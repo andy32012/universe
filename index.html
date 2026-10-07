@@ -15,7 +15,8 @@
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@500;900&display=swap" rel="stylesheet" crossorigin>
+<!-- the serif face is only used for the place names, so only their characters are fetched; add any new place name's characters to text= -->
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@900&display=swap&text=%E5%A4%AA%E9%99%BD%E7%B3%BB%E7%9A%84%E9%82%8A%E7%B7%A3%E6%AD%90%E7%89%B9%E9%9B%B2%E9%84%B0%E8%BF%91%E6%81%86%E6%98%9F%E9%99%84%E7%A9%BA%E9%8A%80%E6%B2%B3%E6%9C%AC%E7%BE%A4%E6%8B%89%E5%B0%BC%E4%BA%9E%E5%87%B1%E8%B6%85%E5%9C%98%E5%AE%87%E5%AE%99%E7%B6%B2%E5%8F%AF%E8%A7%80%E6%B8%AC" rel="stylesheet" crossorigin>
 <style>
 /* Deep space is the whole page, so the interface stays dark in both themes. */
 :root{
@@ -145,6 +146,8 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--gold);outline-o
 }
 @media (max-width:360px){
   :root{--ctl-b:72px}
+  #tools{gap:6px}
+  #tools button{min-height:36px}
 }
 /* phones held sideways: little height, so the buttons go into two columns, the flight buttons sit side by side and the readout tightens */
 @media (orientation:landscape) and (max-height:500px){
@@ -155,6 +158,7 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--gold);outline-o
   .stats dd{font-size:15px}
   #near{margin-top:5px}
   #tools{display:grid;grid-template-columns:auto auto;top:calc(env(safe-area-inset-top,0px) + 10px)}
+  #tools button{padding:0 12px}
   #stick{width:112px;height:112px}
   #knob{width:46px;height:46px;margin:-23px 0 0 -23px}
   #fly{flex-direction:row;align-items:flex-end}
@@ -181,6 +185,7 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--gold);outline-o
   <button type="button" id="goHome">回太陽系</button>
   <button type="button" id="scaleBtn">比例：放大</button>
   <button type="button" id="brightBtn">亮度：高</button>
+  <button type="button" id="qualBtn">畫質：自動・高</button>
   <button type="button" id="teleBtn">望遠鏡：1×</button>
   <button type="button" id="hdrBtn" hidden>HDR：關</button>
 </div>
@@ -213,7 +218,9 @@ var $ = function(s){ return document.querySelector(s); };
 function fail(m){ $('#failT').textContent = m; $('#fail').hidden = false; }
 if(!window.THREE){ fail('3D 繪圖元件無法在這個瀏覽器上執行。請更新瀏覽器，或換一個瀏覽器再試。'); return; }
 var canvas = $('#gl'), renderer;
-try{ renderer = new THREE.WebGLRenderer({canvas:canvas, antialias:true, powerPreference:'high-performance'}); }
+/* the alpha channel carries each pixel's extra brightness to the HDR screen (see below); it is always 1 otherwise.
+   No antialiasing on the screen itself: only a full-screen picture is drawn there, and the scene is smoothed where it is drawn (see MSAA). */
+try{ renderer = new THREE.WebGLRenderer({canvas:canvas, antialias:false, alpha:true, premultipliedAlpha:false, powerPreference:'high-performance'}); }
 catch(e){ fail('這台裝置的瀏覽器無法啟用 WebGL，所以畫不出宇宙。請換一個瀏覽器再試。'); return; }
 var PR = Math.min(window.devicePixelRatio || 1, 2);
 renderer.setPixelRatio(PR);
@@ -229,9 +236,101 @@ var clamp = function(x,a,b){ return Math.min(b, Math.max(a, x)); };
 var sstep = function(a,b,x){ var t = clamp((x - a)/(b - a), 0, 1); return t*t*(3 - 2*t); };
 /* galactic longitude, latitude (degrees) and distance -> scene axes: x toward the galactic centre, y toward the galactic north pole */
 function gal(l, b, d){ l = rad(l); b = rad(b); return new THREE.Vector3(d*Math.cos(b)*Math.cos(l), d*Math.sin(b), -d*Math.cos(b)*Math.sin(l)); }
-var rnd = (function(){ var s = 20261007; return function(){ s = (s*1664525 + 1013904223) >>> 0; return s/4294967296; }; })();
+/* one fixed random sequence lays out everything generated, so the universe looks the same on every visit; its state is kept where the background thread can pick it up */
+var RNG = {s:20261007};
+var rnd = function(){ RNG.s = (RNG.s*1664525 + 1013904223) >>> 0; return RNG.s/4294967296; };
 function gauss(){ var u = 1 - rnd(), v = rnd(); return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v); }
 function inSphere(R){ var v = new THREE.Vector3(); do{ v.set(rnd()*2-1, rnd()*2-1, rnd()*2-1); }while(v.lengthSq() > 1); return v.multiplyScalar(R); }
+
+/* The two heavy pieces of start-up work (the noise baked for the clouds, and the hundreds of thousands of galaxies in the cosmic web)
+   run in a background thread when the browser allows it, so the page stays responsive while they are made. They follow the same
+   random sequence as everything else, so the result is identical either way. cosmosGen must stand alone: it is also sent, as text, to that thread. */
+function cosmosGen(){
+  var S = 0;
+  function rnd(){ S = (S*1664525 + 1013904223) >>> 0; return S/4294967296; }
+  function gauss(){ var u = 1 - rnd(), v = rnd(); return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v); }
+  function hashN(x, y, z){ var n = Math.sin(x*127.1 + y*311.7 + z*74.7)*43758.5453; return n - Math.floor(n); }
+  function L(a, b, t){ return a + (b - a)*t; }
+  function noise3(x, y, z){
+    var xi = Math.floor(x), yi = Math.floor(y), zi = Math.floor(z), xf = x - xi, yf = y - yi, zf = z - zi;
+    var u = xf*xf*(3 - 2*xf), v = yf*yf*(3 - 2*yf), w = zf*zf*(3 - 2*zf);
+    return L(L(L(hashN(xi,yi,zi), hashN(xi+1,yi,zi), u), L(hashN(xi,yi+1,zi), hashN(xi+1,yi+1,zi), u), v),
+             L(L(hashN(xi,yi,zi+1), hashN(xi+1,yi,zi+1), u), L(hashN(xi,yi+1,zi+1), hashN(xi+1,yi+1,zi+1), u), v), w);
+  }
+  /* four octaves of smooth noise, from lattices of random values, sampled into an N x N x N texture with two channels */
+  function bake(o){
+    var N = o.N, lats = o.lats, octs = [4, 8, 16, 32], amps = [0.5, 0.25, 0.125, 0.0625], acc = new Float32Array(N*N*N*2), oc, x, y, z, ch, k;
+    for(oc=0;oc<octs.length;oc++){
+      var c = octs[oc], lat = lats[oc], amp = amps[oc];
+      var i0 = new Int32Array(N), i1 = new Int32Array(N), tw = new Float32Array(N);
+      for(k=0;k<N;k++){ var f = k/N*c, fi = Math.floor(f), t = f - fi; i0[k] = fi % c; i1[k] = (fi + 1) % c; tw[k] = t*t*(3 - 2*t); }
+      for(z=0;z<N;z++){ var z0 = i0[z]*c*c, z1 = i1[z]*c*c, tz = tw[z];
+        for(y=0;y<N;y++){ var y0 = i0[y]*c, y1 = i1[y]*c, ty = tw[y], row = (z*N + y)*N*2;
+          for(x=0;x<N;x++){ var x0 = i0[x], x1 = i1[x], tx = tw[x];
+            for(ch=0;ch<2;ch++){
+              var a00 = lat[(z0 + y0 + x0)*2 + ch], a10 = lat[(z0 + y0 + x1)*2 + ch], a01 = lat[(z0 + y1 + x0)*2 + ch], a11 = lat[(z0 + y1 + x1)*2 + ch];
+              var b00 = lat[(z1 + y0 + x0)*2 + ch], b10 = lat[(z1 + y0 + x1)*2 + ch], b01 = lat[(z1 + y1 + x0)*2 + ch], b11 = lat[(z1 + y1 + x1)*2 + ch];
+              var lo = (a00 + (a10 - a00)*tx) + ((a01 + (a11 - a01)*tx) - (a00 + (a10 - a00)*tx))*ty;
+              var hi = (b00 + (b10 - b00)*tx) + ((b01 + (b11 - b01)*tx) - (b00 + (b10 - b00)*tx))*ty;
+              acc[row + x*2 + ch] += amp*(lo + (hi - lo)*tz);
+            } } } }
+    }
+    var out = new Uint8Array(N*N*N*2);
+    for(var q=0;q<out.length;q++) out[q] = Math.min(255, Math.round(acc[q]/0.9375*255));
+    return {out:out, transfer:[out.buffer]};
+  }
+  /* point clouds, each built from a list of steps: a round swarm, a strand between two places, or galaxies along walls and filaments */
+  function points(o){
+    S = o.s;
+    var clouds = [], transfer = [];
+    o.clouds.forEach(function(steps){
+      var pos = [], col = [], siz = [];
+      function put(x, y, z, r, g, b, s){ pos.push(x, y, z); col.push(r, g, b); siz.push(s); }
+      steps.forEach(function(st){
+        var j, t;
+        if(st.k === 'blob'){
+          var c = st.c;
+          for(j=0;j<st.n;j++){ var bx = c[0] + gauss()*st.R, by = c[1] + gauss()*st.R, bz = c[2] + gauss()*st.R; put(bx, by, bz, st.col[0], st.col[1], st.col[2], st.size); }
+        } else if(st.k === 'strand'){
+          var a = st.a, b = st.b, w = st.w;
+          for(j=0;j<st.n;j++){ t = rnd(); var sx = a[0] + (b[0] - a[0])*t + gauss()*w, sy = a[1] + (b[1] - a[1])*t + gauss()*w, sz = a[2] + (b[2] - a[2])*t + gauss()*w; put(sx, sy, sz, 0.86, 0.88, 1.0, 2.0); }
+        } else {
+          var R = st.R, cell = st.cell, n = 0, tries = 0, x, y, z;
+          while(n < st.n && tries < st.n*40){
+            tries++;
+            do{ x = rnd()*2-1; y = rnd()*2-1; z = rnd()*2-1; }while(x*x + y*y + z*z > 1);
+            x *= R; y *= R; z *= R;
+            var na = noise3(x/cell + 11.3, y/cell + 4.1, z/cell + 7.7)*0.6 + noise3(x/cell*2.1, y/cell*2.1 + 9.0, z/cell*2.1)*0.4;
+            var nb = noise3(x/cell + 31.0, y/cell + 17.0, z/cell + 2.0);
+            var wa = 1 - Math.abs(2*na - 1), wb = 1 - Math.abs(2*nb - 1);
+            if(rnd() < Math.pow(wa, 7)*(0.25 + 0.75*Math.pow(wb, 3))){
+              t = rnd(); n++;
+              put(x, y, z, st.col[0]*(0.8 + 0.2*t), st.col[1]*(0.8 + 0.2*t), st.col[2], st.size*(0.8 + 0.6*rnd()));
+            }
+          }
+        }
+      });
+      var P = new Float32Array(pos), C = new Float32Array(col), Z = new Float32Array(siz);
+      clouds.push({pos:P, col:C, siz:Z}); transfer.push(P.buffer, C.buffer, Z.buffer);
+    });
+    return {out:{s:S, clouds:clouds}, transfer:transfer};
+  }
+  return {bake:bake, points:points};
+}
+var genHere = null;
+function genJob(job, arg, done){
+  function here(){ setTimeout(function(){ if(!genHere) genHere = cosmosGen(); done(genHere[job](arg).out); }, 0); }
+  var w, settled = false;
+  try{
+    if(typeof Worker === 'undefined' || typeof Blob === 'undefined' || !window.URL || !URL.createObjectURL) throw 0;
+    if(!genJob.url) genJob.url = URL.createObjectURL(new Blob(['var G = (' + cosmosGen.toString() + ')();' +
+      'onmessage = function(e){ var r = G[e.data.job](e.data.arg); postMessage(r.out, r.transfer); };'], {type:'text/javascript'}));
+    w = new Worker(genJob.url);
+  }catch(e){ here(); return; }
+  w.onmessage = function(e){ if(settled) return; settled = true; w.terminate(); done(e.data); };
+  w.onerror = function(e){ if(e && e.preventDefault) e.preventDefault(); if(settled) return; settled = true; w.terminate(); here(); };
+  w.postMessage({job:job, arg:arg});
+}
 
 /* ---------- scene ---------- */
 var scene = new THREE.Scene();
@@ -271,6 +370,9 @@ function cloud(list, a, b, c, d, parent, grow){
     pos[i*3] = s[0]; pos[i*3+1] = s[1]; pos[i*3+2] = s[2];
     col[i*3] = s[3]; col[i*3+1] = s[4]; col[i*3+2] = s[5]; siz[i] = s[6];
   }
+  return cloudArrays(pos, col, siz, a, b, c, d, parent, grow);
+}
+function cloudArrays(pos, col, siz, a, b, c, d, parent, grow){
   var g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
   g.setAttribute('aCol', new THREE.BufferAttribute(col, 3));
@@ -368,26 +470,28 @@ var BODY_FS = 'uniform float uType; uniform vec3 uSun; uniform vec3 uTint; unifo
    with a brighter haze toward the Sun. The routine follows wwwtyro/glsl-atmosphere (public domain). Lengths are in planet radii. */
 var AIR_VS = 'varying vec3 vW; varying vec3 vCtr; varying float vRw; uniform float uTop;' +
   'void main(){ vec4 w = modelMatrix*vec4(position,1.0); vW = w.xyz; vCtr = modelMatrix[3].xyz; vRw = length(modelMatrix[0].xyz)/uTop; gl_Position = projectionMatrix*viewMatrix*w; }';
-var AIR_FS = 'uniform vec3 uSun; uniform vec3 uKr; uniform float uKm; uniform float uShR; uniform float uShM; uniform float uTop; uniform float uI; uniform float uAlpha;' +
+var AIR_FS = 'uniform vec3 uSun; uniform vec3 uKr; uniform float uKm; uniform float uShR; uniform float uShM; uniform float uTop; uniform float uI; uniform float uAlpha; uniform float uAirI; uniform float uAirJ;' +
   'varying vec3 vW; varying vec3 vCtr; varying float vRw;' +
   'vec2 rsi(vec3 r0, vec3 rd, float sr){ float tm = -dot(r0, rd); vec3 pp = r0 + rd*tm; float d2 = dot(pp, pp); if(d2 > sr*sr) return vec2(1e5, -1e5); float hf = sqrt(sr*sr - d2); return vec2(tm - hf, tm + hf); }' +
   'void main(){ vec3 r = normalize(vW); vec3 r0 = -vCtr/vRw;' +
   ' vec2 p = rsi(r0, r, uTop); if(p.x > p.y) discard;' +
   ' vec2 pl = rsi(r0, r, 1.0); if(pl.x < pl.y && pl.x > 0.0) p.y = min(p.y, pl.x);' +
-  ' float t0 = max(p.x, 0.0); float iStep = (p.y - t0)/12.0; float iTime = t0;' +
+  ' float t0 = max(p.x, 0.0); float iStep = (p.y - t0)/uAirI; float iTime = t0;' +
   ' vec3 totR = vec3(0.0); vec3 totM = vec3(0.0); float iOdR = 0.0; float iOdM = 0.0;' +
   ' float mu = dot(r, uSun); float mumu = mu*mu; float g = 0.758; float gg = g*g;' +
   ' float pR = 3.0/(16.0*3.141592)*(1.0 + mumu);' +
   ' float pM = 3.0/(8.0*3.141592)*((1.0 - gg)*(mumu + 1.0))/(pow(1.0 + gg - 2.0*mu*g, 1.5)*(2.0 + gg));' +
-  ' for(int i=0;i<12;i++){ vec3 iPos = r0 + r*(iTime + iStep*0.5); float iH = length(iPos) - 1.0;' +
+  ' for(int i=0;i<24;i++){ if(float(i) >= uAirI) break; vec3 iPos = r0 + r*(iTime + iStep*0.5); float iH = length(iPos) - 1.0;' +
   '  float odR = exp(-iH/uShR)*iStep; float odM = exp(-iH/uShM)*iStep; iOdR += odR; iOdM += odM;' +
-  '  float jStep = rsi(iPos, uSun, uTop).y/5.0; float jTime = 0.0; float jOdR = 0.0; float jOdM = 0.0;' +
-  '  for(int j=0;j<5;j++){ vec3 jPos = iPos + uSun*(jTime + jStep*0.5); float jH = length(jPos) - 1.0;' +
+  '  float jStep = rsi(iPos, uSun, uTop).y/uAirJ; float jTime = 0.0; float jOdR = 0.0; float jOdM = 0.0;' +
+  '  for(int j=0;j<8;j++){ if(float(j) >= uAirJ) break; vec3 jPos = iPos + uSun*(jTime + jStep*0.5); float jH = length(jPos) - 1.0;' +
   '   jOdR += exp(-max(jH, -0.02)/uShR)*jStep; jOdM += exp(-max(jH, -0.02)/uShM)*jStep; jTime += jStep; }' +
   '  vec3 attn = exp(-(uKm*(iOdM + jOdM) + uKr*(iOdR + jOdR)));' +
   '  totR += odR*attn; totM += odM*attn; iTime += iStep; }' +
   ' vec3 c = uI*(pR*uKr*totR + pM*uKm*totM);' +
   ' gl_FragColor = vec4(c*uAlpha, 1.0); }';
+/* samples along each line of sight through the air, and toward the Sun from each of them; set by the quality setting */
+var AIRQ = {i:{value:12}, j:{value:5}};
 /* scattering strength per colour, haze strength, the two scale heights, where the air ends, sunlight strength */
 var AIRS = {
   '地球':{kr:[11.7, 27.6, 47.6], km:22, shR:0.0040, shM:0.0011, top:1.045, I:8.5},
@@ -397,7 +501,7 @@ var AIRS = {
 function airShell(name, radius, pos, sunDir, a, b, c, d){
   var A = AIRS[name]; if(!A) return;
   var m = new THREE.ShaderMaterial({uniforms:{uSun:{value:sunDir}, uKr:{value:new THREE.Vector3().fromArray(A.kr)}, uKm:{value:A.km}, uShR:{value:A.shR}, uShM:{value:A.shM},
-    uTop:{value:A.top}, uI:{value:A.I}, uAlpha:{value:1}}, vertexShader:AIR_VS, fragmentShader:AIR_FS, transparent:true, blending:THREE.AdditiveBlending, depthWrite:false});
+    uTop:{value:A.top}, uI:{value:A.I}, uAlpha:{value:1}, uAirI:AIRQ.i, uAirJ:AIRQ.j}, vertexShader:AIR_VS, fragmentShader:AIR_FS, transparent:true, blending:THREE.AdditiveBlending, depthWrite:false});
   var mesh = new THREE.Mesh(sphGeo, m); mesh.position.copy(pos); mesh.scale.setScalar(radius*A.top*K('p'));
   sized.push({m:mesh, base:radius*A.top, cls:'p'});
   addLayer(mesh, a, b, c, d, auRoot);
@@ -446,46 +550,49 @@ var VIEW = {right:{value:new THREE.Vector3()}, up:{value:new THREE.Vector3()}, f
 /* On devices that support it, four octaves of cloud noise are baked once into a small 3D texture, so every look-up in the clouds costs one fetch instead of four.
    Both paths give the same kind of noise; the baked one simply lets the clouds use many more samples. */
 var HAS3D = !!(renderer.capabilities && renderer.capabilities.isWebGL2 && THREE.DataTexture3D);
-var volTex = {value:null};
-function bakeVolume(N){
-  var octs = [4, 8, 16, 32], amps = [0.5, 0.25, 0.125, 0.0625], acc = new Float32Array(N*N*N*2), o, x, y, z, ch;
-  for(o=0;o<octs.length;o++){
-    var c = octs[o], lat = new Float32Array(c*c*c*2), amp = amps[o], k;
-    for(k=0;k<lat.length;k++) lat[k] = rnd();
-    var i0 = new Int32Array(N), i1 = new Int32Array(N), tw = new Float32Array(N);
-    for(k=0;k<N;k++){ var f = k/N*c, fi = Math.floor(f), t = f - fi; i0[k] = fi % c; i1[k] = (fi + 1) % c; tw[k] = t*t*(3 - 2*t); }
-    for(z=0;z<N;z++){ var z0 = i0[z]*c*c, z1 = i1[z]*c*c, tz = tw[z];
-      for(y=0;y<N;y++){ var y0 = i0[y]*c, y1 = i1[y]*c, ty = tw[y], row = (z*N + y)*N*2;
-        for(x=0;x<N;x++){ var x0 = i0[x], x1 = i1[x], tx = tw[x];
-          for(ch=0;ch<2;ch++){
-            var a00 = lat[(z0 + y0 + x0)*2 + ch], a10 = lat[(z0 + y0 + x1)*2 + ch], a01 = lat[(z0 + y1 + x0)*2 + ch], a11 = lat[(z0 + y1 + x1)*2 + ch];
-            var b00 = lat[(z1 + y0 + x0)*2 + ch], b10 = lat[(z1 + y0 + x1)*2 + ch], b01 = lat[(z1 + y1 + x0)*2 + ch], b11 = lat[(z1 + y1 + x1)*2 + ch];
-            var lo = (a00 + (a10 - a00)*tx) + ((a01 + (a11 - a01)*tx) - (a00 + (a10 - a00)*tx))*ty;
-            var hi = (b00 + (b10 - b00)*tx) + ((b01 + (b11 - b01)*tx) - (b00 + (b10 - b00)*tx))*ty;
-            acc[row + x*2 + ch] += amp*(lo + (hi - lo)*tz);
-          } } } }
-  }
-  var out = new Uint8Array(N*N*N*2);
-  for(var q=0;q<out.length;q++) out[q] = Math.min(255, Math.round(acc[q]/0.9375*255));
-  return out;
+/* ---------- picture quality ----------
+   標準 suits phones. 高 and 極致 spend a fast device's extra power on smoother edges, more samples through the clouds, rounder planets,
+   finer air and a more careful trace of light round black holes. 自動 starts at 高 where the device has the faster cloud path,
+   and steps down (never back up past where it had to step down from) if frames get slow. */
+var QUALITY = [
+  {name:'標準', vol:[0.30, 0.85], neb:80,  gal:56,  bh:[1.0, 230], air:[12, 5], sph:[48, 32],   msaa:false},
+  {name:'高',   vol:[0.45, 1.00], neb:112, gal:80,  bh:[0.7, 330], air:[16, 6], sph:[96, 64],   msaa:true},
+  {name:'極致', vol:[0.60, 1.00], neb:160, gal:112, bh:[0.5, 460], air:[24, 8], sph:[160, 100], msaa:true}
+];
+var qual = {mode:'auto', level:0, cap:QUALITY.length - 1};
+try{ var qSaved = localStorage.getItem('universe.quality'); if(qSaved === '0' || qSaved === '1' || qSaved === '2') qual.mode = +qSaved; }catch(e){}
+qual.level = qual.mode === 'auto' ? (HAS3D ? 1 : 0) : qual.mode;
+var volTex = {value:null}, VOLK = {value:1, ready:true};
+/* a 3D texture of two-channel noise; made without data, nothing is uploaded until the data arrives */
+function vol3D(data, N){
+  var t = new THREE.DataTexture3D(data, N, N, N);
+  t.format = THREE.RGFormat; t.type = THREE.UnsignedByteType; t.internalFormat = 'RG8';
+  t.minFilter = t.magFilter = THREE.LinearFilter; t.wrapS = t.wrapT = t.wrapR = THREE.RepeatWrapping; t.unpackAlignment = 1; if(data) t.needsUpdate = true;
+  return t;
 }
 if(HAS3D){
+  /* the random lattices are drawn here, in order, so everything made after them comes out the same whichever thread bakes the noise */
+  var lats = [], li, lk;
+  for(li=0;li<4;li++){ var lc = [4, 8, 16, 32][li], lat = new Float32Array(lc*lc*lc*2); for(lk=0;lk<lat.length;lk++) lat[lk] = rnd(); lats.push(lat); }
   try{
-    var VN = 96, vt = new THREE.DataTexture3D(bakeVolume(VN), VN, VN, VN);
-    vt.format = THREE.RGFormat; vt.type = THREE.UnsignedByteType; vt.internalFormat = 'RG8';
-    vt.minFilter = vt.magFilter = THREE.LinearFilter; vt.wrapS = vt.wrapT = vt.wrapR = THREE.RepeatWrapping; vt.unpackAlignment = 1; vt.needsUpdate = true;
-    volTex.value = vt;
-    /* make sure the device really can read the baked noise back; if not, fall back to the plain path rather than show empty clouds */
+    /* make sure the device really can read a 3D texture back; if not, fall back to the plain path rather than show empty clouds */
+    var tt = vol3D(new Uint8Array(4*4*4*2).fill(200), 4);
     var tRT = new THREE.WebGLRenderTarget(2, 2), tScene = new THREE.Scene(), tCam = new THREE.Camera();
-    var tMesh = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), new THREE.ShaderMaterial({uniforms:{uVol:volTex},
+    var tMesh = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), new THREE.ShaderMaterial({uniforms:{uVol:{value:tt}},
       vertexShader:'void main(){ gl_Position = vec4(position.xy, 0.0, 1.0); }',
       fragmentShader:'precision highp sampler3D; uniform sampler3D uVol; void main(){ float a = texture(uVol, vec3(0.31,0.62,0.17)).r + texture(uVol, vec3(0.77,0.12,0.55)).g; gl_FragColor = vec4(a*0.5, 0.0, 0.0, 1.0); }'}));
     tMesh.frustumCulled = false; tScene.add(tMesh);
     renderer.setRenderTarget(tRT); renderer.render(tScene, tCam);
     var px = new Uint8Array(4); renderer.readRenderTargetPixels(tRT, 0, 0, 1, 1, px);
-    renderer.setRenderTarget(null); tRT.dispose();
+    renderer.setRenderTarget(null); tRT.dispose(); tt.dispose(); tMesh.material.dispose(); tMesh.geometry.dispose();
     if(!(px[0] > 20)) HAS3D = false;
   }catch(e){ HAS3D = false; }
+  if(HAS3D){
+    /* the finer settings bake a finer grid, so the smallest wisps stay sharp; the clouds fade in once it is ready */
+    var VN = qual.level >= 1 ? 128 : 96, vt = vol3D(null, VN);
+    volTex.value = vt; VOLK.value = 0; VOLK.ready = false;
+    genJob('bake', {N:VN, lats:lats}, function(data){ vt.image.data = data; vt.needsUpdate = true; VOLK.ready = true; });
+  }
 }
 var VOL_VS = 'varying vec2 vNdc; void main(){ vNdc = position.xy; gl_Position = vec4(position.xy, 0.0, 1.0); }';
 /* F1 and F2 are two independent fields of four-octave cloud noise; N1 is a single smooth octave */
@@ -498,7 +605,7 @@ var VOL_NOISE =
   ' float F1(vec3 p){ return 0.5*N1(p) + 0.25*N1(p*2.0 + vec3(13.1,7.7,4.3)) + 0.125*N1(p*4.0 + vec3(31.7,3.3,17.9)) + 0.0625*N1(p*8.0 + vec3(5.9,21.3,9.1)); }\n' +
   ' float F2(vec3 p){ return F1(p + 17.3); }\n' +
   '#endif\n';
-var VOL_HEAD = 'uniform vec3 uRo; uniform vec3 uRight; uniform vec3 uUp; uniform vec3 uFwd; uniform float uTanF; uniform float uAspect; uniform float uAlpha; varying vec2 vNdc;\n' + VOL_NOISE;
+var VOL_HEAD = 'uniform vec3 uRo; uniform vec3 uRight; uniform vec3 uUp; uniform vec3 uFwd; uniform float uTanF; uniform float uAspect; uniform float uAlpha; uniform float uSteps; varying vec2 vNdc;\n' + VOL_NOISE;
 var VOL_FS = VOL_HEAD +
   'uniform float uType; uniform float uSeed; uniform vec3 uAxis; uniform vec3 uTintA; uniform vec3 uTintB; uniform float uExtra; uniform vec3 uFine;' +
   'float seg(vec3 p, vec3 a, vec3 b, out float h){ vec3 pa = p - a; vec3 ba = b - a; h = clamp(dot(pa, ba)/dot(ba, ba), 0.0, 1.0); return length(pa - ba*h); }' +
@@ -591,8 +698,8 @@ var VOL_FS = VOL_HEAD +
   ' float b = dot(uRo, rd); vec3 perp0 = uRo - rd*b; float h = 1.0 - dot(perp0, perp0); if(h < 0.0) discard;' +
   ' h = sqrt(h); float t0 = max(-b - h, 0.0); float t1 = -b + h; if(t1 <= t0) discard;' +
   ' float dith = fract(52.9829189*fract(0.06711056*gl_FragCoord.x + 0.00583715*gl_FragCoord.y));' +
-  ' float dt = (t1 - t0)/STEPS.0; float t = t0 + dt*dith; vec3 col = vec3(0.0); float T = 1.0;' +
-  ' for(int i=0;i<STEPS;i++){ vec4 sm = neb(uRo + rd*t); col += T*sm.rgb*dt*0.95; T *= exp(-sm.a*dt*3.0); t += dt; if(T < 0.02) break; }' +
+  ' float dt = (t1 - t0)/uSteps; float t = t0 + dt*dith; vec3 col = vec3(0.0); float T = 1.0;' +
+  ' for(int i=0;i<MAXSTEPS;i++){ if(float(i) >= uSteps) break; vec4 sm = neb(uRo + rd*t); col += T*sm.rgb*dt*0.95; T *= exp(-sm.a*dt*3.0); t += dt; if(T < 0.02) break; }' +
   ' float tc = dot(-uRo, rd);' +
   ' if(tc > 0.0 && uType < 2.5){ vec3 u1 = normalize(cross(uAxis, vec3(0.03,1.0,0.07))); vec3 u2 = cross(uAxis, u1);' +
   '  for(int k=0;k<4;k++){ if(uType > 0.5 && k > 0) break;' +
@@ -609,8 +716,8 @@ var GALV_FS = VOL_HEAD +
   ' float A = dot(sd, sd); float Bq = dot(so, sd); vec3 cl = so - sd*(Bq/A); float h = A*(1.0 - dot(cl, cl)); if(h < 0.0) discard;' +
   ' h = sqrt(h); float t0 = max((-Bq - h)/A, 0.0); float t1 = (-Bq + h)/A; if(t1 <= t0) discard;' +
   ' float dith = fract(52.9829189*fract(0.06711056*gl_FragCoord.x + 0.00583715*gl_FragCoord.y));' +
-  ' float dt = (t1 - t0)/GSTEPS.0; float t = t0 + dt*dith; vec3 col = vec3(0.0); float T = 1.0;' +
-  ' for(int i=0;i<GSTEPS;i++){' +
+  ' float dt = (t1 - t0)/uSteps; float t = t0 + dt*dith; vec3 col = vec3(0.0); float T = 1.0;' +
+  ' for(int i=0;i<MAXSTEPS;i++){ if(float(i) >= uSteps) break;' +
   '  vec3 p = uRo + rd*t; float r = length(p.xz); float z = p.y; vec3 em = vec3(0.0); float dust = 0.0;' +
   '  if(uKind < 0.5){' +
   '   float hz = 0.018 + 0.030*r; float fall = 1.0 - smoothstep(0.80, 1.0, r);' +
@@ -645,23 +752,23 @@ var GALV_FS = VOL_HEAD +
   '  col += T*em*dt*3.0*uGain; T *= exp(-dust*dt); t += dt; if(T < 0.02) break; }' +
   ' gl_FragColor = vec4(col*uAlpha, (1.0 - T)*uAlpha); }';
 var noiseTexU = {value:noiseTex};
-function volMaterial(fs, uniforms, steps){
+function volMaterial(fs, uniforms, steps, most){
   uniforms.uRo = {value:new THREE.Vector3()}; uniforms.uRight = VIEW.right; uniforms.uUp = VIEW.up; uniforms.uFwd = VIEW.fwd;
-  uniforms.uTanF = VIEW.tanF; uniforms.uAspect = VIEW.aspect; uniforms.uAlpha = {value:1};
+  uniforms.uTanF = VIEW.tanF; uniforms.uAspect = VIEW.aspect; uniforms.uAlpha = {value:1}; uniforms.uSteps = steps;
   var defs = {};
   if(HAS3D){ uniforms.uVol = volTex; defs.VOL3D = ''; } else uniforms.uNoiseT = noiseTexU;
-  return new THREE.ShaderMaterial({uniforms:uniforms, defines:defs, vertexShader:VOL_VS, fragmentShader:fs.split('GSTEPS').join(String(steps)).split('STEPS').join(String(steps)),
+  return new THREE.ShaderMaterial({uniforms:uniforms, defines:defs, vertexShader:VOL_VS, fragmentShader:fs.split('MAXSTEPS').join(String(most)),
     transparent:true, depthTest:false, depthWrite:false, blending:THREE.CustomBlending, blendSrc:THREE.OneFactor, blendDst:THREE.OneMinusSrcAlphaFactor});
 }
-/* the baked noise affords many more samples through each cloud */
-var NEB_STEPS = HAS3D ? 80 : 44, GAL_STEPS = HAS3D ? 56 : 32;
+/* samples through each cloud and each galaxy, set by the quality setting; the baked noise affords many more of them */
+var NEB_STEPS = {value:80}, GAL_STEPS = {value:56}, NEB_MAX = 160, GAL_MAX = 112;
 /* The catalogued size of a nebula is its bright part. The gas and dust around it reach much farther, so each cloud is drawn in a volume
    this many times its catalogued radius: the bright structure fills the true size, and fainter ragged outskirts spread beyond it. */
 var REACH = [2.3, 1.9, 1.6, 1.9, 2.1];
 var nebs = [], sites = [], pool = [], gals = [];
 function nebula(pos, R, type, seed, tintA, tintB, extra, a, b, c, d){
   var m = volMaterial(VOL_FS, {uFine:{value:new THREE.Vector3()}, uType:{value:type}, uSeed:{value:seed}, uAxis:{value:pos.clone().normalize().negate()}, uExtra:{value:extra},
-    uTintA:{value:new THREE.Vector3().fromArray(tintA)}, uTintB:{value:new THREE.Vector3().fromArray(tintB)}}, NEB_STEPS);
+    uTintA:{value:new THREE.Vector3().fromArray(tintA)}, uTintB:{value:new THREE.Vector3().fromArray(tintB)}}, NEB_STEPS, NEB_MAX);
   var mesh = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), m); mesh.renderOrder = 6;
   var Y = addLayer(mesh, a, b, c, d, volScene);
   var rec = {m:mesh, w:pos.clone(), R:R*REACH[type], layer:Y};
@@ -673,12 +780,12 @@ function galaxyVol(centre, R, normal, o, a, b, c, d){
   if(o.mw){ u1.set(1,0,0); u2.set(0,0,-1); }        /* the Milky Way's frame matches the one its star points were laid out in */
   var M = new THREE.Matrix3().set(u1.x, u1.y, u1.z, n.x, n.y, n.z, u2.x, u2.y, u2.z);
   var m = volMaterial(GALV_FS, {uM:{value:M}, uArms:{value:o.arms || 2}, uB:{value:o.b || 0.2}, uR0:{value:o.r0 || 0.2}, uSeed:{value:o.seed || 1}, uKind:{value:o.kind || 0}, uGain:{value:1},
-    uCore:{value:new THREE.Vector3().fromArray(o.core)}, uArmCol:{value:new THREE.Vector3().fromArray(o.arm)}}, GAL_STEPS);
+    uCore:{value:new THREE.Vector3().fromArray(o.core)}, uArmCol:{value:new THREE.Vector3().fromArray(o.arm)}}, GAL_STEPS, GAL_MAX);
   var mesh = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), m); mesh.renderOrder = 3;
   addLayer(mesh, a, b, c, d, volScene);
   gals.push({m:mesh, w:centre.clone(), R:R, M:M});
 }
-var sphGeo = new THREE.SphereGeometry(1, 48, 32), quadGeo = new THREE.PlaneGeometry(2, 2), boards = [];
+var sphGeo = new THREE.SphereGeometry(1, QUALITY[qual.level].sph[0], QUALITY[qual.level].sph[1]), quadGeo = new THREE.PlaneGeometry(2, 2), boards = [];
 var mapped = [];
 /* Two ways to look at it.
    True scale: every size and every distance is real. Space then looks almost empty, because it is: bodies are tiny beside the gaps between them.
@@ -1046,33 +1153,8 @@ var M31 = gal(121.2, -21.6, 2.54e6), M33 = gal(133.6, -31.3, 2.73e6), LMC = gal(
   mark('三角座星系', label('三角座星系', '273 萬光年', M33, 5.7, 7.5, false), 6000);
 })();
 
-/* value noise in script, used to lay galaxies out along walls and filaments */
-function hashN(x, y, z){ var n = Math.sin(x*127.1 + y*311.7 + z*74.7)*43758.5453; return n - Math.floor(n); }
-function noise3(x, y, z){
-  var xi = Math.floor(x), yi = Math.floor(y), zi = Math.floor(z), xf = x - xi, yf = y - yi, zf = z - zi;
-  var u = xf*xf*(3 - 2*xf), v = yf*yf*(3 - 2*yf), w = zf*zf*(3 - 2*zf);
-  function L(a, b, t){ return a + (b - a)*t; }
-  return L(L(L(hashN(xi,yi,zi), hashN(xi+1,yi,zi), u), L(hashN(xi,yi+1,zi), hashN(xi+1,yi+1,zi), u), v),
-           L(L(hashN(xi,yi,zi+1), hashN(xi+1,yi,zi+1), u), L(hashN(xi,yi+1,zi+1), hashN(xi+1,yi+1,zi+1), u), v), w);
-}
-function webby(R, n, cell, col, size){
-  var out = [], tries = 0, v;
-  while(out.length < n && tries < n*40){
-    tries++;
-    v = inSphere(R);
-    var a = noise3(v.x/cell + 11.3, v.y/cell + 4.1, v.z/cell + 7.7)*0.6 + noise3(v.x/cell*2.1, v.y/cell*2.1 + 9.0, v.z/cell*2.1)*0.4;
-    var b = noise3(v.x/cell + 31.0, v.y/cell + 17.0, v.z/cell + 2.0);
-    var wa = 1 - Math.abs(2*a - 1), wb = 1 - Math.abs(2*b - 1);
-    if(rnd() < Math.pow(wa, 7)*(0.25 + 0.75*Math.pow(wb, 3))){
-      var t = rnd();
-      out.push([v.x, v.y, v.z, col[0]*(0.8 + 0.2*t), col[1]*(0.8 + 0.2*t), col[2], size*(0.8 + 0.6*rnd())]);
-    }
-  }
-  return out;
-}
-
 /* ---------- 5. our supercluster: Virgo and Laniakea (real cluster positions) ---------- */
-/* (layers 5 and 6 are built a moment after the first frame, so the page appears at once) */
+/* (layers 5 and 6 are built a moment after the first frame, so the page appears at once; their galaxies are made in the background) */
 var CLUSTERS = [
   ['M81 星系群',142.1,40.9,12,40,1.2],['半人馬座 A 星系群',309.5,19.4,12,40,1.5],['室女座星系團',283.8,74.5,54,900,6],
   ['天爐座星系團',236.7,-53.6,62,220,3],['大熊座星系團',145,66,60,160,5],['長蛇座星系團',269.6,26.5,160,300,6],
@@ -1081,28 +1163,32 @@ var CLUSTERS = [
   ['孔雀–印第安',332,-24,200,260,12],['蛇夫座星系團',0.6,9.3,370,300,8]
 ];
 setTimeout(function(){
-  var pts = [], P = {}, M = 1e6;
-  function blob(c, n, R, col){ for(var j=0;j<n;j++){ pts.push([c.x + gauss()*R, c.y + gauss()*R, c.z + gauss()*R, col[0], col[1], col[2], 2.3]); } }
-  blob(new THREE.Vector3(), 50, 1.4*M, [1.0,0.9,0.7]);
+  var P = {}, M = 1e6, O = new THREE.Vector3();
+  function xyz(v){ return [v.x, v.y, v.z]; }
+  var steps = [{k:'blob', c:[0, 0, 0], n:50, R:1.4*M, col:[1.0,0.9,0.7], size:2.3}];
   CLUSTERS.forEach(function(c){
     var v = gal(c[1], c[2], c[3]*M); P[c[0]] = v;
-    blob(v, c[4], c[5]*M, [1.0,0.86,0.66]);
+    steps.push({k:'blob', c:xyz(v), n:c[4], R:c[5]*M, col:[1.0,0.86,0.66], size:2.3});
     var L = Math.log10(c[3]*M);
     mark(c[0], label(c[0], lyText(c[3]*M), v, L - 0.75, L + 1.05, false), c[5]*M*0.4);
   });
-  function strand(a, b, n, w){
-    for(var j=0;j<n;j++){ var t = rnd(); pts.push([a.x + (b.x - a.x)*t + gauss()*w, a.y + (b.y - a.y)*t + gauss()*w, a.z + (b.z - a.z)*t + gauss()*w, 0.86,0.88,1.0, 2.0]); }
-  }
-  var O = new THREE.Vector3();
+  function strand(a, b, n, w){ steps.push({k:'strand', a:xyz(a), b:xyz(b), n:n, w:w}); }
   strand(O, P['室女座星系團'], 300, 4*M); strand(P['室女座星系團'], P['半人馬座星系團'], 420, 8*M);
   strand(P['半人馬座星系團'], P['巨引源'], 380, 9*M); strand(P['巨引源'], P['孔雀–印第安'], 320, 10*M);
   strand(P['半人馬座星系團'], P['長蛇座星系團'], 260, 7*M); strand(P['半人馬座星系團'], P['沙普力超星系團'], 700, 22*M);
   strand(P['室女座星系團'], P['大熊座星系團'], 220, 5*M); strand(P['室女座星系團'], P['后髮座星系團'], 480, 14*M);
   strand(O, P['天爐座星系團'], 200, 5*M); strand(P['英仙座星系團'], gal(128, -30, 220*M), 520, 10*M);
   strand(P['后髮座星系團'], P['武仙座超星系團'], 420, 18*M);
-  webby(900*M, 9000, 150*M, [0.9,0.9,1.0], 1.9).forEach(function(p){ pts.push(p); });
-  webby(260*M, 7000, 55*M, [1.0,0.92,0.8], 1.8).forEach(function(p){ pts.push(p); });
-  cloud(pts, 6.2, 6.9, 9.0, 9.7);
+  steps.push({k:'web', R:900*M, n:9000, cell:150*M, col:[0.9,0.9,1.0], size:1.9}, {k:'web', R:260*M, n:7000, cell:55*M, col:[1.0,0.92,0.8], size:1.8});
+  /* the galaxies of layer 6 continue the same random sequence, so they are made in the same run */
+  var far = [{k:'web', R:3.6e9, n:42000, cell:3.2e8, col:[0.82,0.86,1.0], size:1.9}], edge = [{k:'web', R:EDGE*0.985, n:80000, cell:3.4e9, col:[0.86,0.84,1.0], size:1.8}];
+  genJob('points', {s:RNG.s, clouds:[steps, far, edge]}, function(r){
+    RNG.s = r.s;
+    var q = r.clouds;
+    cloudArrays(q[0].pos, q[0].col, q[0].siz, 6.2, 6.9, 9.0, 9.7);
+    cloudArrays(q[1].pos, q[1].col, q[1].siz, 7.9, 8.6, 10.0, 10.6);
+    cloudArrays(q[2].pos, q[2].col, q[2].siz, 9.1, 9.8, 12.5, 13);
+  });
   label('本星系群', '你的家', O, 7.1, 9.0, false, true);
   /* M87*, the first black hole ever photographed, sits at the heart of the Virgo Cluster */
   blackHole('M87*', '第一個被拍到的黑洞，65 億個太陽重', P['室女座星系團'], 0.0052, 1, 6.3, 8.6, 5.6, 6.4, 8.8, 9.4);
@@ -1111,8 +1197,6 @@ setTimeout(function(){
 
 /* ---------- 6. the cosmic web, out to the edge ---------- */
 setTimeout(function(){
-  cloud(webby(3.6e9, 42000, 3.2e8, [0.82,0.86,1.0], 1.9), 7.9, 8.6, 10.0, 10.6);
-  cloud(webby(EDGE*0.985, 80000, 3.4e9, [0.86,0.84,1.0], 1.8), 9.1, 9.8, 12.5, 13);
   label('牧夫座空洞', '7 億光年', gal(80, 60, 7e8), 8.4, 9.8, false);
   label('史隆長城', '約 12 億光年', gal(310, 62, 1.2e9), 8.6, 10.0, false);
   label('武仙–北冕座長城', '約 150 億光年', gal(60, 45, 1.5e10), 9.8, 11.1, false);
@@ -1190,7 +1274,27 @@ var HDR = (function(){
 function mkTarget(depth){
   return new THREE.WebGLRenderTarget(4, 4, {minFilter:THREE.LinearFilter, magFilter:THREE.LinearFilter, type:HDR ? THREE.HalfFloatType : THREE.UnsignedByteType, depthBuffer:!!depth, stencilBuffer:false});
 }
-var rtMain = mkTarget(true), rtVol = mkTarget(false), rtComp = mkTarget(false), rtDown = [], rtUp = [], BL = 5, volScale = 0.5;
+/* smoother edges on planets, rings and orbits at the higher settings: the scene is drawn with several samples per pixel where the device can */
+var MSAA = (function(){
+  try{
+    if(!renderer.capabilities.isWebGL2 || !THREE.WebGLMultisampleRenderTarget) return 0;
+    var n = Math.min(4, gl.getParameter(gl.MAX_SAMPLES) || 0); if(n < 2) return 0;
+    var rb = gl.createRenderbuffer(); gl.bindRenderbuffer(gl.RENDERBUFFER, rb);
+    gl.renderbufferStorageMultisample(gl.RENDERBUFFER, n, HDR ? gl.RGBA16F : gl.RGBA8, 4, 4);
+    var fb = gl.createFramebuffer(); gl.bindFramebuffer(gl.FRAMEBUFFER, fb);
+    gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.RENDERBUFFER, rb);
+    var ok = gl.checkFramebufferStatus(gl.FRAMEBUFFER) === gl.FRAMEBUFFER_COMPLETE && gl.getError() === gl.NO_ERROR;
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.bindRenderbuffer(gl.RENDERBUFFER, null); gl.deleteFramebuffer(fb); gl.deleteRenderbuffer(rb);
+    renderer.state.reset();
+    return ok ? n : 0;
+  }catch(e){ return 0; }
+})();
+function mkMain(msaa){
+  if(!msaa || !MSAA) return mkTarget(true);
+  var t = new THREE.WebGLMultisampleRenderTarget(4, 4, {minFilter:THREE.LinearFilter, magFilter:THREE.LinearFilter, type:HDR ? THREE.HalfFloatType : THREE.UnsignedByteType, depthBuffer:true, stencilBuffer:false});
+  t.samples = MSAA; return t;
+}
+var rtMain = mkMain(QUALITY[qual.level].msaa), rtVol = mkTarget(false), rtComp = mkTarget(false), rtDown = [], rtUp = [], BL = 5, volScale = 0.5;
 for(var bi=0;bi<BL;bi++){ rtDown.push(mkTarget(false)); if(bi < BL - 1) rtUp.push(mkTarget(false)); }
 function sizeTargets(){
   var w = Math.max(4, Math.round(window.innerWidth*PR)), h = Math.max(4, Math.round(window.innerHeight*PR));
@@ -1202,13 +1306,13 @@ var postScene = new THREE.Scene(), postCam = new THREE.Camera(), postQuad = new 
 postQuad.frustumCulled = false; postScene.add(postQuad);
 var POST_VS = 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }';
 function postMat(fs, uniforms){ return new THREE.ShaderMaterial({uniforms:uniforms, vertexShader:POST_VS, fragmentShader:fs, depthTest:false, depthWrite:false}); }
-var compU = {tMain:{value:null}, tVol:{value:null}, uLens:{value:new THREE.Vector3(0.5, 0.5, 0)}, uAspect:{value:1}};
-var compMat = postMat('uniform sampler2D tMain; uniform sampler2D tVol; uniform vec3 uLens; uniform float uAspect; varying vec2 vUv;' +
+var compU = {tMain:{value:null}, tVol:{value:null}, uLens:{value:new THREE.Vector3(0.5, 0.5, 0)}, uAspect:{value:1}, uVolK:VOLK};
+var compMat = postMat('uniform sampler2D tMain; uniform sampler2D tVol; uniform vec3 uLens; uniform float uAspect; uniform float uVolK; varying vec2 vUv;' +
   'void main(){ vec2 uv = vUv;' +
   /* a black hole bends the light passing it: everything behind is pushed outward into arcs and a ring */
   ' if(uLens.z > 0.0){ vec2 d = (uv - uLens.xy)*vec2(uAspect, 1.0); float r2 = dot(d, d); float wgt = smoothstep(uLens.z*1.05, uLens.z*2.0, sqrt(r2));' +
   '  uv -= d/vec2(uAspect, 1.0)*(uLens.z*uLens.z*2.6/(r2 + 1e-6))*wgt; }' +
-  ' vec4 m = texture2D(tMain, uv); vec4 v = texture2D(tVol, uv);' +
+  ' vec4 m = texture2D(tMain, uv); vec4 v = texture2D(tVol, uv)*uVolK;' +
   ' gl_FragColor = vec4(m.rgb*(1.0 - v.a) + v.rgb, 1.0); }', compU);
 var downU = {tSrc:{value:null}, uPx:{value:new THREE.Vector2()}, uThr:{value:0}};
 var downMat = postMat('uniform sampler2D tSrc; uniform vec2 uPx; uniform float uThr; varying vec2 vUv;' +
@@ -1226,18 +1330,18 @@ var finMat = postMat(('uniform sampler2D tScene; uniform sampler2D tBloom; unifo
   ' c = mix(c, c*c*(3.0 - 2.0*c), 0.18);' +                      /* a little contrast */
   ' vec2 q = (vUv - 0.5)*vec2(uAspect, 1.0); float vg = 1.0 - 0.30*smoothstep(0.35, 1.05, length(q)); c *= vg;' +
   ' c += (hh(vUv*uRes + fract(uTime)*91.7) - 0.5)*0.014;' +
-  /* how far beyond white this pixel wanted to go: an HDR screen is told to push it that much brighter */
+  /* how far beyond white this pixel wanted to go: an HDR screen is told to push it that much brighter.
+     It travels in the alpha channel, so the picture itself keeps every one of its 256 levels. */
   ' float over = max(raw.r, max(raw.g, raw.b));' +
   ' float boost = clamp((over - OVER0)/OVER1, 0.0, 1.0)*vg;' +
-  ' if(uHdr > 0.5){ c = max(c, 0.0)*(1.0 + boost*1.25)/2.25; }' +
-  ' gl_FragColor = vec4(c, 1.0); }').split('BLOOM').join(HDR ? '0.55' : '0.65').split('OVER0').join(HDR ? '1.2' : '0.9').split('OVER1').join(HDR ? '5.0' : '1.4'), finU);
+  ' gl_FragColor = vec4(c, uHdr > 0.5 ? boost : 1.0); }').split('BLOOM').join(HDR ? '0.55' : '0.65').split('OVER0').join(HDR ? '1.2' : '0.9').split('OVER1').join(HDR ? '5.0' : '1.4'), finU);
 /* A black hole is drawn by following each ray of light as gravity bends it (the method used by open-source tracers such as oseiskar/black-hole, MIT).
    Lengths are in units of the hole's Schwarzschild radius. A ray either falls in (black), crosses the glowing disc (possibly more than once:
    that is how the far side of the disc appears arched over the top), or escapes, and then shows whatever lies in the direction it ends up pointing. */
 var bhU = {tScene:{value:null}, uRo:{value:new THREE.Vector3()}, uRight:VIEW.right, uUp:VIEW.up, uFwd:VIEW.fwd, uTanF:VIEW.tanF, uAspect:VIEW.aspect,
-  uTime:TIME, uDisc:{value:1}, uSeed:{value:1}, uDn:{value:new THREE.Vector3(0.16, 0.97, 0.18).normalize()}};
+  uTime:TIME, uDisc:{value:1}, uSeed:{value:1}, uDn:{value:new THREE.Vector3(0.16, 0.97, 0.18).normalize()}, uBhStep:{value:1}, uBhMax:{value:230}};
 var bhMat = postMat('uniform sampler2D tScene; uniform vec3 uRo; uniform vec3 uRight; uniform vec3 uUp; uniform vec3 uFwd; uniform float uTanF; uniform float uAspect;' +
-  'uniform float uTime; uniform float uDisc; uniform float uSeed; uniform vec3 uDn; varying vec2 vUv;' + NOISE_GL +
+  'uniform float uTime; uniform float uDisc; uniform float uSeed; uniform vec3 uDn; uniform float uBhStep; uniform float uBhMax; varying vec2 vUv;' + NOISE_GL +
   'vec3 sky(vec3 d){ float z = dot(d, uFwd); if(z <= 0.0) return vec3(0.0);' +
   ' vec2 q = vec2(dot(d, uRight)/(z*uTanF*uAspect), dot(d, uUp)/(z*uTanF)); float m = max(abs(q.x), abs(q.y));' +
   ' return texture2D(tScene, clamp(q, -1.0, 1.0)*0.5 + 0.5).rgb*(1.0 - smoothstep(1.0, 1.3, m)); }' +
@@ -1251,11 +1355,11 @@ var bhMat = postMat('uniform sampler2D tScene; uniform vec3 uRo; uniform vec3 uR
   ' vec3 hv = cross(x, v); float h2 = dot(hv, hv);' +
   ' vec3 e1 = normalize(cross(uDn, vec3(0.31, 0.12, 0.94))); vec3 e2 = cross(uDn, e1);' +
   ' vec3 col = vec3(0.0); float T = 1.0; float fell = 0.0;' +
-  ' for(int i=0;i<230;i++){' +
+  ' for(int i=0;i<640;i++){ if(float(i) >= uBhMax) break;' +
   '  float r2 = dot(x, x); float r = sqrt(r2);' +
   '  if(r < 1.0){ fell = 1.0; break; }' +
   '  if(r > RS*1.02 && dot(x, v) > 0.0) break;' +
-  '  float dt = clamp(0.07*r, 0.03, 2.0);' +
+  '  float dt = clamp(0.07*r*uBhStep, 0.03*uBhStep, 2.0);' +
   '  v += -1.5*h2*x/(r2*r2*r)*dt;' +                             /* the bending of light near a black hole */
   '  vec3 xn = x + v*dt;' +
   '  float s0 = dot(x, uDn); float s1 = dot(xn, uDn);' +
@@ -1337,7 +1441,7 @@ function setHdr(on){
         '@fragment fn fs(@builtin(position) pos : vec4<f32>) -> @location(0) vec4<f32> {' +
         ' let dim = vec2<f32>(textureDimensions(img));' +
         ' let c = textureSample(img, smp, pos.xy/dim);' +
-        ' return vec4<f32>(c.rgb*2.25, 1.0); }'});
+        ' return vec4<f32>(c.rgb*(1.0 + c.a*1.25), 1.0); }'});
       hdr.pipe = dev.createRenderPipeline({layout:'auto', vertex:{module:mod, entryPoint:'vs'},
         fragment:{module:mod, entryPoint:'fs', targets:[{format:'rgba16float'}]}, primitive:{topology:'triangle-list'}});
       hdr.samp = dev.createSampler({magFilter:'linear', minFilter:'linear'});
@@ -1441,8 +1545,33 @@ var BRIGHT = [['標準', 1.0, 1.2], ['高', 1.3, 1.55], ['最高', 1.7, 2.0]], b
 function applyBright(){ $('#brightBtn').textContent = '亮度：' + BRIGHT[brightI][0]; finU.uExpo.value = BRIGHT[brightI][1]; STARGAIN.value = BRIGHT[brightI][2]; }
 $('#brightBtn').addEventListener('click', function(){ brightI = (brightI + 1) % BRIGHT.length; applyBright(); });
 $('#hdrBtn').addEventListener('click', function(){ hdr.want = !hdr.on; setHdr(hdr.want); });
+/* picture quality: what each level changes is listed in QUALITY near the top */
+function applyQuality(){
+  var q = QUALITY[qual.level];
+  NEB_STEPS.value = HAS3D ? q.neb : Math.round(q.neb*0.55); GAL_STEPS.value = HAS3D ? q.gal : Math.round(q.gal*0.57);
+  AIRQ.i.value = q.air[0]; AIRQ.j.value = q.air[1];
+  bhU.uBhStep.value = q.bh[0]; bhU.uBhMax.value = q.bh[1];
+  volScale = clamp(volScale, q.vol[0], q.vol[1]);
+  if(sphGeo.parameters.widthSegments !== q.sph[0]){
+    var old = sphGeo, i; sphGeo = new THREE.SphereGeometry(1, q.sph[0], q.sph[1]);
+    for(i=0;i<sized.length;i++){ if(sized[i].m.geometry === old) sized[i].m.geometry = sphGeo; }
+    old.dispose();
+  }
+  if(!!(q.msaa && MSAA) !== !!rtMain.isWebGLMultisampleRenderTarget){ rtMain.dispose(); rtMain = mkMain(q.msaa); }
+  sizeTargets();
+  qual.since = performance.now();
+  $('#qualBtn').textContent = '畫質：' + (qual.mode === 'auto' ? '自動・' : '') + q.name;
+}
+$('#qualBtn').addEventListener('click', function(){
+  qual.mode = qual.mode === 'auto' ? 0 : (qual.mode < QUALITY.length - 1 ? qual.mode + 1 : 'auto');
+  if(qual.mode === 'auto'){ qual.cap = QUALITY.length - 1; qual.level = HAS3D ? 1 : 0; } else qual.level = qual.mode;
+  qual.calm = 0;
+  try{ localStorage.setItem('universe.quality', String(qual.mode)); }catch(e){}
+  applyQuality();
+});
 applyBright();
 applyScale();
+applyQuality();
 /* dragging on the sky also turns your view; the keyboard works too */
 /* The telescope. It narrows the field of view, the way a real telescope or a camera zoom does:
    distant things fill more of the screen, but no size or distance in the world is altered. */
@@ -1494,6 +1623,7 @@ window.addEventListener('resize', function(){
   sizeTargets();
 });
 
+var EL = {tele:$('#teleBtn'), place:$('#place'), dHome:$('#dHome'), dLight:$('#dLight'), dEdge:$('#dEdge'), dPct:$('#dPct'), near:$('#near')};
 var v1 = new THREE.Vector3(), fwdV = new THREE.Vector3(), last = performance.now(), frames = 0, shownPlace = '', ftA = 0, ftN = 0, plain = false;
 var pick = [];
 function frame(now){
@@ -1542,6 +1672,7 @@ function frame(now){
   lyTop.position.copy(lyRoot.position); lyTop.scale.copy(lyRoot.scale);
 
   TIME.value += dt;
+  if(VOLK.ready && VOLK.value < 1) VOLK.value = Math.min(1, VOLK.value + dt*1.5);
   for(i=0;i<mapped.length;i++){ if(mapped[i].t.ready && mapped[i].u.uHasMap.value < 1) mapped[i].u.uHasMap.value = 1; }
   if(HYG.u){ HYG.u.uS.value = S; HYG.u.uTele.value = tele; }
   var qAU = auRoot.quaternion.clone().invert().multiply(camera.quaternion);
@@ -1645,27 +1776,34 @@ function frame(now){
   /* keep the motion smooth: the clouds are the costly part, so their resolution follows the frame time */
   ftA += dt; ftN++;
   if(ftN >= 30){
-    var ft = ftA/ftN, old = volScale; ftA = 0; ftN = 0;
-    if(ft > 0.030) volScale = Math.max(0.3, volScale - 0.08); else if(ft < 0.0185) volScale = Math.min(0.85, volScale + 0.05);
+    var ft = ftA/ftN, old = volScale, Q = QUALITY[qual.level]; ftA = 0; ftN = 0;
+    if(ft > 0.030) volScale = Math.max(Q.vol[0], volScale - 0.08); else if(ft < 0.0185) volScale = Math.min(Q.vol[1], volScale + 0.05);
+    /* on 自動, step the whole quality level once the cloud resolution has no room left; a level it had to leave is not tried again.
+       The first seconds after starting or changing level are left alone: shaders and textures are still settling then. */
+    if(qual.mode === 'auto' && now - qual.since > 3000){
+      qual.calm = ft < 0.0185 && old >= Q.vol[1] ? (qual.calm || 0) + 1 : 0;
+      if(ft > 0.030 && old <= Q.vol[0] && qual.level > 0){ qual.level--; qual.cap = qual.level; applyQuality(); }
+      else if(qual.calm >= 6 && qual.level < qual.cap){ qual.level++; qual.calm = 0; applyQuality(); }
+    }
     if(volScale !== old) sizeTargets();
   }
   if(frames % 4 === 0){
-    $('#teleBtn').textContent = '望遠鏡：' + teleText(tele);
+    EL.tele.textContent = '望遠鏡：' + teleText(tele);
     var place = PLACES[PLACES.length - 1];
     for(var q=0;q<PLACES.length;q++){ if(L < PLACES[q][0]){ place = PLACES[q]; break; } }
-    if(place[1] !== shownPlace){ shownPlace = place[1]; $('#place').textContent = place[1]; }
-    $('#dHome').firstChild.nodeValue = fmtDist(D); $('#dLight').textContent = fmtLight(D);
+    if(place[1] !== shownPlace){ shownPlace = place[1]; EL.place.textContent = place[1]; }
+    EL.dHome.firstChild.nodeValue = fmtDist(D); EL.dLight.textContent = fmtLight(D);
     var left = EDGE - D;
     if(left > 0){
-      $('#dEdge').firstChild.nodeValue = lyText(left);
+      EL.dEdge.firstChild.nodeValue = lyText(left);
       var pct = D/EDGE*100;
-      $('#dPct').textContent = pct < 0.01 ? '走不到全程的 0.01%' : '已走了全程的 ' + (pct < 10 ? pct.toFixed(2) : pct.toFixed(0)) + '%';
-    } else { $('#dEdge').firstChild.nodeValue = '已到邊界'; $('#dPct').textContent = '這裡已經在可觀測宇宙之外'; }
+      EL.dPct.textContent = pct < 0.01 ? '走不到全程的 0.01%' : '已走了全程的 ' + (pct < 10 ? pct.toFixed(2) : pct.toFixed(0)) + '%';
+    } else { EL.dEdge.firstChild.nodeValue = '已到邊界'; EL.dPct.textContent = '這裡已經在可觀測宇宙之外'; }
     if(atEdge){
-      $('#near').textContent = gap < EDGE*0.006 ? '你站在可觀測宇宙的邊界上' : '最近的地標：可觀測宇宙的邊界';
+      EL.near.textContent = gap < EDGE*0.006 ? '你站在可觀測宇宙的邊界上' : '最近的地標：可觀測宇宙的邊界';
     } else if(near){
       var real = near.w.distanceTo(P);
-      $('#near').textContent = '最近的地標：' + near.name + (real > near.r0*K(near.cls)*1.02 ? '，還有 ' + fmtDist(real) : '，就在眼前');
+      EL.near.textContent = '最近的地標：' + near.name + (real > near.r0*K(near.cls)*1.02 ? '，還有 ' + fmtDist(real) : '，就在眼前');
     }
   }
 }
