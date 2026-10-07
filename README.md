@@ -1,4 +1,32 @@
-# 從太陽系到宇宙邊緣
+# Universe: From the Solar System to the Edge of the Cosmos
+
+Fly in first person from the Solar System all the way to the edge of the observable universe.
+
+The whole project is a single `index.html` file. Nothing to install: open it in a browser and it runs.
+
+## What is real
+
+- **Solar System:** planet orbit sizes, their approximate current positions, and the true sizes of each body.
+- **Stars:** 3D positions and brightness of 16,166 real stars from the [HYG Database](https://github.com/astronexus/HYG-Database).
+- **Deep sky:** directions and distances of named nebulae, galaxies, galaxy clusters and black holes (some coordinates are approximate).
+
+The remaining stars, the unnamed nebulae along the spiral arms, and the cosmic web are generated procedurally to follow real distributions.
+
+## Credits
+
+- Star data: [HYG Database](https://github.com/astronexus/HYG-Database), CC BY-SA 4.0. A 16,166-star subset converted to galactic coordinates is embedded in this project and is also licensed under CC BY-SA 4.0.
+- Textures for the Sun, planets, Moon and Saturn's rings: [Solar System Scope](https://www.solarsystemscope.com/textures/), CC BY 4.0 (recompressed and resized).
+- Rendering: [three.js](https://github.com/mrdoob/three.js) r128, MIT.
+- Black hole ray tracing approach based on [oseiskar/black-hole](https://github.com/oseiskar/black-hole) (MIT).
+- Atmospheric scattering based on [wwwtyro/glsl-atmosphere](https://github.com/wwwtyro/glsl-atmosphere) (public domain).
+
+## License
+
+The source code is released under the [MIT License](LICENSE). The embedded star data and textures keep their original licenses listed above.
+
+---
+
+# 從太陽系到宇宙邊緣（中文）
 
 以第一人稱在宇宙中飛行：從太陽系一路到可觀測宇宙的邊界。
 
@@ -19,3 +47,7 @@
 - 有名字的星雲、星系、星系團、黑洞的方向與距離（部分座標為近似值）。
 
 其餘的恆星、旋臂上未命名的星雲、宇宙網，是依照真實的分布規律生成的。
+
+## 授權
+
+程式碼以 [MIT 授權](LICENSE) 釋出。內嵌的恆星資料與貼圖沿用上面列出的原始授權。
