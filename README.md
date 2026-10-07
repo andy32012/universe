@@ -15,10 +15,14 @@
 - 繪圖函式庫：[three.js](https://github.com/mrdoob/three.js) r128，MIT。
 - 黑洞光線追蹤的做法參考 [oseiskar/black-hole](https://github.com/oseiskar/black-hole)（MIT）。
 - 大氣散射的算法參考 [wwwtyro/glsl-atmosphere](https://github.com/wwwtyro/glsl-atmosphere)（公有領域）。
+- 行星與冥王星的軌道根數：E. M. Standish（JPL），[Keplerian Elements for Approximate Positions of the Major Planets](https://ssd.jpl.nasa.gov/planets/approx_pos.html)，適用 1800–2050 年。
+- 月球位置的算法參考 Paul Schlyter，[How to compute planetary positions](https://stjarnhimlen.se/comp/ppcomp.html)。
 
 ## 哪些是真的
 
-- 太陽系：行星軌道大小與目前的大致位置、各天體的實際尺寸。
+- 太陽系：八大行星和冥王星真實的橢圓軌道（包含傾角），以及打開頁面當下的位置；跟完整星曆比對，2000–2050 年間誤差在 0.2° 以內。
+- 月球：當下的位置和月相，誤差在 0.1° 以內。
+- 各天體的實際尺寸。
 - 16,166 顆恆星的三維位置與亮度。
 - 有名字的星雲、星系、星系團、黑洞的方向與距離（部分座標為近似值）。
 

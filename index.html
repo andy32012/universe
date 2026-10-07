@@ -39,11 +39,6 @@
   padding-top:env(safe-area-inset-top,0px);
   padding-bottom:env(safe-area-inset-bottom,0px);
 }
-@media (prefers-color-scheme: dark){
-  :root:not([data-theme="light"]){ --space:#030408; --panel:rgba(10,12,20,.66); }
-}
-:root[data-theme="dark"]{ --space:#030408; --panel:rgba(10,12,20,.66); }
-:root[data-theme="light"]{ --panel:rgba(14,16,26,.72); }
 *,*::before,*::after{box-sizing:inherit}
 html{scroll-padding-top:env(safe-area-inset-top,0px)}
 html,body{height:100%;margin:0}
@@ -236,7 +231,8 @@ var clamp = function(x,a,b){ return Math.min(b, Math.max(a, x)); };
 var sstep = function(a,b,x){ var t = clamp((x - a)/(b - a), 0, 1); return t*t*(3 - 2*t); };
 /* galactic longitude, latitude (degrees) and distance -> scene axes: x toward the galactic centre, y toward the galactic north pole */
 function gal(l, b, d){ l = rad(l); b = rad(b); return new THREE.Vector3(d*Math.cos(b)*Math.cos(l), d*Math.sin(b), -d*Math.cos(b)*Math.sin(l)); }
-/* one fixed random sequence lays out everything generated, so the universe looks the same on every visit; its state is kept where the background thread can pick it up */
+/* one fixed random sequence lays out everything generated, so the universe looks the same on every visit; its state is kept where the background thread can pick it up.
+   Everything takes its numbers from it in turn, so adding, removing or reordering any call to rnd() reshapes everything generated after it. */
 var RNG = {s:20261007};
 var rnd = function(){ RNG.s = (RNG.s*1664525 + 1013904223) >>> 0; return RNG.s/4294967296; };
 function gauss(){ var u = 1 - rnd(), v = rnd(); return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v); }
@@ -455,7 +451,8 @@ var BODY_FS = 'uniform float uType; uniform vec3 uSun; uniform vec3 uTint; unifo
   'else { float h = fb(p*3.0 + 1.0); col = mix(vec3(0.78,0.68,0.58), vec3(0.45,0.33,0.26), smoothstep(0.4, 0.6, h)); }' +
   'float l = pow(max(dot(N, uSun), 0.0), 0.8);' +
   'float ndv = max(dot(normalize(vNv), normalize(vV)), 0.0); float rim = pow(1.0 - ndv, 3.0);' +
-  'vec3 air = uType < 3.5 ? vec3(0.0) : (uType < 1.5 ? vec3(1.0,0.85,0.55) : (uType < 2.5 ? vec3(0.35,0.60,1.0) : (uType < 3.5 ? vec3(0.9,0.55,0.4)*0.35 : (uType < 5.5 ? vec3(1.0,0.85,0.65)*0.5 : (uType < 6.5 ? vec3(0.6,0.95,1.0) : (uType < 7.5 ? vec3(0.35,0.55,1.0) : vec3(0.0)))))));' +
+  /* a thin rim of haze on the giant planets; the inner planets' air is drawn by the scattering shells (airShell) instead */
+  'vec3 air = uType < 3.5 ? vec3(0.0) : (uType < 5.5 ? vec3(1.0,0.85,0.65)*0.5 : (uType < 6.5 ? vec3(0.6,0.95,1.0) : (uType < 7.5 ? vec3(0.35,0.55,1.0) : vec3(0.0))));' +
   'float wet = 1.0; float cloudA = 0.0;' +
   'if(uHasMap > 0.5){ col = mcol;' +
   ' if(uType > 1.5 && uType < 2.5){' +                    /* Earth: seas shine, clouds drift over the top */
@@ -853,19 +850,71 @@ function lyText(d){
   return (d/1e8 < 100 ? +(d/1e8).toFixed(1) : Math.round(d/1e8).toLocaleString('en-US')) + ' 億光年';
 }
 
-/* ---------- 1. the solar system (real orbit sizes; positions for today's date, to within a few degrees) ---------- */
+/* ---------- 1. the solar system: real orbits, with every planet, Pluto and the Moon where they are today ----------
+   Planets follow their true elliptical, tilted orbits, from the orbital elements JPL publishes for 1800-2050 (E. M. Standish,
+   "Keplerian Elements for Approximate Positions of the Major Planets"); checked against a full ephemeris for 2000-2050 they are within 0.2 degrees.
+   The Moon adds the largest pulls of the Sun on its orbit (after Paul Schlyter, "How to compute planetary positions"): within 0.1 degrees. */
+/* semi-major axis (AU), eccentricity, inclination, mean longitude, longitude of perihelion, longitude of the ascending node (degrees), then their change per century */
+var ORBITS = {
+  '水星':[0.38709927, 0.20563593, 7.00497902, 252.25032350, 77.45779628, 48.33076593, 0.00000037, 0.00001906, -0.00594749, 149472.67411175, 0.16047689, -0.12534081],
+  '金星':[0.72333566, 0.00677672, 3.39467605, 181.97909950, 131.60246718, 76.67984255, 0.00000390, -0.00004107, -0.00078890, 58517.81538729, 0.00268329, -0.27769418],
+  '地球':[1.00000261, 0.01671123, -0.00001531, 100.46457166, 102.93768193, 0.0, 0.00000562, -0.00004392, -0.01294668, 35999.37244981, 0.32327364, 0.0],
+  '火星':[1.52371034, 0.09339410, 1.84969142, -4.55343205, -23.94362959, 49.55953891, 0.00001847, 0.00007882, -0.00813131, 19140.30268499, 0.44441088, -0.29257343],
+  '木星':[5.20288700, 0.04838624, 1.30439695, 34.39644051, 14.72847983, 100.47390909, -0.00011607, -0.00013253, -0.00183714, 3034.74612775, 0.21252668, 0.20469106],
+  '土星':[9.53667594, 0.05386179, 2.48599187, 49.95424423, 92.59887831, 113.66242448, -0.00125060, -0.00050991, 0.00193609, 1222.49362201, -0.41897216, -0.28867794],
+  '天王星':[19.18916464, 0.04725744, 0.77263783, 313.23810451, 170.95427630, 74.01692503, -0.00196176, -0.00004397, -0.00242939, 428.48202785, 0.40805281, 0.04240589],
+  '海王星':[30.06992276, 0.00859048, 1.77004347, -55.12002969, 44.96476227, 131.78422574, 0.00026291, 0.00005105, 0.00035372, 218.45945325, -0.32241464, -0.01262724],
+  '冥王星':[39.48211675, 0.24882730, 17.14001206, 238.92903833, 224.06891629, 110.30393684, -0.00031596, 0.00005170, 0.00004818, 145.20780515, -0.04062942, -0.01183482]
+};
+/* ecliptic coordinates (x toward the March equinox, y 90 degrees on, z toward the ecliptic's north pole) -> the solar system's own axes */
+function ecl(v){ return new THREE.Vector3(v[0], v[2], -v[1]); }
+/* where a planet is on its orbit, days after noon on 1 January 2000; pass E (the eccentric anomaly, 0 to 2 pi) to trace the whole orbit instead */
+function kepler(el, days, E){
+  var T = days/36525, a = el[0] + el[6]*T, e = el[1] + el[7]*T, I = rad(el[2] + el[8]*T), L = el[3] + el[9]*T, wb = el[4] + el[10]*T, Om = rad(el[5] + el[11]*T);
+  var w = rad(wb) - Om;
+  if(E === undefined){
+    var M = rad(((L - wb) % 360 + 540) % 360 - 180); E = M + e*Math.sin(M);
+    for(var k=0;k<8;k++) E -= (E - e*Math.sin(E) - M)/(1 - e*Math.cos(E));        /* Kepler's equation */
+  }
+  var xp = a*(Math.cos(E) - e), yp = a*Math.sqrt(1 - e*e)*Math.sin(E);
+  var cw = Math.cos(w), sw = Math.sin(w), cO = Math.cos(Om), sO = Math.sin(Om), cI = Math.cos(I), sI = Math.sin(I);
+  return [(cw*cO - sw*sO*cI)*xp + (-sw*cO - cw*sO*cI)*yp, (cw*sO + sw*cO*cI)*xp + (-sw*sO + cw*cO*cI)*yp, sw*sI*xp + cw*sI*yp];
+}
+/* the Moon as seen from the Earth, in AU, ecliptic coordinates of 2000 */
+function moonAt(days){
+  var d = days + 1.5, s = Math.sin, c = Math.cos;
+  var N = rad(125.1228 - 0.0529538083*d), i = rad(5.1454), w = rad(318.0634 + 0.1643573223*d), e = 0.054900;
+  var M = rad(115.3654 + 13.0649929509*d), Ms = rad(356.0470 + 0.9856002585*d), ws = rad(282.9404 + 4.70935e-5*d);
+  var E = M + e*s(M)*(1 + e*c(M));
+  for(var k=0;k<6;k++) E -= (E - e*s(E) - M)/(1 - e*c(E));
+  var xv = 60.2666*(c(E) - e), yv = 60.2666*Math.sqrt(1 - e*e)*s(E), v = Math.atan2(yv, xv), r = Math.hypot(xv, yv);
+  var xh = r*(c(N)*c(v + w) - s(N)*s(v + w)*c(i)), yh = r*(s(N)*c(v + w) + c(N)*s(v + w)*c(i)), zh = r*s(v + w)*s(i);
+  var lon = Math.atan2(yh, xh), lat = Math.atan2(zh, Math.hypot(xh, yh));
+  /* the Sun's pull: evection, variation, the yearly equation and smaller terms */
+  var Lm = M + w + N, D = Lm - Ms - ws, F = Lm - N;
+  lon += rad(-1.274*s(M - 2*D) + 0.658*s(2*D) - 0.186*s(Ms) - 0.059*s(2*M - 2*D) - 0.057*s(M - 2*D + Ms) + 0.053*s(M + 2*D)
+    + 0.046*s(2*D - Ms) + 0.041*s(M - Ms) - 0.035*s(D) - 0.031*s(M + Ms) - 0.015*s(2*F - 2*D) + 0.011*s(M - 4*D));
+  lat += rad(-0.173*s(F - 2*D) - 0.055*s(M - F - 2*D) - 0.046*s(M + F - 2*D) + 0.033*s(F + 2*D) + 0.017*s(2*M + F));
+  r += -0.58*c(M - 2*D) - 0.46*c(2*D);
+  lon -= rad(3.8246e-5*d);                     /* from the equinox of the day back to that of 2000 */
+  r *= 4.26352e-5;                             /* Earth radii -> AU */
+  return [r*c(lat)*c(lon), r*c(lat)*s(lon), r*s(lat)];
+}
 (function(){
   var days = (Date.now() - Date.UTC(2000, 0, 1, 12))/86400000;
+  /* the elements for the Earth give the centre the Earth and Moon circle together; the Earth sits 1/82.3 of the way toward the Moon from it, on the far side */
+  var moonV = moonAt(days), EMB = kepler(ORBITS['地球'], days);
+  var earthV = ecl([EMB[0] - moonV[0]/82.3, EMB[1] - moonV[1]/82.3, EMB[2] - moonV[2]/82.3]);
   var PL = [
-    /* name, orbit radius (AU), longitude at J2000, degrees per day, marker colour, marker size, shader type, true radius (AU) */
-    ['水星', 0.387, 252.25, 4.09233, [0.72,0.68,0.64], 8, 0, 1.631e-5],
-    ['金星', 0.723, 181.98, 1.60213, [0.95,0.86,0.62], 11, 1, 4.045e-5],
-    ['地球', 1.000, 100.46, 0.98561, [0.45,0.68,1.0], 12, 2, 4.259e-5],
-    ['火星', 1.524, 355.45, 0.52403, [1.0,0.50,0.32], 10, 3, 2.266e-5],
-    ['木星', 5.203, 34.40, 0.08309, [0.95,0.80,0.62], 17, 4, 4.779e-4],
-    ['土星', 9.537, 49.94, 0.03346, [0.95,0.86,0.62], 16, 5, 4.029e-4],
-    ['天王星', 19.19, 313.23, 0.01173, [0.66,0.90,0.94], 13, 6, 1.708e-4],
-    ['海王星', 30.07, 304.88, 0.00598, [0.42,0.60,1.0], 13, 7, 1.655e-4]
+    /* name, marker colour, marker size, shader type, true radius (AU) */
+    ['水星', [0.72,0.68,0.64], 8, 0, 1.631e-5],
+    ['金星', [0.95,0.86,0.62], 11, 1, 4.045e-5],
+    ['地球', [0.45,0.68,1.0], 12, 2, 4.259e-5],
+    ['火星', [1.0,0.50,0.32], 10, 3, 2.266e-5],
+    ['木星', [0.95,0.80,0.62], 17, 4, 4.779e-4],
+    ['土星', [0.95,0.86,0.62], 16, 5, 4.029e-4],
+    ['天王星', [0.66,0.90,0.94], 13, 6, 1.708e-4],
+    ['海王星', [0.42,0.60,1.0], 13, 7, 1.655e-4]
   ];
   var pts = [];
   /* the Sun: 1.39 million km across */
@@ -873,19 +922,19 @@ function lyText(d){
   body(9, RSUN, new THREE.Vector3(), auRoot, [1.0,0.86,0.55], null, -9, -8, -2.4, -1.8, 'p', {map:loadMap('sun'), spin:0.0012});
   dot(new THREE.Vector3(), auRoot, [1.0,0.82,0.52], RSUN, 0.03, true, -9, -8, -1.6, -0.9, 'p');
   PL.forEach(function(p){
-    var lon = rad((p[2] + p[3]*days) % 360), r = p[1];
-    var v = new THREE.Vector3(r*Math.cos(lon), 0, -r*Math.sin(lon));
-    dot(v, auRoot, p[4], p[7], 0.0011*p[5], false, -9, -8, -2.2, -1.4, 'p');
+    var el = ORBITS[p[0]], r = el[0];
+    var v = p[0] === '地球' ? earthV.clone() : ecl(kepler(el, days));
+    dot(v, auRoot, p[1], p[4], 0.0011*p[2], false, -9, -8, -2.2, -1.4, 'p');
     var hi = Math.log10(r*AU_LY) + 1.9;
-    mark(p[0], label(p[0], '', v, -9, hi, true, p[0] === '地球'), p[7]*2.6*AU_LY, 'p');
+    mark(p[0], label(p[0], '', v, -9, hi, true, p[0] === '地球'), p[4]*2.6*AU_LY, 'p');
     var toSun = v.clone().applyQuaternion(auRoot.quaternion).normalize().negate();
     var FACE = {'水星':['mercury', 0.0008, 0.0], '地球':['earth', 0.0030, 0.409], '火星':['mars', 0.0028, 0.44], '木星':['jupiter', 0.0060, 0.055],
                 '土星':['saturn', 0.0055, 0.0], '天王星':['uranus', 0.0035, 1.71], '海王星':['neptune', 0.0038, 0.494]}[p[0]];
     var maps = FACE ? {map:loadMap(FACE[0]), spin:FACE[1]} : null;
     if(p[0] === '地球' && maps){ maps.night = loadMap('night'); maps.clouds = loadMap('clouds'); }
-    var ball = body(p[6], p[7], v, auRoot, null, toSun, -9, -8, -2.6, -2.0, 'p', maps);
+    var ball = body(p[3], p[4], v, auRoot, null, toSun, -9, -8, -2.6, -2.0, 'p', maps);
     if(FACE) ball.rotation.z = FACE[2];        /* each planet leans by its real axial tilt */
-    airShell(p[0], p[7], v, toSun, -9, -8, -2.6, -2.0);
+    airShell(p[0], p[4], v, toSun, -9, -8, -2.6, -2.0);
     if(p[0] === '土星'){
       /* Saturn keeps its rings */
       var rg = new THREE.RingGeometry(1.2, 2.3, 128, 1); rg.rotateX(-Math.PI/2);
@@ -896,27 +945,26 @@ function lyText(d){
           'float d = smoothstep(1.25,1.3,r)*(1.0-smoothstep(1.5,1.53,r))*0.25 + smoothstep(1.53,1.56,r)*(1.0-smoothstep(1.92,1.95,r))*0.95 + smoothstep(2.02,2.04,r)*(1.0-smoothstep(2.27,2.3,r))*0.65;' +
           'd *= 0.8 + 0.2*sin(r*160.0); gl_FragColor = vec4(vec3(0.92,0.85,0.70)*uAlpha, d*0.9*uAlpha); }',
         transparent:true, depthWrite:false, side:THREE.DoubleSide});
-      var ring = new THREE.Mesh(rg, rm); ring.position.copy(v); ring.scale.setScalar(p[7]*K('p')); ring.rotation.set(0.47, 0, 0.2); ball.rotation.set(0.47, 0, 0.2);
+      var ring = new THREE.Mesh(rg, rm); ring.position.copy(v); ring.scale.setScalar(p[4]*K('p')); ring.rotation.set(0.47, 0, 0.2); ball.rotation.set(0.47, 0, 0.2);
       if(ringMap) mapped.push({u:{uHasMap:rm.uniforms.uHasRing}, t:ringMap});
-      sized.push({m:ring, base:p[7], cls:'p'});
+      sized.push({m:ring, base:p[4], cls:'p'});
       addLayer(ring, -9, -8, -2.6, -2.0, auRoot);
     }
-    /* orbit */
+    /* orbit: the true ellipse, tilted to the ecliptic as it really is */
     var seg = 180, arr = new Float32Array((seg + 1)*3);
-    for(var i=0;i<=seg;i++){ var a = i/seg*Math.PI*2; arr[i*3] = r*Math.cos(a); arr[i*3+2] = r*Math.sin(a); }
+    for(var i=0;i<=seg;i++){ var o = ecl(kepler(el, days, i/seg*Math.PI*2)); arr[i*3] = o.x; arr[i*3+1] = o.y; arr[i*3+2] = o.z; }
     var g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(arr, 3));
     var m = new THREE.LineBasicMaterial({color:0x8fa3c8, transparent:true, opacity:0.45, depthWrite:false});
     addLayer(new THREE.Line(g, m), -9, -8, Math.log10(r*AU_LY) + 1.6, Math.log10(r*AU_LY) + 2.3, auRoot, {line:m, base:0.45});
   });
   (function(){
-    var e = PL[2], lon = rad((e[2] + e[3]*days) % 360);
-    var ev = new THREE.Vector3(Math.cos(lon), 0, -Math.sin(lon));
-    var mv = ev.clone().add(new THREE.Vector3(Math.cos(lon + 2.1), 0.09, -Math.sin(lon + 2.1)).multiplyScalar(0.00257));
+    /* the Moon where it really is tonight, so its phase seen from the Earth is today's */
+    var mv = earthV.clone().add(ecl(moonV));
     body(0, 1.161e-5, mv, auRoot, null, mv.clone().applyQuaternion(auRoot.quaternion).normalize().negate(), -9, -8, -2.6, -2.0, 'p', {map:loadMap('moon'), spin:0});
     dot(mv, auRoot, [0.8,0.8,0.8], 1.161e-5, 0.006, false, -9, -8, -4.2, -3.9, 'p');
     mark('月球', label('月球', '', mv, -9, -6.0, true), 1.161e-5*2.6*AU_LY, 'p');
   })();
-  var pluto = new THREE.Vector3(35.6*Math.cos(rad(302)), -2.5, -35.6*Math.sin(rad(302)));
+  var pluto = ecl(kepler(ORBITS['冥王星'], days));
   dot(pluto, auRoot, [0.85,0.75,0.65], 7.94e-6, 0.008, false, -9, -8, -2.2, -1.4, 'p');
   mark('冥王星', label('冥王星', '', pluto, -4.2, -1.9, true), 7.94e-6*2.6*AU_LY, 'p');
   body(8, 7.94e-6, pluto, auRoot, null, pluto.clone().applyQuaternion(auRoot.quaternion).normalize().negate(), -9, -8, -2.6, -2.0, 'p');
@@ -1306,13 +1354,9 @@ var postScene = new THREE.Scene(), postCam = new THREE.Camera(), postQuad = new 
 postQuad.frustumCulled = false; postScene.add(postQuad);
 var POST_VS = 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }';
 function postMat(fs, uniforms){ return new THREE.ShaderMaterial({uniforms:uniforms, vertexShader:POST_VS, fragmentShader:fs, depthTest:false, depthWrite:false}); }
-var compU = {tMain:{value:null}, tVol:{value:null}, uLens:{value:new THREE.Vector3(0.5, 0.5, 0)}, uAspect:{value:1}, uVolK:VOLK};
-var compMat = postMat('uniform sampler2D tMain; uniform sampler2D tVol; uniform vec3 uLens; uniform float uAspect; uniform float uVolK; varying vec2 vUv;' +
-  'void main(){ vec2 uv = vUv;' +
-  /* a black hole bends the light passing it: everything behind is pushed outward into arcs and a ring */
-  ' if(uLens.z > 0.0){ vec2 d = (uv - uLens.xy)*vec2(uAspect, 1.0); float r2 = dot(d, d); float wgt = smoothstep(uLens.z*1.05, uLens.z*2.0, sqrt(r2));' +
-  '  uv -= d/vec2(uAspect, 1.0)*(uLens.z*uLens.z*2.6/(r2 + 1e-6))*wgt; }' +
-  ' vec4 m = texture2D(tMain, uv); vec4 v = texture2D(tVol, uv)*uVolK;' +
+var compU = {tMain:{value:null}, tVol:{value:null}, uVolK:VOLK};
+var compMat = postMat('uniform sampler2D tMain; uniform sampler2D tVol; uniform float uVolK; varying vec2 vUv;' +
+  'void main(){ vec4 m = texture2D(tMain, vUv); vec4 v = texture2D(tVol, vUv)*uVolK;' +
   ' gl_FragColor = vec4(m.rgb*(1.0 - v.a) + v.rgb, 1.0); }', compU);
 var downU = {tSrc:{value:null}, uPx:{value:new THREE.Vector2()}, uThr:{value:0}};
 var downMat = postMat('uniform sampler2D tSrc; uniform vec2 uPx; uniform float uThr; varying vec2 vUv;' +
@@ -1389,8 +1433,7 @@ function drawFrame(){
   var w = rtMain.width, h = rtMain.height, i;
   renderer.setRenderTarget(rtMain); renderer.setClearColor(0x030408, 1); renderer.clear(); renderer.render(scene, camera);
   renderer.setRenderTarget(rtVol); renderer.setClearColor(0x000000, 0); renderer.clear(); renderer.render(volScene, camera);
-  compU.uLens.value.z = 0;
-  compU.tMain.value = rtMain.texture; compU.tVol.value = rtVol.texture; compU.uAspect.value = w/h;
+  compU.tMain.value = rtMain.texture; compU.tVol.value = rtVol.texture;
   pass(compMat, rtComp);
   renderer.autoClear = false; renderer.setRenderTarget(rtComp); renderer.render(topScene, camera); renderer.autoClear = true;
   /* the black hole that looks biggest from here, if any is big enough on screen to matter */
