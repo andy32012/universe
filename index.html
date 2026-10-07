@@ -79,7 +79,7 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--gold);outline-o
 #goHome{
   position:fixed;right:16px;top:calc(env(safe-area-inset-top,0px) + 16px);z-index:6;
   min-height:40px;padding:0 15px;border-radius:999px;font-size:13px;
-  background:var(--panel);border:1px solid var(--line);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);
+  background:var(--panel);border:1px solid var(--line);-webkit-backdrop-filter:none;backdrop-filter:none;
 }
 #tip{position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom,0px) + 176px);transform:translateX(-50%);z-index:4;margin:0;white-space:nowrap;pointer-events:none;
   font-size:12.5px;color:var(--ink-dim);padding:7px 14px;border-radius:999px;background:rgba(8,9,14,.55);border:1px solid var(--line);transition:opacity .8s}
@@ -87,11 +87,11 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--gold);outline-o
 #scaleBtn{
   position:fixed;right:16px;top:calc(env(safe-area-inset-top,0px) + 64px);z-index:6;
   min-height:40px;padding:0 15px;border-radius:999px;font-size:13px;color:var(--gold);
-  background:var(--panel);border:1px solid rgba(243,217,162,.4);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);
+  background:var(--panel);border:1px solid rgba(243,217,162,.4);-webkit-backdrop-filter:none;backdrop-filter:none;
 }
 #brightBtn,#hdrBtn,#teleBtn{
   position:fixed;right:16px;z-index:6;min-height:40px;padding:0 15px;border-radius:999px;font-size:13px;
-  background:var(--panel);border:1px solid var(--line);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);
+  background:var(--panel);border:1px solid var(--line);-webkit-backdrop-filter:none;backdrop-filter:none;
 }
 #brightBtn{top:calc(env(safe-area-inset-top,0px) + 112px)}
 #teleBtn{top:calc(env(safe-area-inset-top,0px) + 160px)}
@@ -108,7 +108,7 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--gold);outline-o
 #stick{
   position:fixed;left:calc(env(safe-area-inset-left,0px) + 22px);bottom:calc(env(safe-area-inset-bottom,0px) + 26px);z-index:6;
   width:132px;height:132px;border-radius:50%;touch-action:none;
-  background:var(--panel);border:1px solid var(--line);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);
+  background:var(--panel);border:1px solid var(--line);-webkit-backdrop-filter:none;backdrop-filter:none;
 }
 #stick::before{content:"";position:absolute;inset:14px;border-radius:50%;border:1px dashed rgba(238,240,246,.16)}
 #knob{position:absolute;left:50%;top:50%;width:54px;height:54px;margin:-27px 0 0 -27px;border-radius:50%;background:rgba(238,240,246,.82);pointer-events:none;will-change:transform}
@@ -121,7 +121,7 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--gold);outline-o
 }
 #fly button{
   border-radius:50%;touch-action:none;background:var(--panel);border:1px solid var(--line);
-  -webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);letter-spacing:.08em;
+  -webkit-backdrop-filter:none;backdrop-filter:none;letter-spacing:.08em;
 }
 #fwd{width:104px;height:104px;font-size:17px;font-weight:600;border-color:rgba(243,217,162,.5) !important;color:var(--gold)}
 #back{width:66px;height:66px;font-size:13px;color:var(--ink-dim)}
@@ -140,7 +140,7 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--gold);outline-o
 #hud .stats>div{display:flex;align-items:baseline;gap:8px}
 #hud .stats dt{font-size:10px;letter-spacing:.03em;color:var(--ink-faint)}
 #hud .stats dd{margin:0;font-size:12px;font-weight:400;line-height:1.4;color:var(--ink-dim)}
-#goHome,#exploreBtn{position:fixed;top:calc(env(safe-area-inset-top,0px) + 24px);z-index:8;min-height:44px;border-radius:999px;backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);font-size:12px;letter-spacing:.04em}
+#goHome,#exploreBtn{position:fixed;top:calc(env(safe-area-inset-top,0px) + 24px);z-index:8;min-height:44px;border-radius:999px;backdrop-filter:none;-webkit-backdrop-filter:none;font-size:12px;letter-spacing:.04em}
 #goHome{right:calc(env(safe-area-inset-right,0px) + 122px);width:82px;padding:0 10px;color:var(--ink-dim);background:rgba(12,16,24,.45);border:1px solid rgba(238,240,246,.12)}
 #exploreBtn{right:calc(env(safe-area-inset-right,0px) + 24px);width:88px;padding:0 12px;border:1px solid rgba(243,217,162,.38);background:rgba(25,25,31,.62);color:var(--gold)}
 #exploreBtn span{font-size:19px;vertical-align:-1px;margin-left:5px}
@@ -149,12 +149,12 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--gold);outline-o
 #teleBtn{top:auto;left:50%;right:auto;bottom:calc(env(safe-area-inset-bottom,0px) + 44px);transform:translateX(-50%);min-height:40px;padding:0 16px;font-size:11px;background:rgba(10,14,22,.45);border-color:rgba(238,240,246,.13);color:var(--ink-dim)}
 #sourceBtn{position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom,0px) + 3px);transform:translateX(-50%);z-index:6;min-width:76px;min-height:36px;padding:0 10px;font-size:9px;letter-spacing:.1em;color:var(--ink-faint)}
 #sourceBtn:hover{color:var(--gold)}
-#stick{width:112px;height:112px;left:calc(env(safe-area-inset-left,0px) + 24px);bottom:calc(env(safe-area-inset-bottom,0px) + 28px);background:rgba(12,16,24,.25);border-color:rgba(238,240,246,.16);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)}
+#stick{width:112px;height:112px;left:calc(env(safe-area-inset-left,0px) + 24px);bottom:calc(env(safe-area-inset-bottom,0px) + 28px);background:rgba(12,16,24,.25);border-color:rgba(238,240,246,.16);backdrop-filter:none;-webkit-backdrop-filter:none}
 #stick::before{inset:14px;border-color:rgba(238,240,246,.1)}
 #stick i{display:none}
 #knob{width:40px;height:40px;margin:-20px 0 0 -20px;background:rgba(238,240,246,.6)}
 #fly{right:calc(env(safe-area-inset-right,0px) + 24px);bottom:calc(env(safe-area-inset-bottom,0px) + 28px);gap:10px}
-#fly button{background:rgba(12,16,24,.32);border-color:rgba(238,240,246,.16);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)}
+#fly button{background:rgba(12,16,24,.32);border-color:rgba(238,240,246,.16);backdrop-filter:none;-webkit-backdrop-filter:none}
 #fwd{width:88px;height:88px;font-size:14px;font-weight:500;border-color:rgba(243,217,162,.35)!important}
 #back{width:52px;height:52px;font-size:11px;color:var(--ink-faint)}
 #cross{width:14px;height:14px;margin:-7px 0 0 -7px;opacity:.25}
@@ -167,7 +167,7 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--gold);outline-o
 #labels .lab[data-explore].off{display:none}
 #labels .lab[data-explore]:hover{color:var(--gold);background:rgba(8,11,20,.65)}
 
-#explorer{position:fixed;top:calc(env(safe-area-inset-top,0px) + 84px);right:calc(env(safe-area-inset-right,0px) + 24px);width:360px;max-height:calc(100dvh - env(safe-area-inset-top,0px) - env(safe-area-inset-bottom,0px) - 284px);z-index:9;display:flex;flex-direction:column;border:1px solid rgba(243,217,162,.19);border-radius:20px;background:rgba(13,18,28,.96);box-shadow:0 24px 80px rgba(0,0,0,.45);backdrop-filter:blur(22px);-webkit-backdrop-filter:blur(22px);overflow:hidden;user-select:text;-webkit-user-select:text}
+#explorer{position:fixed;top:calc(env(safe-area-inset-top,0px) + 84px);right:calc(env(safe-area-inset-right,0px) + 24px);width:360px;max-height:calc(100dvh - env(safe-area-inset-top,0px) - env(safe-area-inset-bottom,0px) - 284px);z-index:9;display:flex;flex-direction:column;border:1px solid rgba(243,217,162,.19);border-radius:20px;background:rgba(13,18,28,.96);box-shadow:0 24px 80px rgba(0,0,0,.45);backdrop-filter:none;-webkit-backdrop-filter:none;overflow:hidden;user-select:text;-webkit-user-select:text}
 #explorer[hidden],#explorerTravel[hidden],#objectCard[hidden],#objectRelease[hidden],#destinationEmpty[hidden],#objectSource[hidden]{display:none}
 .explorer-heading{padding:21px 20px 17px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;border-bottom:1px solid var(--line)}
 .explorer-eyebrow{color:var(--gold);font-size:9px;letter-spacing:.2em;line-height:1.5;margin:0}
@@ -222,7 +222,7 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--gold);outline-o
 #explorer #credit{position:static;left:auto;bottom:auto;transform:none;max-width:none;margin:0;color:var(--ink-dim);font-size:10px;line-height:1.9;white-space:normal;pointer-events:auto;text-shadow:none}
 #explorerAttribution>a{display:inline-block;min-height:32px;margin-top:8px;line-height:32px;color:var(--gold);font-size:10px;text-underline-offset:3px}
 
-#explorerTravel{position:fixed;bottom:calc(env(safe-area-inset-bottom,0px) + 196px);left:50%;transform:translateX(-50%);z-index:7;display:flex;align-items:center;gap:10px;max-width:calc(100% - 32px);min-height:40px;border:1px solid rgba(243,217,162,.2);border-radius:999px;padding:5px 8px 5px 14px;background:rgba(10,13,22,.82);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);font-size:11px}
+#explorerTravel{position:fixed;bottom:calc(env(safe-area-inset-bottom,0px) + 196px);left:50%;transform:translateX(-50%);z-index:7;display:flex;align-items:center;gap:10px;max-width:calc(100% - 32px);min-height:40px;border:1px solid rgba(243,217,162,.2);border-radius:999px;padding:5px 8px 5px 14px;background:rgba(10,13,22,.82);backdrop-filter:none;-webkit-backdrop-filter:none;font-size:11px}
 .travel-dot{width:4px;height:4px;border-radius:50%;background:var(--gold);flex-shrink:0}
 #explorerTravelText{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--gold)}
 #explorerStop{border-left:1px solid var(--line);padding:7px 8px 7px 11px;white-space:nowrap;color:var(--ink-dim);font-size:10px;flex-shrink:0}
@@ -344,7 +344,7 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--gold);outline-o
         <div id="explorerLookControls" aria-label="觀測效果"></div>
         <div class="explorer-quality">
           <label for="qualitySelect">畫面品質</label>
-          <select id="qualitySelect"><option value="high">高畫質 · M5</option><option value="balanced">均衡</option><option value="auto">自動調整</option></select>
+          <select id="qualitySelect"><option value="high">高畫質</option><option value="balanced">均衡</option><option value="auto">自動調整</option></select>
         </div>
         <div id="explorerScale"></div>
         <p class="explorer-control-guide">拖曳轉向，W／S 前進後退；雙指或滾輪調整望遠鏡。</p>
@@ -389,9 +389,11 @@ var $ = function(s){ return document.querySelector(s); };
 function fail(m){ $('#failT').textContent = m; $('#fail').hidden = false; }
 if(!window.THREE){ fail('3D 繪圖元件沒有載入成功。請確認網路連線後重新整理頁面。'); return; }
 var canvas = $('#gl'), renderer;
-try{ renderer = new THREE.WebGLRenderer({canvas:canvas, antialias:true, powerPreference:'high-performance'}); }
+/* The final pass covers every canvas pixel; default-framebuffer MSAA only adds
+   storage/resolve work, since scene edges were already rendered offscreen. */
+try{ renderer = new THREE.WebGLRenderer({canvas:canvas, antialias:false, powerPreference:'high-performance'}); }
 catch(e){ fail('這台裝置的瀏覽器無法啟用 WebGL，所以畫不出宇宙。請換一個瀏覽器再試。'); return; }
-var PR = Math.min(window.devicePixelRatio || 1, 2);
+var PR = Math.min(window.devicePixelRatio || 1, 2, Math.sqrt(8388608/Math.max(window.innerWidth*window.innerHeight, 1)));
 renderer.setPixelRatio(PR);
 renderer.setSize(window.innerWidth, window.innerHeight, false);
 renderer.setClearColor(0x000000, 1);
@@ -531,7 +533,7 @@ float terrainHeight(vec3 point){
 }
 `;
 var ECLIPSE_GL = `
-uniform vec4 uOcc[4]; uniform float uOccCount; uniform vec3 uSun; uniform float uSunAngle;
+uniform vec4 uOcc[4]; uniform float uOccCount; uniform vec3 uSun; uniform float uSunAngle; uniform float uSunTangent;
 // Area of the overlap of two apparent discs, normalized by the solar-disc area.
 // Uniform solar radiance; solar limb darkening is omitted.
 float discVisible(float a,float b,float sep){
@@ -544,11 +546,16 @@ float discVisible(float a,float b,float sep){
   return clamp(1.0-area/(3.14159265359*a*a),0.0,1.0);
 }
 float eclipseAt(vec3 surface){
+  if(uOccCount<0.5) return 1.0;
   float visibility=1.0;
   for(int i=0;i<4;i++){
     if(float(i)>=uOccCount) break;
-    vec3 d=uOcc[i].xyz-surface; float dist=length(d);
-    if(dot(d,uSun)>0.0 && dist>uOcc[i].w){
+    vec3 d=uOcc[i].xyz-surface; float d2=dot(d,d), along=dot(d,uSun);
+    // Reject rays outside the complete penumbra before inverse trigonometry.
+    float cone=uOcc[i].w*(1.0+uSunTangent*uSunTangent)+max(along,0.0)*uSunTangent;
+    if(d2-along*along>cone*cone) continue;
+    float dist=sqrt(d2);
+    if(along>0.0 && dist>uOcc[i].w){
       float angle=asin(clamp(uOcc[i].w/dist,0.0,1.0));
       // atan avoids acos cancellation for small angular separations.
       float sep=atan(length(cross(d,uSun)),dot(d,uSun));
@@ -578,6 +585,8 @@ varying vec3 vObj; varying vec3 vNw; varying vec3 vNv; varying vec3 vV; varying 
 float cloudsAt(vec3 p){return smoothstep(0.10,0.8,mapAt(uMap3,normalize(p),uRotation+uSpin*uTime+uTime*0.000008+0.03).r);}
 void main(){
   vec3 p=normalize(vObj), N=normalize(vNw); float spin=uRotation+uSpin*uTime;
+  bool earth=uType>1.5 && uType<2.5;
+  if(uType<8.5 && !earth && uTerrain<0.5 && dot(N,uSun)<=0.0){gl_FragColor=vec4(0.0,0.0,0.0,1.0);return;}
   vec3 mcol=uHasMap>0.5 ? mapAt(uMap,p,spin).rgb : uTint;
   if(uType>8.5){
     float ndv=max(dot(normalize(vNv),normalize(vV)),0.0);
@@ -606,8 +615,9 @@ void main(){
     else col=mix(vec3(0.40,0.31,0.24),vec3(0.77,0.68,0.56),f);
   }
   if(uHasMap<0.5) col*=uTint;
-  vec3 surface=uBasis*p; float visibility=eclipseAt(surface);
-  if(uHasRing>0.5){
+  float mu=max(dot(N,uSun),0.0);
+  vec3 surface=uBasis*p; float visibility=mu>0.0?eclipseAt(surface):0.0;
+  if(uHasRing>0.5 && mu>0.0){
     float dn=dot(uSun,uRingN);
     if(abs(dn)>0.00001){
       float t=-dot(surface,uRingN)/dn;
@@ -616,24 +626,31 @@ void main(){
       }
     }
   }
-  float mu=max(dot(N,uSun),0.0), cloudA=0.0, cloudShadow=1.0, wet=0.0;
-  bool earth=uType>1.5 && uType<2.5;
+  float cloudA=0.0, cloudShadow=1.0, wet=0.0;
   if(earth && uHasMap>0.5){
     wet=smoothstep(0.02,0.10,mcol.b-max(mcol.r,mcol.g)*0.85)*(1.0-smoothstep(0.35,0.6,mcol.r));
     cloudA=cloudsAt(p);
-    float sl=max(dot(p,uSunLocal),0.08);
-    vec3 q=normalize(p+(uSunLocal-p*dot(p,uSunLocal))*(0.0013/sl));
-    cloudShadow=exp(-cloudsAt(q)*1.7);
+    if(mu>0.0 && visibility>0.0){
+      float sl=max(dot(p,uSunLocal),0.08);
+      vec3 q=normalize(p+(uSunLocal-p*dot(p,uSunLocal))*(0.0013/sl));
+      cloudShadow=exp(-cloudsAt(q)*1.7);
+    }
     if(uCloudLayers<0.5) col=mix(col,vec3(0.97),cloudA*0.9);
   }
   vec3 outc=col*(mu*uFlux*1.15*visibility*cloudShadow), emission=vec3(0.0);
   if(earth){
-    vec3 V=normalize(cameraPosition-vW), H=normalize(uSun+V);
-    // A rough ocean highlight and Schlick Fresnel response; ocean mask is inferred from the colour map.
-    float fresnel=0.02+0.98*pow(1.0-max(dot(V,H),0.0),5.0);
-    float wave=0.85+0.15*n3(surfacePoint(p)*900.0+vec3(uTime*0.04));
-    float spec=pow(max(dot(N,H),0.0),180.0)*7.2*fresnel*wave;
-    outc+=vec3(1.0,0.97,0.90)*spec*wet*mu*uFlux*visibility*cloudShadow;
+    // Resolve capillary texture only inside a visible ocean highlight.
+    if(wet>0.001 && mu>0.0 && visibility>0.0){
+      vec3 V=normalize(cameraPosition-vW), H=normalize(uSun+V);
+      float nh=max(dot(N,H),0.0);
+      if(nh>0.94){
+        float fresnel=0.02+0.98*pow(1.0-max(dot(V,H),0.0),5.0);
+        float footprint=length(fwidth(p))*900.0, wave=0.925;
+        if(footprint<1.0) wave=mix(0.85+0.15*n3(surfacePoint(p)*900.0+vec3(uTime*0.04)),0.925,smoothstep(0.25,1.0,footprint));
+        float spec=pow(nh,180.0)*7.2*fresnel*wave;
+        outc+=vec3(1.0,0.97,0.90)*spec*wet*mu*uFlux*visibility*cloudShadow;
+      }
+    }
     if(uHasMap>0.5) emission=mapAt(uMap2,p,spin).rgb*vec3(1.0,0.80,0.53)*(1.0-smoothstep(-0.13,0.07,dot(N,uSun)))*0.7*(1.0-cloudA*0.75);
   }
   gl_FragColor=vec4((outc*uDisplayGain+emission)*uAlpha,1.0);
@@ -641,55 +658,147 @@ void main(){
 
 /* Three finite-height cloud shells: procedural thickness and approximate self-shadow,
    not a meteorological cloud field or measured cloud altitude. */
+var CLOUD_VS = `
+varying vec3 vObj; varying vec3 vNv; varying vec3 vV;
+void main(){vObj=position;vNv=normalize(normalMatrix*normal);vec4 mv=modelViewMatrix*vec4(position,1.0);vV=-mv.xyz;gl_Position=projectionMatrix*mv;}
+`;
 var CLOUD_FS = `
 uniform sampler2D uMap3; uniform float uRotation; uniform float uSpin; uniform float uTime;
-uniform float uAlpha; uniform float uFlux; uniform float uDisplayGain; uniform float uLayer; uniform vec3 uSunLocal; uniform mat3 uBasis;
-varying vec3 vObj; varying vec3 vNw; varying vec3 vNv; varying vec3 vV; varying vec3 vW; varying float vRw;
+uniform float uAlpha; uniform float uFlux; uniform float uDisplayGain; uniform float uLayer;
+uniform float uCloudMerge; uniform float uCloudShadowSteps; uniform vec3 uSunLocal; uniform mat3 uBasis;
+varying vec3 vObj; varying vec3 vNv; varying vec3 vV;
 ` + NOISE_GL + SURFACE_MAP_GL + ECLIPSE_GL + `
-float density(vec3 p){
+float cloudBase(vec3 p,float footprint){
   float turn=uRotation+uSpin*uTime+uTime*0.000008+0.03;
   float tex=mapAt(uMap3,normalize(p),turn).r;
-  float a=turn*6.2831853; vec3 q=vec3(cos(a)*p.x-sin(a)*p.z,p.y,sin(a)*p.x+cos(a)*p.z);
-  float detail=n3(q*600.0+uLayer*1.73);
-  float footprint=length(fwidth(q))*600.0;
-  detail=mix(detail,0.5,smoothstep(0.25,1.0,footprint));
-  return smoothstep(0.13+uLayer*0.035,0.80,tex+(detail-0.5)*0.11);
+  // Do not evaluate eight-corner noise when the pixel filter removes it entirely.
+  if(footprint<1.0){
+    float a=turn*6.2831853; vec3 q=vec3(cos(a)*p.x-sin(a)*p.z,p.y,sin(a)*p.x+cos(a)*p.z);
+    tex+=(n3(q*600.0+uLayer*1.73)-0.5)*0.11*(1.0-smoothstep(0.25,1.0,footprint));
+  }
+  return tex;
 }
+float density(vec3 p,float footprint){return smoothstep(0.13+uLayer*0.035,0.80,cloudBase(p,footprint));}
 void main(){
-  vec3 p=normalize(vObj); float d=density(p); if(d<0.01) discard;
-  float mu=dot(p,uSunLocal); vec3 stepSun=(uSunLocal-p*mu)*0.00065/max(mu,0.12);
-  float od=0.0; for(int j=1;j<=4;j++) od+=density(normalize(p+stepSun*float(j)))*0.2;
-  float visibility=eclipseAt(uBasis*p);
-  float direct=max(mu,0.0)*exp(-od)*uFlux*visibility;
-  float backlit=pow(max(dot(normalize(vV),normalize(vNv)),0.0),0.4);
+  vec3 p=normalize(vObj); float footprint=length(fwidth(p))*600.0;
+  float tex=cloudBase(p,footprint),d=smoothstep(0.13+uLayer*0.035,0.80,tex);
+  if((uCloudMerge>0.5 && tex<=0.13) || (uCloudMerge<0.5 && d<0.01))discard;
+  float mu=dot(p,uSunLocal),direct=0.0,visibility=1.0;
+  if(mu> -0.2 && uOccCount>0.5)visibility=eclipseAt(uBasis*p);
+  if(mu>0.0 && visibility>0.0){
+    vec3 stepSun=(uSunLocal-p*mu)*0.00065/max(mu,0.12);
+    float od=0.0;
+    for(int j=1;j<=4;j++){
+      if(float(j)>uCloudShadowSteps)break;
+      od+=density(normalize(p+stepSun*(float(j)*4.0/uCloudShadowSteps)),footprint)*(0.8/uCloudShadowSteps);
+    }
+    direct=mu*exp(-od)*uFlux*visibility;
+  }
+  float backlit=pow(max(dot(normalize(vV),normalize(vNv)),0.0),0.4),viewFactor=0.8+0.2*backlit;
   vec3 lit=vec3(1.0,0.985,0.96)*(direct*1.45+uFlux*0.018*max(mu+0.2,0.0)*visibility)*uDisplayGain;
-  float alpha=(1.0-exp(-d*0.78))*(0.8+0.2*backlit)*uAlpha;
+  float alpha;
+  if(uCloudMerge>0.5){
+    // When shell separation is subpixel, compose all three optical depths once.
+    vec3 ds=smoothstep(vec3(0.13,0.165,0.20),vec3(0.80),vec3(tex));
+    vec3 clear=vec3(1.0)-(vec3(1.0)-exp(-ds*0.78))*viewFactor*uAlpha;
+    alpha=1.0-clear.x*clear.y*clear.z;
+  }else alpha=(1.0-exp(-d*0.78))*viewFactor*uAlpha;
+  if(alpha<0.002)discard;
   gl_FragColor=vec4(lit,alpha);
 }`;
 /* Air around a planet, computed from how sunlight really scatters in it: short wavelengths scatter most (blue skies, red sunsets),
    with a brighter haze toward the Sun. The routine follows wwwtyro/glsl-atmosphere (public domain). Lengths are in planet radii. */
 var AIR_VS = 'varying vec3 vW; varying vec3 vCtr; varying float vRw; uniform float uTop;' +
   'void main(){ vec4 w = modelMatrix*vec4(position,1.0); vW = w.xyz; vCtr = modelMatrix[3].xyz; vRw = length(modelMatrix[0].xyz)/uTop; gl_Position = projectionMatrix*viewMatrix*w; }';
-var AIR_FS = 'uniform vec3 uSun; uniform vec3 uKr; uniform float uKm; uniform float uShR; uniform float uShM; uniform float uTop; uniform float uI; uniform float uAlpha; uniform float uFlux; uniform float uDisplayGain; uniform float uAirSteps; uniform float uSunSteps;' +
-  'varying vec3 vW; varying vec3 vCtr; varying float vRw;' +
-  'vec2 rsi(vec3 r0, vec3 rd, float sr){ float tm = -dot(r0, rd); vec3 pp = r0 + rd*tm; float d2 = dot(pp, pp); if(d2 > sr*sr) return vec2(1e5, -1e5); float hf = sqrt(sr*sr - d2); return vec2(tm - hf, tm + hf); }' +
-  'void main(){ vec3 r = normalize(vW); vec3 r0 = -vCtr/vRw;' +
-  ' vec2 p = rsi(r0, r, uTop); if(p.x > p.y) discard;' +
-  ' vec2 pl = rsi(r0, r, 1.0); if(pl.x < pl.y && pl.x > 0.0) p.y = min(p.y, pl.x);' +
-  ' float t0 = max(p.x, 0.0); float iStep = (p.y - t0)/uAirSteps; float iTime = t0;' +
-  ' vec3 totR = vec3(0.0); vec3 totM = vec3(0.0); float iOdR = 0.0; float iOdM = 0.0;' +
-  ' float mu = dot(r, uSun); float mumu = mu*mu; float g = 0.758; float gg = g*g;' +
-  ' float pR = 3.0/(16.0*3.141592)*(1.0 + mumu);' +
-  ' float pM = 3.0/(8.0*3.141592)*((1.0 - gg)*(mumu + 1.0))/(pow(1.0 + gg - 2.0*mu*g, 1.5)*(2.0 + gg));' +
-  ' for(int i=0;i<32;i++){ if(float(i)>=uAirSteps) break; vec3 iPos = r0 + r*(iTime + iStep*0.5); float iH = length(iPos) - 1.0;' +
-  '  float odR = exp(-iH/uShR)*iStep; float odM = exp(-iH/uShM)*iStep; iOdR += odR; iOdM += odM;' +
-  '  vec2 hitGround = rsi(iPos,uSun,1.0); if(hitGround.x>0.0 && hitGround.x<hitGround.y){ iTime+=iStep; continue; } float jStep = rsi(iPos, uSun, uTop).y/uSunSteps; float jTime = 0.0; float jOdR = 0.0; float jOdM = 0.0;' +
-  '  for(int j=0;j<8;j++){ if(float(j)>=uSunSteps) break; vec3 jPos = iPos + uSun*(jTime + jStep*0.5); float jH = length(jPos) - 1.0;' +
-  '   jOdR += exp(-max(jH, -0.02)/uShR)*jStep; jOdM += exp(-max(jH, -0.02)/uShM)*jStep; jTime += jStep; }' +
-  '  vec3 attn = exp(-(uKm*(iOdM + jOdM) + uKr*(iOdR + jOdR)));' +
-  '  totR += odR*attn; totM += odM*attn; iTime += iStep; }' +
-  ' vec3 c = uI*uFlux*uDisplayGain*(pR*uKr*totR + pM*uKm*totM);' +
-  ' gl_FragColor = vec4(c*uAlpha, 1.0); }';
+var AIR_FS = `
+uniform vec3 uSun;uniform vec3 uKr;uniform float uKm;uniform float uShR;uniform float uShM;uniform float uTop;
+uniform float uI;uniform float uAlpha;uniform float uFlux;uniform float uDisplayGain;uniform float uAirSteps;
+uniform sampler2D uAirLut;uniform vec2 uAirLutSize;uniform float uAirLutReady;
+varying vec3 vW;varying vec3 vCtr;varying float vRw;
+vec2 rsi(vec3 r0,vec3 rd,float sr){float tm=-dot(r0,rd);vec3 pp=r0+rd*tm;float d2=dot(pp,pp);if(d2>sr*sr)return vec2(1e5,-1e5);float hf=sqrt(sr*sr-d2);return vec2(tm-hf,tm+hf);}
+// Concentrate view samples where the ray approaches the dense lower atmosphere.
+float airRayT(float u,float lo,float hi,float closest){
+  if(closest>=hi-0.000001)return hi-(hi-lo)*(1.0-u)*(1.0-u);
+  if(closest<=lo+0.000001)return lo+(hi-lo)*u*u;
+  if(u<0.5){float q=1.0-2.0*u;return closest-(closest-lo)*q*q;}
+  float q=2.0*u-1.0;return closest+(hi-closest)*q*q;
+}
+vec2 sunDepth(float radius,float mu,float horizon){
+  if(uAirLutReady<0.5){
+    // Unresolved or newly visible air retains a real integral while the cached
+    // table is not ready; an empty texture is never treated as zero optical depth.
+    float end=-radius*mu+sqrt(max(0.0,uTop*uTop-radius*radius*(1.0-mu*mu)));
+    float closest=max(0.0,-radius*mu),previous=0.0;vec2 od=vec2(0.0);
+    for(int j=0;j<8;j++){
+      float nextT=airRayT((float(j)+1.0)/8.0,0.0,end,closest),t=(previous+nextT)*0.5;
+      float h=max(0.0,sqrt(radius*radius+2.0*radius*mu*t+t*t)-1.0);
+      od+=exp(-h/vec2(uShR,uShM))*(nextT-previous);previous=nextT;
+    }
+    return od;
+  }
+  vec2 uv=vec2(sqrt(clamp((mu-horizon)/(1.0-horizon),0.0,1.0)),sqrt(clamp((radius-1.0)/(uTop-1.0),0.0,1.0)));
+  vec4 depthTexel=texture2D(uAirLut,(uv*(uAirLutSize-1.0)+0.5)/uAirLutSize);
+  // Two 16-bit UNORM values; linear texture filtering preserves this decode.
+  return vec2(dot(depthTexel.rg,vec2(256.0,1.0)),dot(depthTexel.ba,vec2(256.0,1.0)))/257.0;
+}
+void main(){
+  vec3 r=normalize(vW),r0=-vCtr/vRw;vec2 span=rsi(r0,r,uTop);if(span.x>span.y)discard;
+  vec2 solid=rsi(r0,r,1.0);if(solid.x<solid.y && solid.x>0.0)span.y=min(span.y,solid.x);
+  float lo=max(span.x,0.0),hi=span.y;if(hi<=lo)discard;
+  float closest=clamp(-dot(r0,r),lo,hi),previous=lo;
+  vec3 totR=vec3(0.0),totM=vec3(0.0);float iOdR=0.0,iOdM=0.0;
+  float mu=dot(r,uSun),mu2=mu*mu,g=0.758,gg=g*g;
+  float pR=3.0/(16.0*3.141592)*(1.0+mu2);
+  float pM=3.0/(8.0*3.141592)*((1.0-gg)*(mu2+1.0))/(pow(1.0+gg-2.0*mu*g,1.5)*(2.0+gg));
+  for(int i=0;i<32;i++){
+    if(float(i)>=uAirSteps)break;
+    float nextT=airRayT((float(i)+1.0)/uAirSteps,lo,hi,closest),stepT=nextT-previous;
+    vec3 pos=r0+r*((previous+nextT)*0.5);previous=nextT;
+    float radius=length(pos),height=max(radius-1.0,0.0);
+    float odR=exp(-height/uShR)*stepT,odM=exp(-height/uShM)*stepT;
+    float viewR=iOdR+0.5*odR,viewM=iOdM+0.5*odM;iOdR+=odR;iOdM+=odM;
+    if(viewM*uKm+viewR*min(uKr.r,min(uKr.g,uKr.b))>16.0)break;
+    float solarMu=dot(pos,uSun)/radius,horizon=-sqrt(max(0.0,1.0-1.0/(radius*radius)));
+    if(solarMu<horizon)continue;
+    vec2 odSun=sunDepth(radius,solarMu,horizon);
+    vec3 attn=exp(-(uKm*(viewM+odSun.y)+uKr*(viewR+odSun.x)));
+    totR+=odR*attn;totM+=odM*attn;
+  }
+  vec3 c=uI*uFlux*uDisplayGain*(pR*uKr*totR+pM*uKm*totM);
+  gl_FragColor=vec4(c*uAlpha,1.0);
+}`;
+// Only 32 KiB per atmosphere, generated once; no fetched textures or extensions.
+var airDepthCache={},airDepthPlaceholder=null;
+function airDepthIntegral(radius,mu,A,steps){
+  var end=-radius*mu+Math.sqrt(Math.max(0,A.top*A.top-radius*radius*(1-mu*mu)));
+  var closest=Math.max(0,-radius*mu),odR=0,odM=0;
+  for(var side=0;side<2;side++){
+    var length=side===0?closest:end-closest;if(length<=0)continue;
+    for(var j=0;j<steps;j++){
+      var a=j/steps,b=(j+1)/steps,lo=length*a*a,hi=length*b*b;
+      var t=closest+(side===0?-1:1)*(lo+hi)*0.5;
+      var h=Math.max(0,Math.sqrt(radius*radius+2*radius*mu*t+t*t)-1),dt=hi-lo;
+      odR+=Math.exp(-h/A.shR)*dt;odM+=Math.exp(-h/A.shM)*dt;
+    }
+  }
+  return [odR,odM];
+}
+function airDepthLookup(A){
+  var key=[A.top,A.shR,A.shM].join(':');if(airDepthCache[key])return airDepthCache[key];
+  var width=128,height=64,data=new Uint8Array(width*height*4);
+  for(var y=0;y<height;y++){
+    var h=y/(height-1),radius=1+(A.top-1)*h*h,horizon=-Math.sqrt(Math.max(0,1-1/(radius*radius)));
+    for(var x=0;x<width;x++){
+      var q=x/(width-1),mu=horizon+(1-horizon)*q*q,od=airDepthIntegral(radius,mu,A,40),i=(y*width+x)*4;
+      var r=Math.round(Math.min(1,od[0])*65535),m=Math.round(Math.min(1,od[1])*65535);
+      data[i]=r>>8;data[i+1]=r&255;data[i+2]=m>>8;data[i+3]=m&255;
+    }
+  }
+  var texture=new THREE.DataTexture(data,width,height,THREE.RGBAFormat,THREE.UnsignedByteType);
+  texture.minFilter=THREE.LinearFilter;texture.magFilter=THREE.LinearFilter;texture.generateMipmaps=false;
+  texture.wrapS=texture.wrapT=THREE.ClampToEdgeWrapping;texture.needsUpdate=true;
+  return airDepthCache[key]={texture:texture,size:new THREE.Vector2(width,height)};
+}
 /* scattering strength per colour, haze strength, the two scale heights, where the air ends, sunlight strength */
 var AIRS = {
   '地球':{kr:[37.0, 86.0, 210.0], km:21, shR:0.0012557, shM:0.0001884, top:1.02, I:8.5},
@@ -698,17 +807,24 @@ var AIRS = {
 };
 function airShell(name, radius, pos, sunDir, a, b, c, d){
   var A = AIRS[name]; if(!A) return;
+  if(!airDepthPlaceholder){
+    var zero=new THREE.DataTexture(new Uint8Array(4),1,1,THREE.RGBAFormat,THREE.UnsignedByteType);zero.needsUpdate=true;
+    airDepthPlaceholder={texture:zero,size:new THREE.Vector2(1,1)};
+  }
+  var lookup=airDepthPlaceholder;
   var m = new THREE.ShaderMaterial({uniforms:{uSun:{value:sunDir}, uKr:{value:new THREE.Vector3().fromArray(A.kr)}, uKm:{value:A.km}, uShR:{value:A.shR}, uShM:{value:A.shM},
-    uTop:{value:A.top}, uI:{value:A.I}, uAlpha:{value:1}, uFlux:{value:1}, uDisplayGain:{value:1}, uAirSteps:{value:32}, uSunSteps:{value:8}}, vertexShader:AIR_VS, fragmentShader:AIR_FS, transparent:true, blending:THREE.AdditiveBlending, depthWrite:false});
+    uTop:{value:A.top}, uI:{value:A.I}, uAlpha:{value:1}, uFlux:{value:1}, uDisplayGain:{value:1}, uAirSteps:{value:24}, uAirLut:{value:lookup.texture}, uAirLutSize:{value:lookup.size}, uAirLutReady:{value:0}}, vertexShader:AIR_VS, fragmentShader:AIR_FS, transparent:true, blending:THREE.AdditiveBlending, depthWrite:false});
   var mesh = new THREE.Mesh(sphGeo, m); mesh.position.copy(pos); mesh.scale.setScalar(radius*A.top*K('p'));
   sized.push({m:mesh, base:radius*A.top, cls:'p'});
+  mesh.userData.airProfile=A;mesh.userData.airLutReady=false;
   mesh.renderOrder=6; addLayer(mesh, a, b, c, d, auRoot); return mesh;
 }
 
 
 // Source: 20-volumes.js
-/* User-selected quality, independent of device-name detection. The high preset stays fixed. */
+/* User-selected high quality stays fixed; measured adaptation is an opt-in mode. */
 var QUALITY_MODE = 'high';
+var RENDER_DETAIL = {value:1};
 var VOLUME_DETAIL = {value:1}, VOLUME_OCCLUSION = {value:1};
 var NEB_SAMPLES = {value:128}, GAL_SAMPLES = {value:96};
 var QUAD_VS = 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix*modelViewMatrix*vec4(position,1.0); }';
@@ -895,8 +1011,8 @@ var VOL_FS = VOL_HEAD +
   '  dust = smoothstep(0.55, 0.75, n)*0.4*edge;' +
   ' }' +
   /* Additional fine dust breaks up smooth silhouettes, without claiming resolved survey structure. */
-  ' float grain = F2(qw*14.0 + n3);' +
-  ' dust *= mix(1.0, 0.72 + 0.90*smoothstep(0.30, 0.68, grain), uDetail);' +
+  ' if(uDetail > 0.6){ float grain = F2(qw*14.0 + n3);' +
+  ' dust *= mix(1.0, 0.72 + 0.90*smoothstep(0.30, 0.68, grain), uDetail); }' +
   ' return vec4(em, dust); }' +
   /* A short secondary path estimates how the central light is screened by unresolved dust.
      This is a procedural density proxy, not a second full radiative-transfer simulation. */
@@ -960,8 +1076,11 @@ var GALV_FS = VOL_HEAD +
   /* dust: a thin sheet in the mid-plane, thickest along the inner edge of each arm and patchy elsewhere */
   '   float dl = abs(fract(ph + 0.63) - 0.5)*2.0; float lane = exp(-dl*dl*22.0)*inner;' +
   '   dust = exp(-abs(z)/(hz*0.30))*pow(discR, 0.55)*(lane*(0.5 + 1.3*n2) + 0.22*smoothstep(0.45, 0.70, n))*(0.6 + 0.8*n3)*38.0;' +
-  '   float tendril = F2(q*94.0 + n3 + uSeed);' +
-  '   dust *= mix(1.0, 0.62 + 1.0*smoothstep(0.31, 0.69, tendril), uDetail);' +
+  /* At these bounds even the largest high-quality tendril multiplier (1.62)
+     leaves segment=dt and extinction below float32 rounding around 1. Skip
+     only that irrelevant texture fetch; every ray sample and emission stays. */
+  '   if(uDetail > 0.6 && (dust*dt > 0.000000001 || dust > 0.00006)){ float tendril = F2(q*94.0 + n3 + uSeed);' +
+  '   dust *= mix(1.0, 0.62 + 1.0*smoothstep(0.31, 0.69, tendril), uDetail); }' +
   '  } else if(uKind < 1.5){' +
   '   float rr = r*r + z*z*1.6; em = uCore*(exp(-rr*9.0)*1.2 + exp(-rr*60.0)*3.0);' +
   '  } else {' +
@@ -996,6 +1115,7 @@ function nebula(pos, R, type, seed, tintA, tintB, extra, a, b, c, d){
   var mesh = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), m); mesh.renderOrder = 6;
   var Y = addLayer(mesh, a, b, c, d, volScene);
   var rec = {m:mesh, w:pos.clone(), R:R*REACH[type], layer:Y};
+  mesh.userData.volumeBounds = {record:rec, nebula:true};
   nebs.push(rec); return rec;
 }
 /* normal: the direction the disc faces. kind: 0 spiral, 1 elliptical, 2 irregular */
@@ -1007,21 +1127,26 @@ function galaxyVol(centre, R, normal, o, a, b, c, d){
     uCore:{value:new THREE.Vector3().fromArray(o.core)}, uArmCol:{value:new THREE.Vector3().fromArray(o.arm)}}, GAL_STEPS);
   var mesh = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), m); mesh.renderOrder = 3;
   addLayer(mesh, a, b, c, d, volScene);
-  gals.push({m:mesh, w:centre.clone(), R:R, M:M});
+  var rec = {m:mesh, w:centre.clone(), R:R, M:M};
+  mesh.userData.volumeBounds = {record:rec, nebula:false}; gals.push(rec);
 }
 
 
 // Source: 30-bodies.js
 var sphGeo = new THREE.SphereGeometry(1, 48, 32), quadGeo = new THREE.PlaneGeometry(2, 2), boards = [];
 var mapped = [], surfaceMeshes = [], lightingBodies = [];
-var surfaceMidGeo = null, surfaceNearGeo = null;
+var surfaceGeometryCache={48:sphGeo};
+function surfaceGeometry(segments){
+  if(!surfaceGeometryCache[segments])surfaceGeometryCache[segments]=new THREE.SphereGeometry(1,segments,Math.round(segments*2/3));
+  return surfaceGeometryCache[segments];
+}
 /* One physical scale for all bodies and distances. Unknown sizes are labelled,
    never enlarged for visibility. Point glows represent unresolved light/markers. */
 var big = false, sized = [], moved = [];
 function K(c){ return 1; }
 function surfaceUniforms(){
   return {uRotation:{value:0},uTerrain:{value:0},uDetail:{value:0},uFlux:{value:1},uDisplayGain:{value:1},uBasis:{value:new THREE.Matrix3()},uSunLocal:{value:new THREE.Vector3(0,1,0)},
-    uOcc:{value:[new THREE.Vector4(),new THREE.Vector4(),new THREE.Vector4(),new THREE.Vector4()]},uOccCount:{value:0},uSunAngle:{value:0.004650},
+    uOcc:{value:[new THREE.Vector4(),new THREE.Vector4(),new THREE.Vector4(),new THREE.Vector4()]},uOccCount:{value:0},uSunAngle:{value:0.004650},uSunTangent:{value:0.004650034},
     uRingMap:{value:WHITE},uHasRing:{value:0},uRingRadiusScale:{value:1},uRingN:{value:new THREE.Vector3(0,1,0)},uCloudLayers:{value:0}};
 }
 function body(type, radius, pos, parent, tint, sunDir, a, b, c, d, cls, maps){
@@ -1038,9 +1163,9 @@ function body(type, radius, pos, parent, tint, sunDir, a, b, c, d, cls, maps){
   if(type>1.5 && type<2.5 && maps.clouds){
     mesh.userData.cloudShells=[]; u.uCloudLayers.value=1;
     for(var ci=0;ci<3;ci++){
-      var cu={}; Object.keys(u).forEach(function(key){cu[key]=u[key];}); cu.uLayer={value:ci};
+      var cu={}; Object.keys(u).forEach(function(key){cu[key]=u[key];}); cu.uLayer={value:ci};cu.uCloudMerge={value:0};cu.uCloudShadowSteps={value:4};
       cu.uTerrain={value:0}; cu.uDetail={value:0};
-      var cm=new THREE.ShaderMaterial({uniforms:cu,vertexShader:BODY_VS,fragmentShader:CLOUD_FS,transparent:true,depthWrite:false,side:THREE.DoubleSide,extensions:{derivatives:true}});
+      var cm=new THREE.ShaderMaterial({uniforms:cu,vertexShader:CLOUD_VS,fragmentShader:CLOUD_FS,transparent:true,depthWrite:false,side:THREE.FrontSide,polygonOffset:true,polygonOffsetFactor:-1,polygonOffsetUnits:-1,extensions:{derivatives:true}});
       var shell=new THREE.Mesh(sphGeo,cm); shell.scale.setScalar(1.00055+ci*0.00065); shell.renderOrder=2+ci;
       mesh.add(shell); mesh.userData.cloudShells.push(shell);
     }
@@ -1116,6 +1241,7 @@ function updateBodyLighting(entries){
     u.uFlux.value=1/(dist*dist);
     u.uSun.value.copy(displayed).negate().applyQuaternion(auRoot.quaternion).normalize();
     u.uSunAngle.value=Math.asin(Math.min(0.99,0.004650*K('p')/Math.max(displayed.length(),0.001)));
+    u.uSunTangent.value=Math.tan(u.uSunAngle.value);
     if(e.name==='月球')e.mesh.userData.terrain=1;
     if(e.name==='火星')e.mesh.userData.terrain=2;
     u.uTerrain.value=e.mesh.userData.terrain||0;
@@ -1124,7 +1250,7 @@ function updateBodyLighting(entries){
     if(e.ring){
       var ru=e.ring.material.uniforms;
       if(ru.uBasis){
-        ru.uFlux.value=u.uFlux.value;ru.uSun.value.copy(u.uSun.value);ru.uSunAngle.value=u.uSunAngle.value;
+        ru.uFlux.value=u.uFlux.value;ru.uSun.value.copy(u.uSun.value);ru.uSunAngle.value=u.uSunAngle.value;ru.uSunTangent.value=u.uSunTangent.value;
         setSurfaceBasis(e.ring,ru);ru.uRingN.value.set(0,1,0).applyQuaternion(surfaceQ);
         fillOccluders(e,lightingBodies,ru,true);
         u.uRingN.value.copy(ru.uRingN.value);u.uRingRadiusScale.value=ru.uRingRadiusScale.value;u.uRingMap.value=ru.uRingMap.value;u.uHasRing.value=ru.uMapReady.value;
@@ -1132,28 +1258,71 @@ function updateBodyLighting(entries){
     }
   }
 }
-/* Near-surface tessellation is allocated only when a body resolves on screen. */
+/* Pick geometry from the actual render pixels, not the screen's CSS size.
+   Geometry is cached, so automatic quality changes do not repeatedly allocate or
+   dispose GPU buffers. Surface relief keeps extra vertices when it resolves. */
 function updateSurfaceDetails(dt){
   var high=typeof QUALITY_MODE==='undefined'||QUALITY_MODE==='high';
-  var targetHigh=high?192:128;
+  var detail=typeof RENDER_DETAIL!=='undefined'?RENDER_DETAIL.value:(high?1:0.55);
+  var pixelHeight=typeof rtMain!=='undefined'&&rtMain.height>4?rtMain.height:window.innerHeight;
+  var fov=Math.max(0.01,VIEW.tanF.value),aspect=VIEW.aspect?VIEW.aspect.value:window.innerWidth/window.innerHeight;
+  for(var bi=0;bi<lightingBodies.length;bi++){
+    var boundBody=lightingBodies[bi];
+    if(boundBody.atmosphere)boundBody.mesh.userData.airBound=boundBody.atmosphere.material.uniforms.uTop.value;
+  }
   for(var i=0;i<surfaceMeshes.length;i++){
-    var mesh=surfaceMeshes[i],u=mesh.material.uniforms;
-    if(!mesh.visible){u.uDetail.value=0;continue;}
+    var mesh=surfaceMeshes[i],u=mesh.material.uniforms,shells=mesh.userData.cloudShells||[];
+    if(!mesh.visible){u.uDetail.value=0;mesh.userData.surfacePx=0;continue;}
     mesh.getWorldPosition(surfaceV);mesh.getWorldScale(surfaceV2);
-    var angular=Math.abs(surfaceV2.x)/Math.max(surfaceV.length(),Math.abs(surfaceV2.x));
-    var px=angular*window.innerHeight/(2*Math.max(0.01,VIEW.tanF.value));
-    var geo=sphGeo;
-    if(px>180){
-      if(!surfaceNearGeo || surfaceNearGeo.parameters.widthSegments!==targetHigh){if(surfaceNearGeo)surfaceNearGeo.dispose();surfaceNearGeo=new THREE.SphereGeometry(1,targetHigh,Math.round(targetHigh*2/3));}
-      geo=surfaceNearGeo;
-    }else if(px>45){if(!surfaceMidGeo)surfaceMidGeo=new THREE.SphereGeometry(1,96,64);geo=surfaceMidGeo;}
-    mesh.geometry=geo;u.uDetail.value=sstep(45,180,px);setSurfaceBasis(mesh,u);
-    var shells=mesh.userData.cloudShells||[];
-    for(var j=0;j<shells.length;j++){shells[j].geometry=geo;shells[j].visible=px>2;}
+    var radius=Math.abs(surfaceV2.x),distance=surfaceV.length(),angular=radius/Math.max(distance,radius);
+    var px=angular*pixelHeight/(2*fov),onScreen=true;
+    // Include the actual outer shells in all frustum tests, including a camera
+    // inside an atmosphere looking away from the planet's opaque surface.
+    var outerRadius=radius*Math.max(mesh.userData.airBound||1,shells.length?1.00185:1,u.uTerrain.value>0.5?1.01:1);
+    if(VIEW.fwd && distance>outerRadius){
+      var forward=surfaceV.dot(VIEW.fwd.value),rView=outerRadius*Math.sqrt(1+fov*fov);
+      if(forward+outerRadius<=0)onScreen=false;
+      else if(VIEW.right && VIEW.up){
+        onScreen=Math.abs(surfaceV.dot(VIEW.up.value))<=Math.max(0,forward)*fov+rView &&
+          Math.abs(surfaceV.dot(VIEW.right.value))<=Math.max(0,forward)*fov*aspect+outerRadius*Math.sqrt(1+fov*fov*aspect*aspect);
+      }
+    }
+    mesh.userData.surfacePx=onScreen?px:0;
+    if(!onScreen){u.uDetail.value=0;for(var hidden=0;hidden<shells.length;hidden++)shells[hidden].visible=false;continue;}
+    var segments=px>850?128:px>240?96:px>90?64:48;
+    if(high)segments=px>180?192:(px>45?96:48);
+    else if(u.uTerrain.value>0.5 && px>180)segments=detail>0.45?128:96;
+    var geo=surfaceGeometry(segments);mesh.geometry=geo;
+    u.uDetail.value=sstep(45,180,px);setSurfaceBasis(mesh,u);
+    // A 0.13% radius separation is invisible until its projection approaches a
+    // pixel. Compose its three alpha layers once at the middle physical height.
+    var mergeClouds=px*0.0013<0.75 && distance>radius*1.00185;
+    for(var j=0;j<shells.length;j++){
+      var shell=shells[j],cu=shell.material.uniforms;
+      shell.geometry=geo;shell.visible=px>2 && (!mergeClouds || j===1);
+      cu.uCloudMerge.value=mergeClouds?1:0;
+      cu.uCloudShadowSteps.value=high?4:(detail>0.65 && px>350?3:2);
+      var side=distance<radius*shell.scale.x?THREE.BackSide:THREE.FrontSide;
+      if(shell.material.side!==side){shell.material.side=side;shell.material.needsUpdate=true;}
+    }
   }
   for(var k=0;k<lightingBodies.length;k++){
-    var a=lightingBodies[k].atmosphere;
-    if(a){var au=a.material.uniforms;if(au.uAirSteps)au.uAirSteps.value=high?32:16;if(au.uSunSteps)au.uSunSteps.value=high?8:5;}
+    var entry=lightingBodies[k],a=entry.atmosphere;if(!a)continue;
+    var airPx=entry.mesh.userData.surfacePx||0,au=a.material.uniforms;
+    // The sun-depth LUT removes the inner integral; these view samples are
+    // concentrated near the dense lower atmosphere instead of spaced uniformly.
+    var close=sstep(100,900,airPx);
+    au.uAirSteps.value=high?32:Math.max(8,Math.round((8+8*detail+8*close*detail)/4)*4);
+    if(airPx>0){
+      if(!a.userData.airLutReady && airPx>1){
+        var lookup=airDepthLookup(a.userData.airProfile);
+        au.uAirLut.value=lookup.texture;au.uAirLutSize.value=lookup.size;au.uAirLutReady.value=1;a.userData.airLutReady=true;
+      }
+      a.geometry=surfaceGeometry(high?(airPx>180?192:airPx>45?96:48):(airPx>850?128:airPx>240?96:airPx>90?64:48));
+      a.getWorldPosition(surfaceV);a.getWorldScale(surfaceV2);
+      var side=surfaceV.length()<Math.abs(surfaceV2.x)?THREE.BackSide:THREE.FrontSide;
+      if(a.material.side!==side){a.material.side=side;a.material.needsUpdate=true;}
+    }
   }
 }
 /* A smooth view-luminance proxy, not a calibrated human-eye or camera simulation.
@@ -2059,21 +2228,49 @@ var HDR = (function(){
 function mkTarget(depth){
   return new THREE.WebGLRenderTarget(4, 4, {minFilter:THREE.LinearFilter, magFilter:THREE.LinearFilter, type:HDR ? THREE.HalfFloatType : THREE.UnsignedByteType, depthBuffer:!!depth, stencilBuffer:false});
 }
+/* Pixel density stays stable while the volume budget adapts. Labels are DOM text,
+   and planets/stars stay in the sharper main target instead of the cloud target. */
+var RENDER_LEVELS = [
+  {scale:0.30, neb:32, gal:24, detail:0.25, shadow:0, bh:190},
+  {scale:0.40, neb:40, gal:28, detail:0.35, shadow:0, bh:210},
+  {scale:0.50, neb:48, gal:32, detail:0.45, shadow:0, bh:230},
+  {scale:0.50, neb:64, gal:48, detail:0.55, shadow:0, bh:250},
+  {scale:0.60, neb:72, gal:48, detail:0.65, shadow:0.15, bh:260},
+  {scale:0.70, neb:80, gal:56, detail:0.75, shadow:0.25, bh:280},
+  {scale:0.80, neb:96, gal:64, detail:0.85, shadow:0.35, bh:300}
+];
+var RENDER_BUDGET = {level:3, ema:0, slow:0, fast:0, lastChange:0, lastResize:0, lastSample:0,
+  resizeCount:0, volumePasses:0, blackHolePass:false};
+var VOLUME_CACHE = {valid:false, signature:[], scratch:[], hits:0, renders:0};
+function invalidateVolumeCache(){ VOLUME_CACHE.valid = false; }
+canvas.addEventListener('webglcontextlost', invalidateVolumeCache);
+canvas.addEventListener('webglcontextrestored', invalidateVolumeCache);
 var rtMain = mkTarget(true), rtVol = mkTarget(false), rtComp = mkTarget(false), rtDown = [], rtUp = [], BL = 5, volScale = 1.0;
 for(var bi=0;bi<BL;bi++){ rtDown.push(mkTarget(false)); if(bi < BL - 1) rtUp.push(mkTarget(false)); }
+function resizeTarget(target, w, h){
+  if(target.width === w && target.height === h) return false;
+  target.setSize(w, h); return true;
+}
+function sizeVolumeTarget(){
+  if(resizeTarget(rtVol, Math.max(4, Math.round(rtMain.width*volScale)), Math.max(4, Math.round(rtMain.height*volScale)))){
+    invalidateVolumeCache();
+    RENDER_BUDGET.lastResize = performance.now(); RENDER_BUDGET.resizeCount++;
+  }
+}
 function sizeTargets(){
   /* Bound allocation on very large external displays; never infer hardware from a user-agent. */
   var pixels = QUALITY_MODE === 'high' ? 8388608 : 4194304;
-  var density = Math.min(window.devicePixelRatio || 1, QUALITY_MODE === 'balanced' ? 1.5 : 2,
+  var density = Math.min(window.devicePixelRatio || 1, QUALITY_MODE === 'high' ? 2 : 1.5,
     Math.sqrt(pixels/Math.max(window.innerWidth*window.innerHeight, 1)));
   if(Math.abs(PR - density) > 0.0001){
     PR = density; renderer.setPixelRatio(PR); renderer.setSize(window.innerWidth, window.innerHeight, false);
     for(var q=0;q<layers.length;q++) if(layers[q].u && layers[q].u.uPR) layers[q].u.uPR.value = PR;
   }
   var w = Math.max(4, Math.round(window.innerWidth*PR)), h = Math.max(4, Math.round(window.innerHeight*PR));
-  rtMain.setSize(w, h); rtComp.setSize(w, h); if(typeof rtBH !== 'undefined') rtBH.setSize(w, h);
-  rtVol.setSize(Math.max(4, Math.round(w*volScale)), Math.max(4, Math.round(h*volScale)));
-  for(var i=0;i<BL;i++){ var d = Math.pow(2, i + 1), ww = Math.max(2, Math.round(w/d)), hh = Math.max(2, Math.round(h/d)); rtDown[i].setSize(ww, hh); if(i < BL - 1) rtUp[i].setSize(ww, hh); }
+  if(rtMain.width !== w || rtMain.height !== h) invalidateVolumeCache();
+  resizeTarget(rtMain, w, h); resizeTarget(rtComp, w, h); if(typeof rtBH !== 'undefined') resizeTarget(rtBH, w, h);
+  sizeVolumeTarget();
+  for(var i=0;i<BL;i++){ var d = Math.pow(2, i + 1), ww = Math.max(2, Math.round(w/d)), hh = Math.max(2, Math.round(h/d)); resizeTarget(rtDown[i], ww, hh); if(i < BL - 1) resizeTarget(rtUp[i], ww, hh); }
 }
 var postScene = new THREE.Scene(), postCam = new THREE.Camera(), postQuad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), null);
 postQuad.frustumCulled = false; postScene.add(postQuad);
@@ -2174,7 +2371,8 @@ function ensureBlackHoleSky(){
   /* Match the output's angular sampling before applying the preset cap. Tiny
      windows do not need a desktop-size cache; normal high-quality views retain 768. */
   var angularSize = Math.ceil(canvas.height/(2*Math.tan(rad(25)))/64)*64;
-  var size = Math.min(QUALITY_MODE === 'high' ? 768 : 384, Math.max(64, angularSize), renderer.capabilities.maxCubemapSize || 1024);
+  var cap = QUALITY_MODE === 'high' ? 768 : QUALITY_MODE === 'balanced' ? 384 : 256;
+  var size = Math.min(cap, Math.max(64, angularSize), renderer.capabilities.maxCubemapSize || 1024);
   if(bhSky.size === size && bhSky.target) return;
   if(bhSky.target) bhSky.target.dispose(); if(bhSky.write) bhSky.write.dispose();
   bhSky.target = makeSkyTarget(size); bhSky.write = makeSkyTarget(size);
@@ -2199,7 +2397,8 @@ function captureSkyFaces(first, count, tile){
        converted into a second float32 world-position buffer. */
     VIEW.tanF.value = 1; VIEW.aspect.value = 1;
     if(HYG.u) HYG.u.uTele.value = 1;
-    NEB_SAMPLES.value = Math.min(64, state.neb); GAL_SAMPLES.value = Math.min(48, state.gal);
+    NEB_SAMPLES.value = Math.min(QUALITY_MODE === 'auto' ? 48 : 64, state.neb);
+    GAL_SAMPLES.value = Math.min(QUALITY_MODE === 'auto' ? 32 : 48, state.gal);
     VOLUME_OCCLUSION.value = 0;
     for(i=0;i<layers.length;i++){
       var u = layers[i].u;
@@ -2219,7 +2418,7 @@ function captureSkyFaces(first, count, tile){
     /* Scissor preserves the full-face camera and gl_FragCoord: adjacent tiles use
        exactly the same projection/noise. Only one bounded tile is submitted per
        update, including the initial capture, instead of six synchronous faces. */
-    var side = Math.ceil(bhSky.size/256), tileSize = Math.ceil(bhSky.size/side);
+    var side = Math.ceil(bhSky.size/(QUALITY_MODE === 'high' ? 256 : 128)), tileSize = Math.ceil(bhSky.size/side);
     if(tile !== undefined){
       var sx = (tile % side)*tileSize, sy = Math.floor(tile/side)*tileSize;
       bhSky.write.scissor.set(sx, sy, Math.min(tileSize, bhSky.size - sx), Math.min(tileSize, bhSky.size - sy));
@@ -2235,7 +2434,7 @@ function captureSkyFaces(first, count, tile){
       if(f === 0 && (!tile || tile === undefined) && gl.checkFramebufferStatus(gl.FRAMEBUFFER) !== gl.FRAMEBUFFER_COMPLETE){
         throw new Error('Incomplete all-sky framebuffer');
       }
-      renderer.clear(); renderer.render(scene, cc); renderer.render(volScene, cc); renderer.render(topScene, cc);
+      renderer.clear(); renderer.render(scene, cc); renderVisibleVolumes(cc); renderer.render(topScene, cc);
     }
   }finally{
     VIEW.right.value.copy(state.right); VIEW.up.value.copy(state.up); VIEW.fwd.value.copy(state.fwd);
@@ -2262,13 +2461,13 @@ function updateBlackHoleSky(hole){
     }
     var moved = bhSky.origin.distanceTo(P) > Math.max(hole.rs*K('s')*0.2, P.length()*1e-7, 1e-10);
     if(!bhSky.face && !bhSky.tile){
-      if(bhSky.ready && !bhSky.dirty && !moved && now - bhSky.lastUpdate < 4) return;
+      if(bhSky.ready && !bhSky.dirty && !moved && now - bhSky.lastUpdate < (QUALITY_MODE === 'auto' ? 8 : 4)) return;
       bhSky.captureOrigin.copy(P);
     }
-    if(now - bhSky.lastFace < 1/30) return;
+    if(now - bhSky.lastFace < (QUALITY_MODE === 'auto' ? 0.12 : QUALITY_MODE === 'balanced' ? 1/15 : 1/30)) return;
     captureSkyFaces(bhSky.face, 1, bhSky.tile);
     bhSky.tile++; bhSky.lastFace = now;
-    var side = Math.ceil(bhSky.size/256);
+    var side = Math.ceil(bhSky.size/(QUALITY_MODE === 'high' ? 256 : 128));
     if(bhSky.tile === side*side){ bhSky.tile = 0; bhSky.face++; }
     if(bhSky.face === 6){
       var old = bhSky.target; bhSky.target = bhSky.write; bhSky.write = old;
@@ -2287,39 +2486,229 @@ function updateBlackHoleSky(hole){
     if(typeof console !== 'undefined' && console.warn) console.warn('All-sky background unavailable:', err);
   }
 }
+function applyAutomaticLevel(level, now){
+  var q = RENDER_LEVELS[level], oldScale = volScale;
+  RENDER_BUDGET.level = level; volScale = q.scale;
+  NEB_SAMPLES.value = HAS3D ? q.neb : Math.max(24, Math.round(q.neb*2/3));
+  GAL_SAMPLES.value = HAS3D ? q.gal : Math.max(18, Math.round(q.gal*2/3));
+  RENDER_DETAIL.value = VOLUME_DETAIL.value = q.detail; VOLUME_OCCLUSION.value = q.shadow;
+  bhU.uSteps.value = q.bh; bhU.uStepScale.value = 1;
+  invalidateVolumeCache();
+  if(oldScale !== volScale){ sizeVolumeTarget(); RENDER_BUDGET.lastResize = now; }
+}
+function resetRenderBudgetHistory(now){
+  RENDER_BUDGET.ema = 0; RENDER_BUDGET.slow = 0; RENDER_BUDGET.fast = 0;
+  RENDER_BUDGET.lastSample = now; RENDER_BUDGET.lastChange = now;
+}
+/* rawDt is the unclamped visible-frame duration in seconds, now is performance.now()
+   in milliseconds. A zero duration resets history after a visibility/resume gap. */
+function updateRenderBudget(rawDt, now){
+  if(!isFinite(now)) return false;
+  if(!(rawDt > 0) || !isFinite(rawDt) || document.hidden || now < RENDER_BUDGET.lastSample){
+    resetRenderBudgetHistory(now); return false;
+  }
+  if(QUALITY_MODE !== 'auto') return false;
+  var dt = Math.min(rawDt, 0.25), b = RENDER_BUDGET;
+  b.lastSample = now;
+  /* Weight rendered frames equally. Duration-weighting counts a long frame
+     twice and biases the 11/22 ms cadence of a capped 90 Hz display upward. */
+  var alpha = 1/36;
+  b.ema = b.ema ? b.ema + (dt - b.ema)*alpha : dt;
+  b.slow = b.ema > 0.028 ? b.slow + dt : 0;
+  b.fast = b.ema < 0.0185 ? b.fast + dt : 0;
+  var level = b.level;
+  if(b.slow >= 0.8 && now - b.lastChange >= 1000 && level > 0) level--;
+  else if(b.fast >= 6 && now - b.lastChange >= 6000 && level < RENDER_LEVELS.length - 1) level++;
+  if(level === b.level) return false;
+  /* Samples can change cheaply; resize only this one target, at most every 2 s. */
+  if(RENDER_LEVELS[level].scale !== volScale && now - b.lastResize < 2000) return false;
+  applyAutomaticLevel(level, now); b.lastChange = now; b.slow = b.fast = 0;
+  return true;
+}
 function setQuality(mode){
   if(mode !== 'high' && mode !== 'balanced' && mode !== 'auto') return false;
   QUALITY_MODE = mode;
+  invalidateVolumeCache();
   var high = mode === 'high';
-  volScale = high ? 1.0 : mode === 'auto' ? 0.75 : 0.65;
-  NEB_SAMPLES.value = HAS3D ? (high ? 128 : 80) : (high ? 64 : 44);
-  GAL_SAMPLES.value = HAS3D ? (high ? 96 : 56) : (high ? 48 : 32);
-  VOLUME_DETAIL.value = high ? 1 : 0.55; VOLUME_OCCLUSION.value = high ? 1 : 0.45;
+  volScale = high ? 1.0 : 0.5;
+  NEB_SAMPLES.value = HAS3D ? (high ? 128 : 64) : (high ? 64 : 44);
+  GAL_SAMPLES.value = HAS3D ? (high ? 96 : 48) : (high ? 48 : 32);
+  RENDER_DETAIL.value = VOLUME_DETAIL.value = high ? 1 : 0.55; VOLUME_OCCLUSION.value = high ? 1 : 0;
   bhU.uSteps.value = high ? 380 : 250; bhU.uStepScale.value = high ? 0.65 : 1;
-  bhSky.dirty = true;
+  RENDER_BUDGET.level = 3; resetRenderBudgetHistory(performance.now());
+  /* A preset change may alter the tile grid even when the cube dimensions match. */
+  bhSky.dirty = true; bhSky.face = bhSky.tile = 0;
   if(typeof ftA !== 'undefined') ftA = 0; if(typeof ftN !== 'undefined') ftN = 0;
   sizeTargets(); return true;
 }
 setQuality('high');
 function pass(mat, target){ postQuad.material = mat; renderer.setRenderTarget(target); renderer.render(postScene, postCam); }
 var vL = new THREE.Vector3();
+/* Test the view's side planes and forward half-space against a world-space sphere.
+   The subtraction stays in JS double precision; GPU astronomical coordinates are
+   never used for culling. Inside a volume, every view remains visible. */
+function sphereIntersectsView(w, radius){
+  if(!(radius > 0)) return false;
+  vL.copy(w).sub(P);
+  if(vL.lengthSq() <= radius*radius) return true;
+  var z = vL.dot(VIEW.fwd.value);
+  if(z < -radius) return false;
+  var tx = VIEW.tanF.value*VIEW.aspect.value, ty = VIEW.tanF.value;
+  if(Math.abs(vL.dot(VIEW.right.value)) > z*tx + radius*Math.sqrt(1 + tx*tx)) return false;
+  if(Math.abs(vL.dot(VIEW.up.value)) > z*ty + radius*Math.sqrt(1 + ty*ty)) return false;
+  return true;
+}
+var hiddenVolumes = [];
+var VOLUME_MATERIAL_STATE = ['visible','transparent','opacity','side','depthTest','depthWrite','depthFunc','colorWrite',
+  'blending','blendSrc','blendDst','blendEquation','blendSrcAlpha','blendDstAlpha','blendEquationAlpha','premultipliedAlpha',
+  'stencilWrite','stencilWriteMask','stencilFunc','stencilRef','stencilFuncMask','stencilFail','stencilZFail','stencilZPass',
+  'polygonOffset','polygonOffsetFactor','polygonOffsetUnits','wireframe','wireframeLinewidth','alphaTest','alphaToCoverage'];
+/* Snapshot values, never the mutable vector/array containers alone. Texture
+   identity/version tracks uploads without walking megabytes of voxel data.
+   An unfamiliar uniform type disables reuse instead of guessing at its state. */
+function appendVolumeValue(value, out, gpuFloat){
+  if(value === null || value === undefined || typeof value === 'number' || typeof value === 'boolean' || typeof value === 'string'){
+    out.push(gpuFloat && typeof value === 'number' ? Math.fround(value) : value); return true;
+  }
+  out.push(value);
+  if(value.isTexture){
+    /* Current volume samplers are explicitly uploaded noise/voxel buffers.
+       A render-target/video texture can change without a version increment. */
+    if(!value.isDataTexture && !value.isDataTexture3D && !value.isDataTexture2DArray) return false;
+    out.push(value.version, value.mapping, value.format, value.type, value.encoding, value.wrapS, value.wrapT, value.wrapR,
+      value.magFilter, value.minFilter, value.anisotropy, value.flipY, value.premultiplyAlpha, value.unpackAlignment, value.generateMipmaps);
+    var image = value.image;
+    out.push(image, image && image.width, image && image.height, image && image.depth);
+    return true;
+  }
+  if(value.isVector2 || value.isVector3 || value.isVector4 || value.isQuaternion){
+    out.push(gpuFloat ? Math.fround(value.x) : value.x, gpuFloat ? Math.fround(value.y) : value.y,
+      gpuFloat && value.z !== undefined ? Math.fround(value.z) : value.z, gpuFloat && value.w !== undefined ? Math.fround(value.w) : value.w); return true;
+  }
+  if(value.isColor){ out.push(gpuFloat ? Math.fround(value.r) : value.r, gpuFloat ? Math.fround(value.g) : value.g, gpuFloat ? Math.fround(value.b) : value.b); return true; }
+  if(value.isMatrix3 || value.isMatrix4){
+    for(var m=0;m<value.elements.length;m++) out.push(gpuFloat ? Math.fround(value.elements[m]) : value.elements[m]); return true;
+  }
+  if(Array.isArray(value) || ArrayBuffer.isView(value)){
+    out.push(value.length);
+    for(var a=0;a<value.length;a++) if(!appendVolumeValue(value[a], out, gpuFloat)) return false;
+    return true;
+  }
+  return false;
+}
+function snapshotVolumeState(target, viewCamera, out){
+  out.length = 0;
+  out.push(target, target.width, target.height, target.texture.version, target.texture.type, target.texture.format,
+    target.scissorTest, QUALITY_MODE, volScene.visible, viewCamera.layers.mask,
+    renderer.outputEncoding, renderer.toneMapping, renderer.toneMappingExposure);
+  if(volScene.overrideMaterial || volScene.fog || renderer.localClippingEnabled || (renderer.clippingPlanes && renderer.clippingPlanes.length) ||
+    volScene.onBeforeRender !== THREE.Object3D.prototype.onBeforeRender || volScene.onAfterRender !== THREE.Object3D.prototype.onAfterRender) return false;
+  if(!appendVolumeValue(target.viewport, out) || !appendVolumeValue(target.scissor, out) ||
+    !appendVolumeValue(viewCamera.projectionMatrix, out, true) || !appendVolumeValue(viewCamera.matrixWorld, out, true) ||
+    !appendVolumeValue(VIEW.right.value, out, true) || !appendVolumeValue(VIEW.up.value, out, true) || !appendVolumeValue(VIEW.fwd.value, out, true) ||
+    !appendVolumeValue(volScene.background, out)) return false;
+  out.push(Math.fround(VIEW.tanF.value), Math.fround(VIEW.aspect.value));
+  for(var i=0;i<volScene.children.length;i++){
+    var mesh = volScene.children[i]; if(!mesh.visible || !volScene.visible) continue;
+    var material = mesh.material, geometry = mesh.geometry, bounds = mesh.userData.volumeBounds;
+    if(!material || Array.isArray(material) || !geometry || !material.uniforms ||
+      mesh.onBeforeRender !== THREE.Object3D.prototype.onBeforeRender || mesh.onAfterRender !== THREE.Object3D.prototype.onAfterRender) return false;
+    out.push(mesh, mesh.renderOrder, mesh.layers.mask, mesh.frustumCulled, material, material.version,
+      material.vertexShader, material.fragmentShader, geometry, geometry.index, geometry.index && geometry.index.version,
+      geometry.drawRange.start, geometry.drawRange.count);
+    if(!appendVolumeValue(mesh.position, out) || !appendVolumeValue(mesh.quaternion, out) || !appendVolumeValue(mesh.scale, out)) return false;
+    if(bounds){ out.push(bounds.record.R, bounds.nebula); if(!appendVolumeValue(bounds.record.w, out)) return false; }
+    out.push(geometry.groups.length);
+    for(var g=0;g<geometry.groups.length;g++) out.push(geometry.groups[g].start, geometry.groups[g].count, geometry.groups[g].materialIndex);
+    var attributes = Object.keys(geometry.attributes); out.push(attributes.length);
+    for(var j=0;j<attributes.length;j++){
+      var attribute = geometry.attributes[attributes[j]];
+      out.push(attributes[j], attribute, attribute.version, attribute.count, attribute.itemSize, attribute.normalized);
+      if(attribute.isInterleavedBufferAttribute) out.push(attribute.data, attribute.data.version, attribute.offset);
+    }
+    for(var p=0;p<VOLUME_MATERIAL_STATE.length;p++) out.push(material[VOLUME_MATERIAL_STATE[p]]);
+    var keys = Object.keys(material.uniforms); out.push(keys.length);
+    for(var u=0;u<keys.length;u++){
+      out.push(keys[u]); if(!appendVolumeValue(material.uniforms[keys[u]].value, out, true)) return false;
+    }
+  }
+  return true;
+}
+function matchingVolumeState(a, b){
+  if(a.length !== b.length) return false;
+  for(var i=0;i<a.length;i++) if(!Object.is(a[i], b[i])) return false;
+  return true;
+}
+function renderVisibleVolumes(viewCamera, target){
+  hiddenVolumes.length = 0; var count = 0, i;
+  for(i=0;volScene.visible && i<volScene.children.length;i++){
+    var mesh = volScene.children[i]; if(!mesh.visible) continue;
+    var bounds = mesh.userData.volumeBounds;
+    if(bounds && !sphereIntersectsView(bounds.record.w, bounds.record.R*(bounds.nebula ? K('n') : 1))){
+      mesh.visible = false; hiddenVolumes.push(mesh);
+    } else count++;
+  }
+  try{
+    /* Only the main volume target is reusable. Cube captures deliberately bypass
+       both cache buffers while they temporarily replace view/sample uniforms. */
+    var main = target === rtVol, cacheable = main && snapshotVolumeState(target, viewCamera, VOLUME_CACHE.scratch);
+    if(cacheable && VOLUME_CACHE.valid && matchingVolumeState(VOLUME_CACHE.signature, VOLUME_CACHE.scratch)){
+      VOLUME_CACHE.hits++; return count;
+    }
+    if(main) VOLUME_CACHE.valid = false;
+    if(count){
+      if(target){ renderer.setRenderTarget(target); renderer.setClearColor(0x000000, 0); renderer.clear(); }
+      renderer.render(volScene, viewCamera);
+      if(main) VOLUME_CACHE.renders++;
+    }
+    if(cacheable && !gl.isContextLost()){
+      var previous = VOLUME_CACHE.signature;
+      VOLUME_CACHE.signature = VOLUME_CACHE.scratch; VOLUME_CACHE.scratch = previous;
+      VOLUME_CACHE.valid = true;
+    }
+  }finally{
+    for(i=0;i<hiddenVolumes.length;i++) hiddenVolumes[i].visible = true;
+    hiddenVolumes.length = 0;
+  }
+  return count;
+}
+function blackHoleAffectsView(hole){
+  var unit = hole.rs*K('s')/2.6, strongRadius = 45*unit;
+  if(sphereIntersectsView(hole.w, strongRadius)) return true;
+  vL.copy(hole.w).sub(P); var distance = vL.length();
+  var tanDiagonal = VIEW.tanF.value*Math.sqrt(1 + VIEW.aspect.value*VIEW.aspect.value);
+  var angle = Math.acos(clamp(vL.dot(VIEW.fwd.value)/Math.max(distance, 1e-30), -1, 1));
+  var nearestAngle = Math.max(0, angle - Math.atan(tanDiagonal));
+  /* If every ray points away, the shader's outside-sphere path leaves the sky
+     unchanged. Otherwise retain off-screen weak lensing if it can shift >= 0.5 px. */
+  if(nearestAngle >= Math.PI/2) return false;
+  var impact = distance*Math.sin(nearestAngle);
+  var pixels = 2*unit/Math.max(impact, 1e-30)*rtMain.height/(2*VIEW.tanF.value)*(1 + tanDiagonal*tanDiagonal);
+  return pixels >= 0.5;
+}
 function drawFrame(){
   var w = rtMain.width, h = rtMain.height, i;
   renderer.setRenderTarget(rtMain); renderer.setClearColor(0x000000, 1); renderer.clear(); renderer.render(scene, camera);
-  renderer.setRenderTarget(rtVol); renderer.setClearColor(0x000000, 0); renderer.clear(); renderer.render(volScene, camera);
-  compU.uLens.value.z = 0;
-  compU.tMain.value = rtMain.texture; compU.tVol.value = rtVol.texture; compU.uAspect.value = w/h;
-  pass(compMat, rtComp);
-  renderer.autoClear = false; renderer.setRenderTarget(rtComp); renderer.render(topScene, camera); renderer.autoClear = true;
+  RENDER_BUDGET.volumePasses = renderVisibleVolumes(camera, rtVol);
+  var scene0 = rtMain;
+  if(RENDER_BUDGET.volumePasses){
+    compU.uLens.value.z = 0;
+    compU.tMain.value = rtMain.texture; compU.tVol.value = rtVol.texture; compU.uAspect.value = w/h;
+    pass(compMat, rtComp); scene0 = rtComp;
+  }
+  renderer.autoClear = false; renderer.setRenderTarget(scene0);
+  if(scene0 === rtMain) renderer.clearDepth();
+  renderer.render(topScene, camera); renderer.autoClear = true;
   /* the black hole that looks biggest from here, if any is big enough on screen to matter */
-  var scene0 = rtComp, bestA = 0.0012, bestH = null;
+  var bestA = 0.0012, bestH = null;
   for(i=0;i<holes.length;i++){
     var app = holes[i].rs*K('s')/Math.max(holes[i].w.distanceTo(P), 1e-30)/(2*VIEW.tanF.value);
-    if(app > bestA){ bestA = app; bestH = holes[i]; }
+    if(app > bestA && blackHoleAffectsView(holes[i])){ bestA = app; bestH = holes[i]; }
   }
+  RENDER_BUDGET.blackHolePass = !!bestH;
   if(bestH){
     updateBlackHoleSky(bestH);
-    bhU.tScene.value = rtComp.texture; bhU.uDisc.value = bestH.disc; bhU.uSeed.value = bestH.seed;
+    bhU.tScene.value = scene0.texture; bhU.uDisc.value = bestH.disc; bhU.uSeed.value = bestH.seed;
     bhU.uRo.value.copy(P).sub(bestH.w).divideScalar(bestH.rs*K('s')/2.6);      /* the dark shadow is about 2.6 Schwarzschild radii wide */
     pass(bhMat, rtBH); scene0 = rtBH;
   }
@@ -2510,7 +2899,11 @@ function teleText(v){ return v < 10 ? (Math.round(v*10)/10) + '\u00d7' : Math.ro
 var keys = {};
 window.addEventListener('keydown', function(e){ if(e.target && (e.target.isContentEditable || /^(INPUT|TEXTAREA|SELECT|BUTTON)$/.test(e.target.tagName))) return; keys[e.key.toLowerCase()] = true; if(e.key.indexOf('Arrow') === 0 || e.key === ' ') e.preventDefault(); if(e.key.toLowerCase() === 'w' || e.key.toLowerCase() === 's'){ homing = false; if(typeof cancelExplorerTravel === 'function') cancelExplorerTravel(); } });
 window.addEventListener('keyup', function(e){ keys[e.key.toLowerCase()] = false; });
-window.addEventListener('blur', function(){ keys = {}; thrust = 0; held = 0; look.x = look.y = 0; $('#fwd').classList.remove('on'); $('#back').classList.remove('on'); });
+function resetFlightInput(){
+  keys={};thrust=0;held=0;look.x=look.y=0;stickId=null;touches.clear();pinchD=0;
+  knob.style.transform='translate(0px,0px)';$('#fwd').classList.remove('on');$('#back').classList.remove('on');
+}
+window.addEventListener('blur',resetFlightInput);
 window.addEventListener('resize', function(){
   camera.aspect = window.innerWidth/window.innerHeight; camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight, false);
@@ -2793,11 +3186,46 @@ bindExplorerLabels();
 
 
 // Source: 90-frame.js
-var v1 = new THREE.Vector3(), fwdV = new THREE.Vector3(), last = performance.now(), frames = 0, shownPlace = '', ftA = 0, ftN = 0, plain = false;
+var v1 = new THREE.Vector3(), fwdV = new THREE.Vector3(), frameAUQuaternion = new THREE.Quaternion(), last = performance.now(), frames = 0, shownPlace = '', plain = false;
+var frameDeadline = 0, frameTimingReset = true;
+/* Cached nearest-star identity remains exact within a triangle-inequality bound.
+   Turning in place does not require scanning the entire catalogue again. */
+var starSearch = {position:new THREE.Vector3(Infinity,Infinity,Infinity), radius:0, index:-1, pos:null, abs:null, count:-1, named:null};
+function updateNearbyStar(){
+  if(!poolStar)return;
+  var hp=HYG.pos, ha=HYG.abs, hn=HYG.n, named=typeof namedStarIndices!=='undefined'?namedStarIndices:null;
+  var shift2=starSearch.position.distanceToSquared(P);
+  var cached=starSearch.pos===hp && starSearch.abs===ha && starSearch.count===hn && starSearch.named===named;
+  if(!cached || !(shift2===0 || shift2<starSearch.radius*starSearch.radius)){
+    var first=Infinity, second=Infinity, winner=-1;
+    for(var h=0;h<hn;h++){
+      if((named && named[h]) || !(ha[h]<90))continue;
+      var ax=hp[h*3]-P.x, ay=hp[h*3+1]-P.y, az=hp[h*3+2]-P.z, q2=ax*ax+ay*ay+az*az;
+      if(!Number.isFinite(q2))continue;
+      if(q2<first){second=first;first=q2;winner=h;}else if(q2<second)second=q2;
+    }
+    var distance=Math.sqrt(first), within=distance<1.5;
+    starSearch.index=within?winner:-1;
+    starSearch.radius=Math.max(0,within?Math.min((Math.sqrt(second)-distance)*0.5,1.5-distance):distance-1.5)*(1-1e-9);
+    starSearch.position.copy(P);starSearch.pos=hp;starSearch.abs=ha;starSearch.count=hn;starSearch.named=named;
+  }
+  if(!cached || starSearch.index!==poolStar.idx)setPoolStar(starSearch.index);
+}
+document.addEventListener('visibilitychange',function(){
+  last=performance.now();frameDeadline=0;frameTimingReset=true;
+  if(document.hidden && typeof resetFlightInput==='function')resetFlightInput();
+});
 var pick = [];
 function frame(now){
   requestAnimationFrame(frame);
-  var dt = Math.min((now - last)/1000, 0.1); last = now; frames++;
+  if(document.hidden){last=now;frameDeadline=0;frameTimingReset=true;return;}
+  /* A 120 Hz display need not submit this expensive scene 120 times a second.
+     Keep the deadline phase, so other refresh rates do not round down to 30 Hz. */
+  if(frames>0 && now<frameDeadline-0.5)return;
+  var rawDt=Math.max(0,(now-last)/1000), dt=Math.min(rawDt,0.1);last=now;frames++;
+  frameDeadline=frameDeadline && now-frameDeadline<100?frameDeadline+1000/60:now+1000/60;
+  if(typeof updateRenderBudget==='function')updateRenderBudget(frameTimingReset?0:rawDt,now);
+  frameTimingReset=false;
   var epochMs = Date.now();
   if(typeof updateSolarSystem === 'function') updateSolarSystem(epochMs);
   if(typeof updateExtraSystems === 'function') updateExtraSystems(epochMs);
@@ -2815,10 +3243,8 @@ function frame(now){
   var near = null, nd = Infinity, i;
   for(i=0;i<marks.length;i++){ var dd = Math.max(marks[i].w.distanceTo(P), marks[i].r0*K(marks[i].cls)); if(dd < nd){ nd = dd; near = marks[i]; } }
   if(poolStar){
-    var hp = HYG.pos, ha = HYG.abs, bi = -1, bd2 = 2.25, h, hn = HYG.n;
-    for(h=0;h<hn;h++){ if(typeof namedStarIndices !== 'undefined' && namedStarIndices[h]) continue; var ax = hp[h*3] - P.x, ay = hp[h*3+1] - P.y, az = hp[h*3+2] - P.z, q2 = ax*ax + ay*ay + az*az; if(q2 < bd2 && ha[h] < 90){ bd2 = q2; bi = h; } }
-    if(bi !== poolStar.idx) setPoolStar(bi);
-    if(bi >= 0){ var dh = Math.max(Math.sqrt(bd2), poolStar.mark.r0*K('s')); if(dh < nd){ nd = dh; near = poolStar.mark; } }
+    updateNearbyStar();
+    if(poolStar.idx >= 0){ var dh = Math.max(poolStar.mark.w.distanceTo(P), poolStar.mark.r0*K('s')); if(dh < nd){ nd = dh; near = poolStar.mark; } }
   }
   var S = nd;
   /* The outer limit is the extent of this observer-centred map, not a physical wall. */
@@ -2840,6 +3266,10 @@ function frame(now){
   /* Navigation may cross many scales in one frame. Recompute the floating-origin scale at the destination. */
   nd = Infinity;
   for(i=0;i<marks.length;i++){ var currentDistance = Math.max(marks[i].w.distanceTo(P), marks[i].r0*K(marks[i].cls)); if(currentDistance < nd){ nd = currentDistance; near = marks[i]; } }
+  if(poolStar){
+    updateNearbyStar();
+    if(poolStar.idx>=0){var currentStarDistance=Math.max(poolStar.mark.w.distanceTo(P),poolStar.mark.r0*K('s'));if(currentStarDistance<nd){nd=currentStarDistance;near=poolStar.mark;}}
+  }
   S = Math.max(nd, 1e-15);
   var D = Math.max(P.length(), 1e-8), L = Math.log10(D);
   /* never let the drawing scale shrink below what is on screen nearby */
@@ -2852,7 +3282,7 @@ function frame(now){
   TIME.value += dt;
   for(i=0;i<mapped.length;i++){ if(mapped[i].t.ready && mapped[i].u.uHasMap.value < 1) mapped[i].u.uHasMap.value = 1; }
   if(HYG.u){ HYG.u.uS.value = S; HYG.u.uTele.value = tele; }
-  var qAU = auRoot.quaternion.clone().invert().multiply(camera.quaternion);
+  var qAU = frameAUQuaternion.copy(auRoot.quaternion).invert().multiply(camera.quaternion);
   for(i=0;i<boards.length;i++){ boards[i].m.quaternion.copy(boards[i].au ? qAU : camera.quaternion); }
   for(i=0;i<dots.length;i++){
     var T = dots[i], far = T.w.distanceTo(P)*T.k/tele, TR = T.R*K(T.cls);          /* far: the size that covers a few pixels at this distance */
@@ -2952,15 +3382,6 @@ function frame(now){
     if(B.show === B.hidden){ B.hidden = !B.show; B.el.classList.toggle('off', B.hidden); }
   }
 
-  /* keep the motion smooth: the clouds are the costly part, so their resolution follows the frame time */
-  ftA += dt; ftN++;
-  if(ftN >= 30){
-    var ft = ftA/ftN, old = volScale; ftA = 0; ftN = 0;
-    if(typeof QUALITY_MODE !== 'undefined' && QUALITY_MODE === 'auto'){
-      if(ft > 0.030) volScale = Math.max(0.3, volScale - 0.08); else if(ft < 0.0185) volScale = Math.min(0.85, volScale + 0.05);
-    }
-    if(volScale !== old) sizeTargets();
-  }
   if(frames % 4 === 0){
     $('#teleBtn').textContent = '望遠鏡：' + teleText(tele);
     var place = PLACES[PLACES.length - 1];
