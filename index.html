@@ -3040,8 +3040,8 @@ canvas.addEventListener('pointermove', function(e){
   var t = touches.get(e.pointerId); if(!t) return;
   var dx = e.clientX - t.x, dy = e.clientY - t.y; t.x = e.clientX; t.y = e.clientY;
   if(touches.size === 1){
-    /* one finger turns your view; the more you are zoomed in, the finer it turns */
-    yaw += dx*0.0035/tele; pitch = clamp(pitch + dy*0.0035/tele, -1.5, 1.5);
+    /* Swipe steers in the same direction as the joystick; zoom makes turning finer. */
+    yaw -= dx*0.0035/tele; pitch = clamp(pitch - dy*0.0035/tele, -1.5, 1.5);
   } else if(touches.size === 2){
     var d = touchDist();
     if(pinchD > 0 && d > 0) setTele(teleT*Math.pow(d/pinchD, 1.6));
