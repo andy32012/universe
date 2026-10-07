@@ -282,6 +282,7 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--gold);outline-o
 .music-volume{display:grid;grid-template-columns:auto 1fr 3.2em;align-items:center;gap:12px;margin-top:12px;font-size:12px;color:var(--ink-dim)}
 #musicVolume{width:100%;min-height:44px;margin:0;accent-color:var(--gold);touch-action:pan-y}
 #musicVolumeText{text-align:right;font-size:11px;font-variant-numeric:tabular-nums}
+
 </style>
 </head>
 <body>
@@ -351,7 +352,7 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--gold);outline-o
       <div class="explorer-detail-body">
         <div class="music-row">
           <button type="button" id="musicToggle" aria-pressed="false">播放音樂</button>
-          <span id="musicState" role="status">關閉</span>
+          <span id="musicState" aria-live="off">關閉</span>
         </div>
         <div class="music-volume">
           <label for="musicVolume">音量</label>
@@ -3587,69 +3588,180 @@ Engine.prototype.bell = function(n){
   });
 };
 
-var ctx = null, engine = null, master = null, timer = 0, offTimer = 0, on = false;
+var ctx = null, engine = null, master = null, timer = 0, offTimer = 0;
+var on = false, phase = 'off', message = '', revision = 0, requests = [], savedClock = 0;
 var btn = document.getElementById('musicToggle'), state = document.getElementById('musicState');
 var vol = document.getElementById('musicVolume'), volText = document.getElementById('musicVolumeText');
 var level = 0.6;
 try { var saved = parseFloat(localStorage.getItem('universe-music-volume')); if(saved >= 0 && saved <= 1) level = saved; } catch(e){}
 vol.value = Math.round(level * 100); volText.textContent = vol.value + '%';
-
+// The visible clock is not a live region: screen readers must not announce every second.
+state.removeAttribute('role'); state.setAttribute('aria-live', 'off');
 function gainFor(v){ return v * v * 0.9; }
+function elapsed(){ return engine && ctx ? mod(Math.max(0, engine.u0 + ctx.currentTime - engine.t0), CYCLE) : savedClock; }
 function clock(s){ s = Math.floor(s); return Math.floor(s / 60) + ':' + ('0' + s % 60).slice(-2); }
 function showState(){
-  btn.setAttribute('aria-pressed', on ? 'true' : 'false');
-  btn.textContent = on ? '停止音樂' : '播放音樂';
-  state.textContent = on && engine ? '播放中 · ' + clock(engine.cycleTime(ctx.currentTime)) + ' / 30:00' : '關閉';
+  var playing = on && phase === 'playing' && ctx && ctx.state === 'running';
+  var label = phase === 'retry' ? '重試播放' : (on ? '停止音樂' : '播放音樂');
+  var text = playing ? '播放中 · ' + clock(elapsed()) + ' / 30:00' :
+    phase === 'starting' ? '正在開啟音訊…' : phase === 'background' ? '背景暫停' : phase === 'retry' ? message : '關閉';
+  if(btn.getAttribute('aria-pressed') !== String(!!playing)) btn.setAttribute('aria-pressed', String(!!playing));
+  if(btn.textContent !== label) btn.textContent = label;
+  if(state.textContent !== text) state.textContent = text;
 }
-function tick(){ if(engine && ctx.state === 'running') engine.pump(ctx.currentTime); if(on) showState(); }
+function clearStop(){ clearTimeout(offTimer); offTimer = 0; }
 function run(go){
-  clearInterval(timer); timer = 0;
-  if(go){ tick(); timer = setInterval(tick, TICK); }
+  if(!go){ clearInterval(timer); timer = 0; }
+  else if(!timer){ tick(); timer = setInterval(tick, TICK); }
+}
+function tick(){
+  if(on && !document.hidden && engine && ctx.state === 'running') engine.pump(ctx.currentTime);
+  showState();
+}
+function holdGain(g, now){
+  // Read the current value before removing a ramp, including on older WebKit.
+  var current = g.value;
+  if(typeof g.cancelAndHoldAtTime === 'function') g.cancelAndHoldAtTime(now);
+  else { g.cancelScheduledValues(now); g.setValueAtTime(current, now); }
+}
+function fadeTo(value, seconds){
+  if(!ctx || !master || ctx.state === 'closed') return;
+  var now = ctx.currentTime, g = master.gain; holdGain(g, now);
+  if(seconds > 0) g.linearRampToValueAtTime(value, now + seconds);
+  else g.setValueAtTime(value, now);
+}
+function forgetRequest(request){ var i = requests.indexOf(request); if(i >= 0) requests.splice(i, 1); }
+function pending(kind, context, token){
+  return requests.some(function(r){ return r.kind === kind && r.ctx === context && (token === undefined || r.token === token); });
+}
+function playing(context){
+  if(context !== ctx || !on || document.hidden || context.state !== 'running') return;
+  var entered = phase !== 'playing'; phase = 'playing'; message = '';
+  if(entered) fadeTo(gainFor(level), 2.5);
+  run(true); showState();
+}
+function retry(text){
+  revision++; on = false; phase = 'retry'; message = text;
+  clearStop(); run(false); fadeTo(0, 0); showState();
+  if(ctx && ctx.state !== 'closed' && ctx.state !== 'suspended') suspendAudio(revision);
+}
+function settle(context){
+  if(context !== ctx) return;
+  if(!on || document.hidden){
+    if(!offTimer && context.state !== 'closed' && context.state !== 'suspended') suspendAudio(revision);
+  } else if(context.state === 'running') playing(context);
+  else if(phase === 'starting' || phase === 'playing') resumeAudio(revision);
+}
+function suspendAudio(token){
+  var context = ctx;
+  if(!context || context.state === 'closed' || context.state === 'suspended' || pending('suspend', context, token)) return;
+  var request = {kind:'suspend', ctx:context, token:token}; requests.push(request);
+  var result; try { result = context.suspend(); } catch(e){ result = Promise.reject(e); }
+  Promise.resolve(result).then(function(){ forgetRequest(request); settle(context); }, function(){
+    forgetRequest(request);
+    if(context !== ctx) return;
+    if(token !== revision || (on && !document.hidden)){ settle(context); return; }
+    // A failed pause must not leave audible output or a polling timer behind.
+    savedClock = elapsed(); fadeTo(0, 0); run(false);
+    try { Promise.resolve(context.close()).catch(function(){}); } catch(e){}
+  });
+}
+function resumeAudio(token){
+  var context = ctx;
+  if(!context || !on || document.hidden || pending('resume', context, token)) return;
+  var request = {kind:'resume', ctx:context, token:token}; requests.push(request);
+  // Invoke resume synchronously from the click handler, retaining Safari's user gesture.
+  var result; try { result = context.resume(); } catch(e){ result = Promise.reject(e); }
+  Promise.resolve(result).then(function(){
+    forgetRequest(request);
+    if(context !== ctx) return;
+    if(token !== revision || !on || document.hidden){ settle(context); return; }
+    if(context.state === 'running') playing(context);
+    else retry('音訊尚未恢復，請點一下重試。');
+  }, function(){
+    forgetRequest(request);
+    if(context !== ctx) return;
+    if(token !== revision){ settle(context); return; }
+    retry('無法開啟音訊，請點一下重試。');
+  });
+  if(context.state === 'running') playing(context);
+}
+function contextChanged(context){
+  if(context !== ctx) return;
+  if(context.state === 'closed'){
+    savedClock = elapsed(); context.onstatechange = null;
+    var unexpected = on || phase === 'starting' || phase === 'playing' || phase === 'background';
+    ctx = engine = master = null; requests = requests.filter(function(r){ return r.ctx !== context; });
+    revision++; on = false; clearStop(); run(false);
+    if(unexpected){ phase = 'retry'; message = '音訊已關閉，請點一下重新播放。'; }
+  } else if(context.state === 'interrupted'){
+    if(on || phase === 'starting' || phase === 'playing') retry('音訊被系統中斷，請點一下繼續。');
+    else { run(false); fadeTo(0, 0); }
+  } else if(context.state === 'running'){
+    if(on && !document.hidden) playing(context);
+    else if(!offTimer){ fadeTo(0, 0); suspendAudio(revision); }
+  } else if(context.state === 'suspended'){
+    if(!on || document.hidden){ fadeTo(0, 0); run(false); }
+    else if(pending('suspend', context)) resumeAudio(revision); // An older pause lost a race with a newer play.
+    else if(phase === 'playing' && !pending('resume', context, revision)) retry('音訊已暫停，請點一下繼續。');
+  }
+  showState();
 }
 function ensure(){
-  if(ctx) return true;
+  if(ctx && ctx.state !== 'closed' && engine) return true;
+  if(ctx){ savedClock = elapsed(); ctx.onstatechange = null; }
   var AC = window.AudioContext || window.webkitAudioContext;
-  if(!AC){ state.textContent = '此瀏覽器不支援 Web Audio'; btn.disabled = true; return false; }
-  ctx = new AC();
-  master = ctx.createGain(); master.gain.value = 0;
-  var comp = ctx.createDynamicsCompressor();
-  comp.threshold.value = -20; comp.knee.value = 12; comp.ratio.value = 3;
-  master.connect(comp); comp.connect(ctx.destination);
-  engine = new Engine(ctx, master);
-  engine.start(0, ctx.currentTime + 0.05);
-  return true;
-}
-function fadeTo(v, seconds){
-  var now = ctx.currentTime, g = master.gain;
-  if(g.cancelAndHoldAtTime) g.cancelAndHoldAtTime(now); else { g.cancelScheduledValues(now); g.setValueAtTime(g.value, now); }
-  g.linearRampToValueAtTime(v, now + seconds);
+  if(!AC){ phase = 'retry'; message = '此瀏覽器不支援 Web Audio'; btn.disabled = true; return false; }
+  var created = null;
+  try {
+    created = new AC();
+    var gain = created.createGain(); gain.gain.value = 0;
+    var comp = created.createDynamicsCompressor();
+    comp.threshold.value = -20; comp.knee.value = 12; comp.ratio.value = 3;
+    gain.connect(comp); comp.connect(created.destination);
+    var nextEngine = new Engine(created, gain); nextEngine.start(savedClock, created.currentTime + 0.05);
+    ctx = created; master = gain; engine = nextEngine;
+    ctx.onstatechange = function(){ contextChanged(created); };
+    return true;
+  } catch(e){
+    if(created){ try { Promise.resolve(created.close()).catch(function(){}); } catch(closeError){} }
+    ctx = engine = master = null; phase = 'retry'; message = '音訊無法初始化，請點一下重試。'; return false;
+  }
 }
 function setOn(next){
-  if(next && !ensure()) return;
-  on = next; clearTimeout(offTimer);
+  var token = ++revision; on = next; clearStop();
   if(on){
-    ctx.resume().then(function(){ if(!on) return; run(!document.hidden); fadeTo(gainFor(level), 2.5); showState(); });
-  } else if(ctx){
-    fadeTo(0, 1.2);
-    offTimer = setTimeout(function(){ if(!on){ run(false); ctx.suspend(); } }, 1300);
+    phase = document.hidden ? 'background' : 'starting'; message = '';
+    if(!ensure()){ on = false; showState(); return; }
+    if(document.hidden){ fadeTo(0, 0); run(false); suspendAudio(token); }
+    else resumeAudio(token);
+  } else {
+    phase = 'off'; message = ''; run(false);
+    if(ctx && ctx.state === 'running'){
+      fadeTo(0, 1.2);
+      offTimer = setTimeout(function(){ offTimer = 0; if(token === revision && !on){ fadeTo(0, 0); suspendAudio(token); } }, 1300);
+    } else { fadeTo(0, 0); suspendAudio(token); }
   }
   showState();
 }
 btn.addEventListener('click', function(){ setOn(!on); });
 vol.addEventListener('input', function(){
   level = vol.value / 100; volText.textContent = vol.value + '%';
-  if(on && ctx){ var g = master.gain; g.cancelScheduledValues(ctx.currentTime); g.setTargetAtTime(gainFor(level), ctx.currentTime, 0.08); }
+  if(on && ctx && ctx.state === 'running' && !document.hidden) fadeTo(gainFor(level), 0.08);
   try { localStorage.setItem('universe-music-volume', String(level)); } catch(e){}
 });
-// 切到背景時暫停整個音訊時鐘；回來時從同一個循環位置繼續。
 document.addEventListener('visibilitychange', function(){
-  if(!ctx || !on) return;
-  if(document.hidden){ run(false); ctx.suspend(); }
-  else ctx.resume().then(function(){ if(on && !document.hidden) run(true); });
+  if(!ctx) return;
+  var token = ++revision; clearStop();
+  if(document.hidden){
+    if(on) phase = 'background'; run(false); fadeTo(0, 0); suspendAudio(token);
+  } else if(on){ phase = 'starting'; resumeAudio(token); }
+  else { fadeTo(0, 0); suspendAudio(token); }
+  showState();
 });
-// 供獨立檢查以離線渲染驗證循環接縫。
-window.UniverseMusic = { CYCLE: CYCLE, Engine: Engine };
+showState();
 })();
+
 </script>
 </body>
 </html>
