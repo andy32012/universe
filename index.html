@@ -184,7 +184,7 @@ body.booting>:not(#loading):not(#fail):not(script){visibility:hidden}
 #labels .lab[data-explore]:hover{color:var(--gold);background:rgba(8,11,20,.65)}
 
 #explorer{position:fixed;top:calc(env(safe-area-inset-top,0px) + 84px);right:calc(env(safe-area-inset-right,0px) + 24px);width:360px;max-height:calc(100dvh - env(safe-area-inset-top,0px) - env(safe-area-inset-bottom,0px) - 284px);z-index:9;display:flex;flex-direction:column;border:1px solid rgba(243,217,162,.19);border-radius:20px;background:rgba(13,18,28,.96);box-shadow:0 24px 80px rgba(0,0,0,.45);backdrop-filter:none;-webkit-backdrop-filter:none;overflow:hidden;user-select:text;-webkit-user-select:text}
-#explorer[hidden],#explorerTravel[hidden],#objectCard[hidden],#objectRelease[hidden],#destinationEmpty[hidden],#objectSource[hidden]{display:none}
+#explorer[hidden],#explorerTravel[hidden],#objectCard[hidden],#objectRelease[hidden],#destinationEmpty[hidden],#objectSource[hidden],#terrainSource[hidden],#objectCometOverview[hidden]{display:none}
 .explorer-heading{padding:21px 20px 17px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;border-bottom:1px solid var(--line)}
 .explorer-eyebrow{color:var(--gold);font-size:9px;letter-spacing:.2em;line-height:1.5;margin:0}
 #explorerTitle{font-family:var(--serif);font-size:25px;font-weight:500;letter-spacing:.08em;margin:6px 0 0;line-height:1.3}
@@ -213,10 +213,10 @@ body.booting>:not(#loading):not(#fail):not(script){visibility:hidden}
 .explorer-muted{color:var(--ink-faint);font-size:10px;line-height:1.7;margin:11px 0 0}
 .object-note{margin:12px 0;padding:10px 12px;border-left:2px solid rgba(243,217,162,.32);background:rgba(243,217,162,.025);color:var(--ink-dim);font-size:11px;line-height:1.7}
 .object-actions{display:grid;grid-template-columns:1.25fr .8fr 1.1fr;gap:7px;margin:17px 0 0}
-.object-actions button,#objectRelease{min-height:44px;border:1px solid var(--line);border-radius:9px;font-size:11px;white-space:nowrap}
+.object-actions button,#objectRelease,#objectCometOverview{min-height:44px;border:1px solid var(--line);border-radius:9px;font-size:11px;white-space:nowrap}
 .object-actions .primary{background:var(--gold);border-color:var(--gold);color:#1a1b21;font-weight:600}
-#objectRelease{width:100%;margin-top:8px;color:var(--gold);background:rgba(243,217,162,.04)}
-#objectSource{display:inline-block;margin-top:8px;font-size:10px;line-height:1.6;color:var(--gold);text-underline-offset:3px;overflow-wrap:anywhere}
+#objectRelease,#objectCometOverview{width:100%;margin-top:8px;color:var(--gold);background:rgba(243,217,162,.04)}
+#objectSource,#terrainSource{display:block;margin-top:8px;font-size:10px;line-height:1.6;color:var(--gold);text-underline-offset:3px;overflow-wrap:anywhere}
 .explorer-detail{margin-top:19px;border-top:1px solid var(--line)}
 .explorer-detail+.explorer-detail{margin-top:0}
 .explorer-detail summary{display:flex;justify-content:space-between;align-items:center;gap:12px;min-height:48px;font-size:12px;color:var(--ink-dim);cursor:pointer;list-style:none}
@@ -361,9 +361,10 @@ body.booting>:not(#loading):not(#fail):not(script){visibility:hidden}
   </div>
   <div class="explorer-scroll">
     <label class="explorer-search-label" for="destinationSearch">尋找目的地</label>
-    <input id="destinationSearch" type="search" autocomplete="off" spellcheck="false" placeholder="地球、小行星、黑洞…">
+    <input id="destinationSearch" type="search" autocomplete="off" spellcheck="false" placeholder="地球、彗星、黑洞…">
     <div class="destination-filters" role="group" aria-label="快速尋找目的地">
       <button type="button" data-destination-filter="" aria-pressed="true">全部</button>
+      <button type="button" data-destination-filter="彗星" aria-pressed="false">彗星</button>
       <button type="button" data-destination-filter="小行星" aria-pressed="false">小行星</button>
       <button type="button" data-destination-filter="碎石群" aria-pressed="false">碎石群</button>
       <button type="button" data-destination-filter="黑洞" aria-pressed="false">黑洞</button>
@@ -383,9 +384,11 @@ body.booting>:not(#loading):not(#fail):not(script){visibility:hidden}
         <button type="button" id="objectFollow">跟隨</button>
         <button type="button" id="objectOrbit">環繞觀賞</button>
       </div>
+      <button type="button" id="objectCometOverview" hidden>退遠看彗尾</button>
       <button type="button" id="objectRelease" hidden>解除跟隨／環繞</button>
       <p id="objectConfidence" class="explorer-muted"></p>
       <a id="objectSource" target="_blank" rel="noopener noreferrer" hidden></a>
+      <a id="terrainSource" target="_blank" rel="noopener noreferrer" hidden></a>
     </section>
 
     <details id="explorerMusic" class="explorer-detail">
@@ -590,8 +593,42 @@ function loadMap(key){
 
 
 // Source: 10-surfaces.js
-/* Surface relief below is PROCEDURAL illustration, not measured elevation data.
-   The analytic eclipse geometry uses the displayed size; flux always uses physical AU. */
+/* Surface relief falls back to procedural illustration until an optional measured
+   DEM is ready. Measured metres are never amplified by the visual detail setting. */
+var DEM_GL = `
+uniform sampler2D uDemMap; uniform float uDemReady; uniform float uDemScale; uniform float uDemOffset;
+uniform float uDemLowAlpha; uniform vec2 uDemSize; uniform vec2 uDemPoles;
+float demDNAt(vec2 uv){
+  vec4 texel;
+  float halfTexel=0.5/uDemSize.x;
+  // Clamp-to-edge works on non-power-of-two WebGL1 textures. Explicitly join
+  // the east-positive longitude seam with the adjacent pixel centres.
+  if(uv.x<halfTexel || uv.x>1.0-halfTexel){
+    float blend=uv.x<halfTexel?uv.x*uDemSize.x+0.5:(uv.x-1.0)*uDemSize.x+0.5;
+    texel=mix(texture2D(uDemMap,vec2(1.0-halfTexel,uv.y)),texture2D(uDemMap,vec2(halfTexel,uv.y)),blend);
+  }else texel=texture2D(uDemMap,uv);
+  return texel.r*65280.0+mix(texel.g,texel.a,uDemLowAlpha)*255.0-32768.0;
+}
+float demHeight(vec3 point,float turns){
+  vec3 p=normalize(point);
+  // The source starts at 0 degrees east; unlike the colour image it has no
+  // half-turn offset. Rows run north-to-south and contain pixel-centred data.
+  float v=0.5-asin(clamp(p.y,-1.0,1.0))/3.14159265359;
+  if(v<=0.0)return uDemPoles.x*uDemScale+uDemOffset;
+  if(v>=1.0)return uDemPoles.y*uDemScale+uDemOffset;
+  vec2 uv=vec2(fract(atan(-p.z,p.x)/6.28318530718-turns),v);
+  float dn=demDNAt(uv),cap=0.5/uDemSize.y;
+  // All duplicated mesh vertices at a pole must meet. The unresolved polar
+  // cap converges to its first/last latitude-row mean, not an arbitrary meridian.
+  if(uv.y<cap)dn=mix(uDemPoles.x,dn,uv.y/cap);
+  else if(uv.y>1.0-cap)dn=mix(uDemPoles.y,dn,(1.0-uv.y)/cap);
+  return dn*uDemScale+uDemOffset;
+}
+`;
+if(!renderer.capabilities.vertexTextures){
+  // Keep the whole app renderable on WebGL1 devices without vertex sampling.
+  DEM_GL='uniform float uDemReady;float demHeight(vec3 point,float turns){return 0.0;}';
+}
 var SURFACE_MAP_GL = `
 vec4 mapAt(sampler2D t, vec3 p, float spin){
   float u = atan(-p.z,p.x)/6.28318530718 + 0.5 - spin;
@@ -600,10 +637,11 @@ vec4 mapAt(sampler2D t, vec3 p, float spin){
   return texture2D(t, fwidth(a.x)<fwidth(b.x)+0.0001 ? a:b);
 }
 `;
-var TERRAIN_GL = `
+var TERRAIN_GL = DEM_GL + `
 uniform float uTerrain; uniform float uDetail; uniform float uRotation; uniform float uSpin; uniform float uTime;
 vec3 surfacePoint(vec3 p){ float a=(uRotation+uSpin*uTime)*6.28318530718; float c=cos(a),s=sin(a); return vec3(c*p.x-s*p.z,p.y,s*p.x+c*p.z); }
 float terrainHeight(vec3 point){
+  if(uDemReady>0.5)return demHeight(point,uRotation+uSpin*uTime);
   if(uTerrain<0.5 || uDetail<0.0001) return 0.0;
   vec3 p=surfacePoint(normalize(point));
   float h=(fb(p*23.0)-0.45)*0.6+(n3(p*95.0)-0.5)*0.12;
@@ -714,7 +752,7 @@ void main(){
   }
   if(uHasMap<0.5) col*=uTint;
   float mu=max(dot(N,uSun),0.0);
-  vec3 surface=uBasis*p; float visibility=mu>0.0?eclipseAt(surface):0.0;
+  vec3 surface=uBasis*p*(1.0+(uDemReady>0.5?terrainHeight(p):0.0)); float visibility=mu>0.0?eclipseAt(surface):0.0;
   if(uHasRing>0.5 && mu>0.0){
     float dn=dot(uSun,uRingN);
     if(abs(dn)>0.00001){
@@ -812,8 +850,31 @@ var AIR_FS = `
 uniform vec3 uSun;uniform vec3 uKr;uniform float uKm;uniform float uShR;uniform float uShM;uniform float uTop;
 uniform float uI;uniform float uAlpha;uniform float uFlux;uniform float uDisplayGain;uniform float uAirSteps;
 uniform sampler2D uAirLut;uniform vec2 uAirLutSize;uniform float uAirLutReady;
+uniform mat3 uDemInvBasis;uniform float uDemRotation;uniform float uDemMinRadius;uniform float uDemMaxRadius;
 varying vec3 vW;varying vec3 vCtr;varying float vRw;
+`+DEM_GL+`
 vec2 rsi(vec3 r0,vec3 rd,float sr){float tm=-dot(r0,rd);vec3 pp=r0+rd*tm;float d2=dot(pp,pp);if(d2>sr*sr)return vec2(1e5,-1e5);float hf=sqrt(sr*sr-d2);return vec2(tm-hf,tm+hf);}
+float groundDistance(vec3 p){float radius=length(p);if(radius<uDemMinRadius)return radius-uDemMinRadius;return radius-1.0-demHeight(uDemInvBasis*p,uDemRotation);}
+float groundEnd(vec3 origin,vec3 ray,float end){
+  if(uDemReady<0.5){vec2 solid=rsi(origin,ray,1.0);return solid.x<solid.y && solid.x>0.0?min(end,solid.x):end;}
+  vec2 outer=rsi(origin,ray,uDemMaxRadius);if(outer.x>=outer.y || outer.y<=0.0)return end;
+  float lo=max(outer.x,0.0),hi=min(outer.y,end);if(hi<=lo)return end;
+  if(groundDistance(origin+ray*lo)<=0.0)return lo;
+  vec2 inner=rsi(origin,ray,uDemMinRadius);
+  if(inner.x<inner.y && inner.x>lo && inner.x<hi)hi=inner.x;
+  else{
+    // A grazing ray may miss the minimum-radius sphere. Find its first sampled
+    // terrain crossing in the thin measured radial envelope, then refine it.
+    float previous=lo;bool found=false;
+    for(int j=1;j<=4;j++){
+      float t=mix(lo,hi,float(j)*0.25);
+      if(groundDistance(origin+ray*t)<=0.0){lo=previous;hi=t;found=true;break;}previous=t;
+    }
+    if(!found)return end;
+  }
+  for(int j=0;j<6;j++){float mid=(lo+hi)*0.5;if(groundDistance(origin+ray*mid)>0.0)lo=mid;else hi=mid;}
+  return min(end,hi);
+}
 // Concentrate view samples where the ray approaches the dense lower atmosphere.
 float airRayT(float u,float lo,float hi,float closest){
   if(closest>=hi-0.000001)return hi-(hi-lo)*(1.0-u)*(1.0-u);
@@ -841,7 +902,7 @@ vec2 sunDepth(float radius,float mu,float horizon){
 }
 void main(){
   vec3 r=normalize(vW),r0=-vCtr/vRw;vec2 span=rsi(r0,r,uTop);if(span.x>span.y)discard;
-  vec2 solid=rsi(r0,r,1.0);if(solid.x<solid.y && solid.x>0.0)span.y=min(span.y,solid.x);
+  span.y=groundEnd(r0,r,span.y);
   float lo=max(span.x,0.0),hi=span.y;if(hi<=lo)discard;
   float closest=clamp(-dot(r0,r),lo,hi),previous=lo;
   vec3 totR=vec3(0.0),totM=vec3(0.0);float iOdR=0.0,iOdM=0.0;
@@ -941,7 +1002,9 @@ function airShell(name, radius, pos, sunDir, a, b, c, d){
   }
   var lookup=airDepthPlaceholder;
   var m = new THREE.ShaderMaterial({uniforms:{uSun:{value:sunDir}, uKr:{value:new THREE.Vector3().fromArray(A.kr)}, uKm:{value:A.km}, uShR:{value:A.shR}, uShM:{value:A.shM},
-    uTop:{value:A.top}, uI:{value:A.I}, uAlpha:{value:1}, uFlux:{value:1}, uDisplayGain:{value:1}, uAirSteps:{value:24}, uAirLut:{value:lookup.texture}, uAirLutSize:{value:lookup.size}, uAirLutReady:{value:0}}, vertexShader:AIR_VS, fragmentShader:AIR_FS, transparent:true, blending:THREE.AdditiveBlending, depthWrite:false});
+    uTop:{value:A.top}, uI:{value:A.I}, uAlpha:{value:1}, uFlux:{value:1}, uDisplayGain:{value:1}, uAirSteps:{value:24}, uAirLut:{value:lookup.texture}, uAirLutSize:{value:lookup.size}, uAirLutReady:{value:0},
+    uDemMap:{value:WHITE},uDemReady:{value:0},uDemScale:{value:0},uDemOffset:{value:0},uDemLowAlpha:{value:0},uDemSize:{value:new THREE.Vector2(1,1)},uDemPoles:{value:new THREE.Vector2()},
+    uDemInvBasis:{value:new THREE.Matrix3()},uDemRotation:{value:0},uDemMinRadius:{value:1},uDemMaxRadius:{value:1}}, vertexShader:AIR_VS, fragmentShader:AIR_FS, transparent:true, blending:THREE.AdditiveBlending, depthWrite:false});
   var mesh = new THREE.Mesh(sphGeo, m); mesh.position.copy(pos); mesh.scale.setScalar(radius*A.top*K('p'));
   sized.push({m:mesh, base:radius*A.top, cls:'p'});
   mesh.userData.airProfile=A;mesh.userData.airLutReady=false;
@@ -1348,7 +1411,8 @@ function K(c){ return 1; }
 function surfaceUniforms(){
   return {uRotation:{value:0},uTerrain:{value:0},uDetail:{value:0},uFlux:{value:1},uDisplayGain:{value:1},uBasis:{value:new THREE.Matrix3()},uSunLocal:{value:new THREE.Vector3(0,1,0)},
     uOcc:{value:[new THREE.Vector4(),new THREE.Vector4(),new THREE.Vector4(),new THREE.Vector4()]},uOccCount:{value:0},uSunAngle:{value:0.004650},uSunTangent:{value:0.004650034},
-    uRingMap:{value:WHITE},uHasRing:{value:0},uRingRadiusScale:{value:1},uRingN:{value:new THREE.Vector3(0,1,0)},uCloudLayers:{value:0}};
+    uRingMap:{value:WHITE},uHasRing:{value:0},uRingRadiusScale:{value:1},uRingN:{value:new THREE.Vector3(0,1,0)},uCloudLayers:{value:0},
+    uDemMap:{value:WHITE},uDemReady:{value:0},uDemScale:{value:0},uDemOffset:{value:0},uDemLowAlpha:{value:0},uDemSize:{value:new THREE.Vector2(1,1)},uDemPoles:{value:new THREE.Vector2()}};
 }
 function body(type, radius, pos, parent, tint, sunDir, a, b, c, d, cls, maps){
   maps=maps||{}; var u=surfaceUniforms();
@@ -1462,7 +1526,8 @@ function updateBodyLighting(entries){
     if(e.name==='火星')e.mesh.userData.terrain=2;
     u.uTerrain.value=e.mesh.userData.terrain||0;
     setSurfaceBasis(e.mesh,u); fillOccluders(e,lightingBodies,u,false);
-    if(e.atmosphere){var au=e.atmosphere.material.uniforms;au.uSun.value.copy(u.uSun.value);if(au.uFlux)au.uFlux.value=u.uFlux.value;}
+    if(e.atmosphere){var au=e.atmosphere.material.uniforms;au.uSun.value.copy(u.uSun.value);if(au.uFlux)au.uFlux.value=u.uFlux.value;
+      if(au.uDemInvBasis)au.uDemInvBasis.value.copy(u.uBasis.value).transpose();}
     if(e.ring){
       var ru=e.ring.material.uniforms;
       if(ru.uBasis){
@@ -1494,7 +1559,7 @@ function updateSurfaceDetails(dt){
     var px=angular*pixelHeight/(2*fov),onScreen=true;
     // Include the actual outer shells in all frustum tests, including a camera
     // inside an atmosphere looking away from the planet's opaque surface.
-    var outerRadius=radius*Math.max(mesh.userData.airBound||1,shells.length?1.00185:1,u.uTerrain.value>0.5?1.01:1);
+    var outerRadius=radius*Math.max(mesh.userData.airBound||1,shells.length?1.00185:1,u.uDemReady.value>0.5?mesh.userData.terrainRadiusMax:(u.uTerrain.value>0.5?1.01:1));
     if(VIEW.fwd && distance>outerRadius){
       var forward=surfaceV.dot(VIEW.fwd.value),rView=outerRadius*Math.sqrt(1+fov*fov);
       if(forward+outerRadius<=0)onScreen=false;
@@ -1508,8 +1573,9 @@ function updateSurfaceDetails(dt){
     var segments=px>850?128:px>240?96:px>90?64:48;
     if(high)segments=px>180?192:(px>45?96:48);
     else if(u.uTerrain.value>0.5 && px>180)segments=detail>0.45?128:96;
-    var geo=surfaceGeometry(segments);mesh.geometry=geo;
+    var geo=typeof terrainGeometry==='function'?terrainGeometry(mesh,segments):surfaceGeometry(segments);mesh.geometry=geo;
     u.uDetail.value=sstep(45,180,px);setSurfaceBasis(mesh,u);
+    if(typeof updateTerrainForMesh==='function')updateTerrainForMesh(mesh,px);
     // A 0.13% radius separation is invisible until its projection approaches a
     // pixel. Compose its three alpha layers once at the middle physical height.
     var mergeClouds=px*0.0013<0.75 && distance>radius*1.00185;
@@ -1665,6 +1731,195 @@ function lyText(d){
 }
 
 
+// Source: 35-terrain.js
+/* Measured global DEMs are optional, lazy assets. Their original vertical datum
+   is preserved; neither relief nor the reference body radius is exaggerated. */
+var TERRAIN_SPECS = {
+  '月球':{key:'moon',url:'assets/moon-lola-8ppd.dem.gz',width:2880,height:1440,
+    encoding:'row-delta-planes',metersPerDN:0.5,referenceRadiusM:1737400,bodyRadiusM:1737400,minDN:-17458,maxDN:21105,
+    sourceLabel:'NASA LRO LOLA',sourceUrl:'https://imbrium.mit.edu/DATA/LOLA_GDR/CYLINDRICAL/IMG/LDEM_16.LBL',
+    resolution:'8 格／度；赤道約 3.8 公里／格'},
+  '火星':{key:'mars',url:'assets/mars-mola-8ppd.dem.gz',width:2880,height:1440,
+    encoding:'row-delta-planes',metersPerDN:1,referenceRadiusM:3396000,bodyRadiusM:3389500,minDN:-23060,maxDN:21272,
+    sourceLabel:'NASA MGS MOLA',sourceUrl:'https://pds-geosciences.wustl.edu/mgs/mgs-m-mola-5-megdr-l3-v1/mgsl_300x/meg016/megr90n000eb.lbl',
+    resolution:'8 格／度；赤道約 7.4 公里／格'}
+};
+var terrainRecords=Object.create(null),terrainQueue=Promise.resolve();
+Object.keys(TERRAIN_SPECS).forEach(function(name){
+  terrainRecords[name]={name:name,spec:TERRAIN_SPECS[name],state:'idle',bytes:null,texture:null,
+    fetchPromise:null,preparePromise:null,body:null,geometry:Object.create(null),retryAt:0};
+});
+function terrainRecord(target){
+  var name=typeof target==='string'?target:target&&target.name;
+  return terrainRecords[name]||null;
+}
+function terrainStatus(target){
+  var record=terrainRecord(target);if(!record)return null;
+  var ready=record.state==='ready',text;
+  if(ready)text=record.spec.sourceLabel+' 實測全球地形（降採樣）；'+record.spec.resolution+'，高度未誇張。';
+  else if(record.state==='failed' || record.state==='unsupported')text='實測地形暫未可用；目前為程序地形示意，可稍後重新選擇此天體再試。';
+  else if(record.state==='idle' || record.state==='prefetched')text='目前為程序地形示意；接近時載入實測地形。';
+  else text='正在準備實測地形；目前仍為程序地形示意。';
+  return {state:record.state,ready:ready,sourceLabel:record.spec.sourceLabel,sourceUrl:record.spec.sourceUrl,resolution:record.spec.resolution,text:text};
+}
+function terrainVisible(){
+  if(!document.hidden)return Promise.resolve();
+  return new Promise(function(resolve){
+    function visible(){if(!document.hidden){document.removeEventListener('visibilitychange',visible);resolve();}}
+    document.addEventListener('visibilitychange',visible);
+  });
+}
+function terrainYield(){return new Promise(function(resolve){setTimeout(resolve,0);}).then(terrainVisible);}
+function bindTerrainBody(record){
+  if(record.body)return record.body;
+  if(typeof solarByName==='undefined' || !solarByName[record.name])return null;
+  var body=solarByName[record.name],u=body.mesh.material.uniforms;
+  record.body=body;body.mesh.userData.measuredTerrain=record;
+  if(body.atmosphere){
+    var au=body.atmosphere.material.uniforms;
+    ['uDemMap','uDemReady','uDemScale','uDemOffset','uDemLowAlpha','uDemSize','uDemPoles'].forEach(function(key){au[key]=u[key];});
+    au.uDemRotation=u.uRotation;
+    au.uDemMinRadius.value=(record.spec.referenceRadiusM+record.spec.minDN*record.spec.metersPerDN)/record.spec.bodyRadiusM;
+    au.uDemMaxRadius.value=(record.spec.referenceRadiusM+record.spec.maxDN*record.spec.metersPerDN)/record.spec.bodyRadiusM;
+  }
+  return body;
+}
+function terrainFailed(record,state){
+  record.state=state||'failed';record.retryAt=Date.now()+60000;
+  if(record.body)record.body.mesh.material.uniforms.uDemReady.value=0;
+}
+function fetchTerrain(record){
+  if(record.bytes || record.texture)return Promise.resolve(true);
+  if(record.fetchPromise)return record.fetchPromise;
+  record.state='fetching';
+  record.fetchPromise=Promise.resolve().then(async function(){
+    var controller=typeof AbortController==='function'?new AbortController():null;
+    var timer=setTimeout(function(){if(controller)controller.abort();},30000);
+    try{
+      if(typeof fetch!=='function' || !controller)throw new Error('Terrain fetching is unavailable');
+      var response=await fetch(record.spec.url,{signal:controller.signal});
+      if(!response.ok)throw new Error('Terrain request failed');
+      var bytes=new Uint8Array(await response.arrayBuffer());
+      record.compressed=bytes.length>=2 && bytes[0]===31 && bytes[1]===139;
+      // Some same-origin hosts send Content-Encoding: gzip and fetch therefore
+      // returns the already-decoded payload. Do not decompress that data twice.
+      if(!record.compressed && bytes.length!==record.spec.width*record.spec.height*2)throw new Error('Invalid terrain archive');
+      record.bytes=bytes;record.state='prefetched';return true;
+    }catch(error){terrainFailed(record);return false;}
+    finally{clearTimeout(timer);record.fetchPromise=null;}
+  });
+  return record.fetchPromise;
+}
+async function unpackTerrain(record){
+  if(!record.compressed)return record.bytes;
+  var spec=record.spec,expected=spec.width*spec.height*2,raw=new Uint8Array(expected),offset=0;
+  var stream=new Blob([record.bytes]).stream().pipeThrough(new DecompressionStream('gzip'));
+  var reader=stream.getReader();
+  try{
+    while(true){
+      await terrainVisible();var next=await reader.read();if(next.done)break;
+      if(offset+next.value.length>expected)throw new Error('Terrain data exceeds the declared grid');
+      raw.set(next.value,offset);offset+=next.value.length;await terrainYield();
+    }
+    if(offset!==expected)throw new Error('Incomplete terrain grid');
+  }catch(error){try{await reader.cancel();}catch(ignored){}throw error;}
+  finally{reader.releaseLock();}
+  return raw;
+}
+/* Return high/low offset-binary bytes. Texture interpolation is then linear in
+   height, including the signed-zero boundary. No browser image colour transform. */
+async function packTerrain(record,raw){
+  var spec=record.spec,count=spec.width*spec.height,packed=new Uint8Array(count*2);
+  var min=Infinity,max=-Infinity,poles=[0,0];
+  for(var row=0;row<spec.height;row++){
+    var previous=0;
+    for(var col=0;col<spec.width;col++){
+      var pixel=row*spec.width+col,value;
+      if(spec.encoding==='int16le')value=raw[pixel*2]|(raw[pixel*2+1]<<8);
+      else if(spec.encoding==='row-delta-planes'){
+        // The archive stores modulo-65536 row differences, low plane then high.
+        var delta=raw[pixel]|(raw[count+pixel]<<8);value=(previous+delta)&65535;previous=value;
+      }else throw new Error('Unknown terrain encoding');
+      var dn=value>32767?value-65536:value;
+      if(dn<spec.minDN || dn>spec.maxDN)throw new Error('Terrain value outside declared range');
+      min=Math.min(min,dn);max=Math.max(max,dn);
+      if(row===0)poles[0]+=dn;else if(row===spec.height-1)poles[1]+=dn;
+      packed[pixel*2]=(value>>>8)^128;packed[pixel*2+1]=value&255;
+    }
+    if((row&7)===7)await terrainYield();
+  }
+  record.decodedMin=min;record.decodedMax=max;record.poles=[poles[0]/spec.width,poles[1]/spec.width];return packed;
+}
+async function terrainUploadReady(){
+  for(var attempt=0;attempt<1500;attempt++){
+    await terrainVisible();
+    if(!renderer.getContext().isContextLost())return;
+    await new Promise(function(resolve){setTimeout(resolve,20);});
+  }
+  throw new Error('Terrain upload has no live graphics context');
+}
+function terrainSupported(record){
+  return typeof DecompressionStream==='function' && renderer.capabilities.vertexTextures && renderer.capabilities.maxTextureSize>=Math.max(record.spec.width,record.spec.height);
+}
+async function prepareTerrain(record){
+  if(record.state==='ready')return true;
+  if(!terrainSupported(record)){
+    terrainFailed(record,'unsupported');return false;
+  }
+  if(!await fetchTerrain(record))return false;
+  var texture=null;
+  try{
+    await terrainYield();record.state='decoding';
+    var raw=await unpackTerrain(record),packed=await packTerrain(record,raw);raw=null;
+    var webgl2=renderer.capabilities.isWebGL2;
+    texture=new THREE.DataTexture(packed,record.spec.width,record.spec.height,webgl2?THREE.RGFormat:THREE.LuminanceAlphaFormat,THREE.UnsignedByteType);
+    // r128 does not infer sized RG8 from RGFormat; unsized RG is invalid here.
+    if(webgl2)texture.internalFormat='RG8';
+    texture.flipY=false;texture.wrapS=texture.wrapT=THREE.ClampToEdgeWrapping;
+    texture.minFilter=texture.magFilter=THREE.LinearFilter;texture.generateMipmaps=false;texture.unpackAlignment=1;texture.needsUpdate=true;
+    await terrainYield();await terrainUploadReady();record.state='uploading';renderer.initTexture(texture);
+    var context=renderer.getContext();
+    if(context.isContextLost() || context.getError()!==context.NO_ERROR)throw new Error('Terrain texture upload failed');
+    var body=bindTerrainBody(record);if(!body)throw new Error('Terrain body is not available');
+    var u=body.mesh.material.uniforms,spec=record.spec;
+    u.uDemMap.value=texture;u.uDemSize.value.set(spec.width,spec.height);u.uDemLowAlpha.value=webgl2?0:1;
+    u.uDemPoles.value.set(record.poles[0],record.poles[1]);
+    u.uDemScale.value=spec.metersPerDN/spec.bodyRadiusM;
+    u.uDemOffset.value=(spec.referenceRadiusM-spec.bodyRadiusM)/spec.bodyRadiusM;
+    body.mesh.userData.terrainRadiusMax=(spec.referenceRadiusM+spec.maxDN*spec.metersPerDN)/spec.bodyRadiusM;
+    record.texture=texture;record.bytes=null;record.state='ready';u.uDemReady.value=1;return true;
+  }catch(error){if(texture)texture.dispose();record.bytes=null;terrainFailed(record);return false;}
+}
+function requestTerrain(target,mode){
+  var record=terrainRecord(target);if(!record)return Promise.resolve(false);
+  bindTerrainBody(record);
+  if(record.state==='ready')return Promise.resolve(true);
+  if(!terrainSupported(record)){terrainFailed(record,'unsupported');return Promise.resolve(false);}
+  if(mode==='prefetch')return record.preparePromise||fetchTerrain(record);
+  if(record.preparePromise)return record.preparePromise;
+  record.preparePromise=terrainQueue.then(function(){return prepareTerrain(record);}).catch(function(){terrainFailed(record);return false;});
+  terrainQueue=record.preparePromise.then(function(){record.preparePromise=null;});
+  return record.preparePromise;
+}
+function updateTerrainForMesh(mesh,pixels){
+  var record=terrainRecord(mesh);if(!record)return;
+  bindTerrainBody(record);
+  if(pixels>=45 && !record.preparePromise && record.state!=='ready' && Date.now()>=record.retryAt)requestTerrain(record.name,'prepare');
+}
+function terrainGeometry(mesh,segments){
+  var record=mesh.userData.measuredTerrain;
+  if(!record || record.state!=='ready')return surfaceGeometry(segments);
+  if(!record.geometry[segments]){
+    // Share the existing vertex/index buffers; only the culling bounds differ.
+    var base=surfaceGeometry(segments),geo=new THREE.BufferGeometry();geo.setIndex(base.index);
+    Object.keys(base.attributes).forEach(function(key){geo.setAttribute(key,base.attributes[key]);});
+    geo.boundingSphere=new THREE.Sphere(new THREE.Vector3(),mesh.userData.terrainRadiusMax);
+    record.geometry[segments]=geo;
+  }
+  return record.geometry[segments];
+}
+
+
 // Source: 40-solar.js
 /* ---------- the live solar system ----------
    Planet elements: JPL's approximate 1800–2050 table, J2000 ecliptic/equinox.
@@ -1792,6 +2047,7 @@ function updateSolarSystem(epochMs){
     };
     if(spec.name === '太陽'){
       BODY_INFO[spec.name].periodDays = null;
+      BODY_INFO[spec.name].absoluteMagnitudeV = 4.83;
       BODY_INFO[spec.name].sourceLabel = 'NASA 太陽資料／IAU 近似自轉';
       BODY_INFO[spec.name].sourceUrl = 'https://science.nasa.gov/sun/facts/';
       BODY_INFO[spec.name].confidence = '半徑與有效溫度為近似值；表面不同緯度會差速自轉，此處以固定週期簡化。';
@@ -1828,7 +2084,7 @@ function updateSolarSystem(epochMs){
   addSolar({name:'水星',planetKey:'Mercury',radiusKm:2439.7,type:0,map:'mercury',tint:[0.72,0.68,0.64],spin:[281.0103,61.4155,329.5988,6.1385108],periodDays:87.969, massText:'約 3.30 × 10²³ 公斤',temperatureText:'表面約 −180 至 430 °C',description:'偏心率最高的八大行星，近近日點時公轉較快。自轉與公轉呈 3:2 共振。'});
   addSolar({name:'金星',planetKey:'Venus',radiusKm:6051.8,type:1,tint:[0.95,0.86,0.62],spin:[272.76,67.16,160.20,-1.4813688],periodDays:224.701,massText:'約 4.87 × 10²⁴ 公斤',temperatureText:'地表平均約 464 °C',description:'緩慢逆向自轉的岩石行星；厚厚的雲層遮住地表。雲層運動與地表自轉並不相同。'});
   addSolar({name:'地球',planetKey:'EM',radiusKm:6371,type:2,map:'earth',tint:[0.45,0.68,1],spin:[0,90,190.147,360.9856235],periodDays:365.256,massText:'約 5.97 × 10²⁴ 公斤',temperatureText:'地表全球平均約 15 °C',description:'軸傾角約 23.4°。位置由地月質心扣除地月繞質心的小幅運動；光照隨目前位置改變。'});
-  addSolar({name:'火星',planetKey:'Mars',radiusKm:3389.5,type:3,map:'mars',terrain:1,tint:[1,0.50,0.32],spin:[317.68143,52.8865,176.630,350.89198226],periodDays:686.98,massText:'約 6.42 × 10²³ 公斤',temperatureText:'地表平均約 −65 °C',description:'一天約 24.6 小時，有稀薄大氣。近景微地形為程序重建，不是實測高程模型。'});
+  addSolar({name:'火星',planetKey:'Mars',radiusKm:3389.5,type:3,map:'mars',terrain:1,tint:[1,0.50,0.32],spin:[317.68143,52.8865,176.630,350.89198226],periodDays:686.98,massText:'約 6.42 × 10²³ 公斤',temperatureText:'地表平均約 −65 °C',description:'一天約 24.6 小時，有稀薄大氣。接近時載入 MOLA 雷射測高地形，高度採實際比例。'});
   addSolar({name:'木星',planetKey:'Jupiter',radiusKm:69911,type:4,map:'jupiter',tint:[0.95,0.80,0.62],spin:[268.056595,64.495303,284.95,870.536],periodDays:4332.59,massText:'約 1.90 × 10²⁷ 公斤',temperatureText:'雲頂約 −110 °C',description:'最大的行星，約十小時自轉一周。四大衛星的軌道和半徑依公開測量參數呈現。'});
   addSolar({name:'土星',planetKey:'Saturn',radiusKm:58232,type:5,map:'saturn',tint:[0.95,0.86,0.62],spin:[40.589,83.537,38.90,810.7939024],periodDays:10759.22,massText:'約 5.68 × 10²⁶ 公斤',temperatureText:'雲頂約 −140 °C',description:'冰粒構成的環位於赤道平面，與行星一起傾斜；環與行星會彼此遮蔽陽光。'});
   addSolar({name:'天王星',planetKey:'Uranus',radiusKm:25362,type:6,map:'uranus',tint:[0.66,0.90,0.94],spin:[257.311,-15.175,203.81,-501.1600928],periodDays:30688.5,massText:'約 8.68 × 10²⁵ 公斤',temperatureText:'雲頂約 −195 °C',description:'自轉軸幾乎躺在軌道平面上，傾角約 98°；逆向自轉。'});
@@ -2151,10 +2407,12 @@ updateSmallBodies(Date.now());
 var smallBodyWarmPromise;
 function prepareSmallBodyRendering(){
   if(smallBodyWarmPromise)return smallBodyWarmPromise;
-  smallBodyWarmPromise=(async function(){
+  var groups=smallBodies.map(function(b){return {group:b.group,bound:b.boundRadiusKm};});groups.push({group:smallDebris.group,bound:smallDebris.boundRadiusM});
+  smallBodyWarmPromise=preparePhysicalGroups(groups,smallBodyWarmState);return smallBodyWarmPromise;
+}
+async function preparePhysicalGroups(groups,state){
     var target=new THREE.WebGLRenderTarget(8,8,{depthBuffer:true,stencilBuffer:false}),warmScene=new THREE.Scene(),warmCamera=new THREE.PerspectiveCamera(50,1,0.01,100);
     warmCamera.position.set(0,0,3);warmCamera.lookAt(0,0,0);
-    var groups=smallBodies.map(function(b){return {group:b.group,bound:b.boundRadiusKm};});groups.push({group:smallDebris.group,bound:smallDebris.boundRadiusM});
     try{
       for(var i=0;i<groups.length;i++){
         await new Promise(function(resolve){setTimeout(resolve,0);});
@@ -2165,7 +2423,7 @@ function prepareSmallBodyRendering(){
         var previousTarget=renderer.getRenderTarget(),face=renderer.getActiveCubeFace(),mip=renderer.getActiveMipmapLevel(),viewport=renderer.getViewport(new THREE.Vector4()),scissor=renderer.getScissor(new THREE.Vector4()),scissorTest=renderer.getScissorTest(),clear=renderer.getClearColor(new THREE.Color()).clone(),alpha=renderer.getClearAlpha(),autoClear=renderer.autoClear;
         try{
           warmScene.add(group);group.position.set(0,0,0);group.quaternion.identity();group.scale.setScalar(1/Math.max(groups[i].bound,1e-9));group.matrixAutoUpdate=true;
-          renderer.setRenderTarget(target);renderer.setViewport(0,0,8,8);renderer.setScissor(0,0,8,8);renderer.setScissorTest(false);renderer.setClearColor(0,1);renderer.autoClear=true;renderer.clear();renderer.render(warmScene,warmCamera);smallBodyWarmState.draws+=group.children.length;
+          renderer.setRenderTarget(target);renderer.setViewport(0,0,8,8);renderer.setScissor(0,0,8,8);renderer.setScissorTest(false);renderer.setClearColor(0,1);renderer.autoClear=true;renderer.clear();renderer.render(warmScene,warmCamera);state.draws+=group.children.length;
         }finally{
           warmScene.remove(group);if(parent){parent.add(group);parent.children.splice(parent.children.indexOf(group),1);parent.children.splice(index,0,group);}
           group.position.copy(position);group.quaternion.copy(quaternion);group.scale.copy(scale);group.visible=visible;group.matrixAutoUpdate=auto;group.matrix.copy(matrix);group.matrixWorld.copy(worldMatrix);group.matrixWorldNeedsUpdate=worldDirty;
@@ -2179,10 +2437,242 @@ function prepareSmallBodyRendering(){
           renderer.setViewport(viewport);renderer.setScissor(scissor);renderer.setScissorTest(scissorTest);renderer.setRenderTarget(previousTarget,face,mip);renderer.setClearColor(clear,alpha);renderer.autoClear=autoClear;
         }
       }
-      smallBodyWarmState.ready=true;
+      state.ready=true;
     }finally{target.dispose();}
-  })();return smallBodyWarmPromise;
 }
+
+
+// Source: 47-comets.js
+/* ---------- comet nuclei and optically thin comet activity ----------
+   Nuclear dimensions and 2026-10-07 TDB osculating elements have cited sources
+   below. Activity, gas/dust density, grain beta, release ages and shape details
+   are illustrative models, NOT observations of the current coma or tail.
+   In particular neither 67P at 4.49 AU nor Encke at 2.09 AU is assumed to have
+   a bright observed tail. UTC–TDB, perturbations and nongravitational orbital
+   accelerations are omitted from the live two-body nuclear ephemeris.
+   Positions are CPU doubles in AU/LY; all geometry is local METRES. */
+var comets=[],cometWarmGroups=[],cometWarmState={ready:false,draws:0};
+var COMET_M_LY=AU_LY/(SOLAR_AU_KM*1000),COMET_BLOBS=8,COMET_TAIL_BUCKET_MS=6*3600000;
+// Fixed illustrative display calibration: the arbitrary tail density model is
+// not calibrated photometry. Preserve activity/r^2 and the actual ray column;
+// changing observer distance, navigation mode or exposure never boosts a tail.
+// The central coma keeps its original scale so the solid nucleus stays clear.
+var COMET_GAS_DISPLAY_GAIN=[1,1000,300];
+var COMET_SPECS=[
+  {name:'67P／楚留莫夫－格拉希門克彗星',short:'67P',diameterKm:3.3,maxDimensionM:4340,volumeM3:18.8e9,rotationHours:12.055,pole:[69.3,64.1],seed:67067,onset:2.8,activityPower:6,bilobed:true,
+    values:[3.458997807705017,0.6494841956905828,3.866079690202892,36.28762759897415,22.23789390781489,275.6519261518347,0.1532070124066952,2349.761896305132],
+    source:'https://doi.org/10.1016/j.icarus.2016.05.002',activitySource:'https://arxiv.org/abs/1602.01965'},
+  {name:'2P／恩克彗星',short:'2P',diameterKm:4.8,maxDimensionM:null,volumeM3:Math.PI/6*Math.pow(4800,3),rotationHours:11.083,pole:null,seed:22002,onset:1.5,activityPower:10,bilobed:false,
+    values:[2.217732124411107,0.8473182439385653,11.34777042988568,334.0190169701303,187.2877405427243,322.3298297849451,0.2984286008724772,1206.318693809891],
+    source:'https://science.nasa.gov/solar-system/comets/2p-encke/',activitySource:'https://arxiv.org/abs/0806.2161'}
+];
+/* A fixed merged proxy batch also works without ANGLE_instanced_arrays. A
+   small per-vertex index selects eight uniform ellipsoids; no per-frame VBO
+   uploads, individual-particle draws, full-screen passes or ray-march loops. */
+var COMET_GAS_VS=`
+attribute float aBlob;
+uniform vec3 uCenters[8];uniform vec3 uAxisX[8];uniform vec3 uAxisY[8];uniform vec3 uAxisZ[8];uniform float uWeights[8];
+varying vec3 vPoint;varying vec3 vCamera;varying vec3 vRayWorld;varying vec3 vMeters;varying float vWeight;
+void main(){
+  int i=int(aBlob+0.5);vec3 x=uAxisX[i],y=uAxisY[i],z=uAxisZ[i],centre=uCenters[i];
+  vec3 local=centre+x*position.x+y*position.y+z*position.z;
+  vec4 world=modelMatrix*vec4(local,1.0);vec3 delta=cameraPosition-(modelMatrix*vec4(centre,1.0)).xyz;
+  vec3 wx=mat3(modelMatrix)*x,wy=mat3(modelMatrix)*y,wz=mat3(modelMatrix)*z;
+  vCamera=vec3(dot(delta,wx)/max(dot(wx,wx),1.0e-24),dot(delta,wy)/max(dot(wy,wy),1.0e-24),dot(delta,wz)/max(dot(wz,wz),1.0e-24));
+  vPoint=position;vRayWorld=world.xyz-cameraPosition;vMeters=vec3(length(x),length(y),length(z));vWeight=uWeights[i];
+  gl_Position=projectionMatrix*viewMatrix*world;
+  // While inside a tenuous cloud its foreground gas exists on every ray. Keep
+  // that foreground contribution in front of distant opaque objects; the
+  // nuclear intersections below stop the integral at the local solid surface.
+  if(dot(vCamera,vCamera)<1.0)gl_Position.z=-gl_Position.w*0.99999;
+}`;
+var COMET_GAS_FS=`
+uniform vec3 uColor;uniform vec3 uAway;uniform float uStrength;uniform float uMode;uniform float uCoreM;
+uniform vec3 uCameraM;uniform mat3 uNucleusInverse;uniform vec3 uNucCenters[2];uniform vec3 uNucAxes[2];uniform float uNucCount;uniform float uNucClip;
+varying vec3 vPoint;varying vec3 vCamera;varying vec3 vRayWorld;varying vec3 vMeters;varying float vWeight;
+float erfApprox(float x){float signX=x<0.0?-1.0:1.0;float t=1.0/(1.0+0.3275911*abs(x));return signX*(1.0-(((((1.061405429*t-1.453152027)*t)+1.421413741)*t-0.284496736)*t+0.254829592)*t*exp(-x*x));}
+float nuclearStop(vec3 direction){
+  if(uNucClip<0.5)return 1.0e25;
+  vec3 oBody=uNucleusInverse*uCameraM,dBody=uNucleusInverse*direction;float stop=1.0e25;
+  for(int i=0;i<2;i++){
+    if(float(i)>=uNucCount)break;
+    vec3 o=(oBody-uNucCenters[i])/uNucAxes[i],d=dBody/uNucAxes[i];
+    float a=dot(d,d),tc=-dot(o,d)/max(a,1.0e-30);vec3 closest=o+d*tc;float h=1.0-dot(closest,closest);
+    if(h>0.0){float halfSpan=sqrt(h/max(a,1.0e-30));if(tc+halfSpan>0.0)stop=min(stop,max(0.0,tc-halfSpan));}
+  }
+  return stop;
+}
+void main(){
+  bool inside=dot(vCamera,vCamera)<1.0;
+  if((inside && gl_FrontFacing)||(!inside && !gl_FrontFacing))discard;
+  vec3 rd=normalize(vPoint-vCamera),rayWorld=vRayWorld/max(length(vRayWorld),1.0e-20);
+  // An exterior observer may be millions of parcel widths away. Measure the
+  // chord from the nearby proxy surface, avoiding subtraction of two huge
+  // camera vectors when finding its impact parameter (float32 cancellation).
+  vec3 origin=inside?vCamera:vPoint;
+  float tc=-dot(origin,rd);vec3 closest=origin+rd*tc;float b2=dot(closest,closest),h=1.0-b2;if(h<=0.0)discard;
+  float halfSpan=sqrt(h),lo=inside?max(0.0,tc-halfSpan):tc-halfSpan,hi=tc+halfSpan,meterStep=max(length(rd*vMeters),0.00001);
+  float originMeters=inside?0.0:length((vPoint-vCamera)*vMeters);
+  hi=min(hi,(nuclearStop(rayWorld)-originMeters)/meterStep);if(hi<=lo)discard;
+  float column;
+  if(uMode<0.5){
+    // Integral of core/(r^2+core^2) through a finite spherical coma. No noisy
+    // march or flat glow card: entering the cloud changes the actual ray span.
+    float b=sqrt(b2*meterStep*meterStep+uCoreM*uCoreM);
+    column=uCoreM/b*(atan((hi-tc)*meterStep/b)-atan((lo-tc)*meterStep/b));
+  }else{
+    // Closed-form Gaussian column through each finite ellipsoidal tail parcel.
+    column=0.36180063*exp(-6.0*b2)*(erfApprox(2.44948974*(hi-tc))-erfApprox(2.44948974*(lo-tc)))*meterStep*vWeight;
+  }
+  float cosine=dot(-uAway,rayWorld),g=uMode>1.5?0.08:0.42;
+  float denominator=max(1.0+g*g-2.0*g*cosine,0.1);
+  float phase=(1.0-g*g)/(denominator*sqrt(denominator));
+  vec3 light=uColor*column*uStrength*(0.35+0.65*phase);
+  gl_FragColor=vec4(light,1.0);
+}`;
+function cometProxyGeometry(count){
+  var sphere=new THREE.SphereGeometry(1,24,16),source=sphere.toNonIndexed(),p=source.attributes.position,positions=new Float32Array(p.count*count*3),index=new Float32Array(p.count*count);
+  for(var i=0;i<count;i++){positions.set(p.array,i*p.count*3);index.fill(i,i*p.count,(i+1)*p.count);}
+  var geometry=new THREE.BufferGeometry();geometry.setAttribute('position',new THREE.BufferAttribute(positions,3));geometry.setAttribute('aBlob',new THREE.BufferAttribute(index,1));source.dispose();sphere.dispose();return geometry;
+}
+var cometComaGeometry=cometProxyGeometry(1),cometTailGeometry=cometProxyGeometry(COMET_BLOBS);
+function cometGas(mode,color){
+  var u={uColor:{value:new THREE.Vector3().fromArray(color)},uAway:{value:new THREE.Vector3(1,0,0)},uStrength:{value:0},uMode:{value:mode},uCoreM:{value:1000},
+    uCameraM:{value:new THREE.Vector3(0,0,10000)},uNucleusInverse:{value:new THREE.Matrix3()},uNucCenters:{value:[new THREE.Vector3(),new THREE.Vector3()]},uNucAxes:{value:[new THREE.Vector3(1,1,1),new THREE.Vector3(1,1,1)]},uNucCount:{value:1},uNucClip:{value:0},
+    uCenters:{value:[]},uAxisX:{value:[]},uAxisY:{value:[]},uAxisZ:{value:[]},uWeights:{value:new Float32Array(COMET_BLOBS)}};
+  for(var i=0;i<COMET_BLOBS;i++){u.uCenters.value.push(new THREE.Vector3());u.uAxisX.value.push(new THREE.Vector3(1,0,0));u.uAxisY.value.push(new THREE.Vector3(0,1,0));u.uAxisZ.value.push(new THREE.Vector3(0,0,1));}
+  var material=new THREE.ShaderMaterial({uniforms:u,vertexShader:COMET_GAS_VS,fragmentShader:COMET_GAS_FS,transparent:true,blending:THREE.AdditiveBlending,depthWrite:false,depthTest:true,side:THREE.DoubleSide});
+  var mesh=new THREE.Mesh(mode===0?cometComaGeometry:cometTailGeometry,material);mesh.frustumCulled=false;mesh.visible=false;return mesh;
+}
+function cometNucleusShape(spec){
+  var geometry=new THREE.SphereGeometry(1,128,96),p=geometry.attributes.position,v=new THREE.Vector3(),min=new THREE.Vector3(Infinity,Infinity,Infinity),max=new THREE.Vector3(-Infinity,-Infinity,-Infinity);
+  var lobes=spec.bilobed?[{c:new THREE.Vector3(-0.58,0,0),a:new THREE.Vector3(1.05,0.82,0.95)},{c:new THREE.Vector3(0.73,0.08,0),a:new THREE.Vector3(0.80,0.68,0.72)}]:[{c:new THREE.Vector3(),a:new THREE.Vector3(1,0.88,0.94)}];
+  for(var i=0;i<p.count;i++){
+    v.fromBufferAttribute(p,i).normalize();var radius=0;
+    for(var j=0;j<lobes.length;j++){var l=lobes[j],ax=l.a,x=v.x/ax.x,y=v.y/ax.y,z=v.z/ax.z,ox=-l.c.x/ax.x,oy=-l.c.y/ax.y,oz=-l.c.z/ax.z,A=x*x+y*y+z*z,B=x*ox+y*oy+z*oz,C=ox*ox+oy*oy+oz*oz-1;radius=Math.max(radius,(-B+Math.sqrt(Math.max(0,B*B-A*C)))/A);}
+    var relief=1+0.022*Math.sin(v.x*17+v.y*5)*Math.cos(v.z*21-v.x*9)+0.009*Math.sin(v.y*49+v.z*29);
+    v.multiplyScalar(radius*relief);p.setXYZ(i,v.x,v.y,v.z);min.min(v);max.max(v);
+  }
+  var centre=min.clone().add(max).multiplyScalar(0.5),size=max.clone().sub(min),scale=(spec.maxDimensionM||spec.diameterKm*1000)/Math.max(size.x,size.y,size.z);
+  for(i=0;i<p.count;i++){v.fromBufferAttribute(p,i).sub(centre).multiplyScalar(scale);p.setXYZ(i,v.x,v.y,v.z);}
+  for(i=0;i<lobes.length;i++){lobes[i].c.sub(centre).multiplyScalar(scale);lobes[i].a.multiplyScalar(scale*0.965);}
+  // Match the volume scale, rather than mistaking an equivalent diameter for
+  // the longest axis. 67P keeps its independently measured ~4.3 km long scale;
+  // the other two model directions fit its approximate Rosetta volume. Encke's
+  // unresolved 4.8 km size defines an equivalent sphere, not measured axes.
+  var indices=geometry.index.array,volume=0;
+  for(i=0;i<indices.length;i+=3){
+    var ia=indices[i],ib=indices[i+1],ic=indices[i+2];
+    volume+=p.getX(ia)*(p.getY(ib)*p.getZ(ic)-p.getZ(ib)*p.getY(ic))+p.getY(ia)*(p.getZ(ib)*p.getX(ic)-p.getX(ib)*p.getZ(ic))+p.getZ(ia)*(p.getX(ib)*p.getY(ic)-p.getY(ib)*p.getX(ic));
+  }
+  volume=Math.abs(volume)/6;
+  var correction=spec.bilobed?new THREE.Vector3(1,Math.sqrt(spec.volumeM3/volume),Math.sqrt(spec.volumeM3/volume)):new THREE.Vector3().setScalar(Math.cbrt(spec.volumeM3/volume));
+  for(i=0;i<p.count;i++){v.fromBufferAttribute(p,i).multiply(correction);p.setXYZ(i,v.x,v.y,v.z);}
+  for(i=0;i<lobes.length;i++){lobes[i].c.multiply(correction);lobes[i].a.multiply(correction);}
+  geometry.computeVertexNormals();smallSmoothWorldNormals(geometry);geometry.computeBoundingBox();geometry.computeBoundingSphere();smallSurfaceAttribute(geometry,geometry.boundingSphere.radius);
+  return {geometry:geometry,lobes:lobes};
+}
+function cometStateAt(record,epochMs,position,velocity){
+  var el=record.elements,mean=el.M+el.n*(epochMs-SOLAR_SNAPSHOT_MS)/86400000;
+  solarKeplerPosition(el,mean,position);
+  var E=solarEccentricAnomaly(rad(mean),el.e),rate=rad(el.n)/(1-el.e*Math.cos(E)),xp=-el.a*Math.sin(E)*rate,yp=el.a*Math.sqrt(1-el.e*el.e)*Math.cos(E)*rate;
+  var w=rad(el.w),node=rad(el.node),inc=rad(el.i),cw=Math.cos(w),sw=Math.sin(w),cn=Math.cos(node),sn=Math.sin(node),ci=Math.cos(inc),si=Math.sin(inc);
+  velocity.set((cw*cn-sw*sn*ci)*xp+(-sw*cn-cw*sn*ci)*yp,sw*si*xp+cw*si*yp,-((cw*sn+sw*cn*ci)*xp+(-sw*sn+cw*cn*ci)*yp));
+}
+function cometActivity(record,rAU){return 1/(1+Math.pow(Math.max(rAU,0.05)/record.spec.onset,record.spec.activityPower));}
+/* Integrate a released grain with solar gravity reduced by radiation pressure.
+   This is an educational fixed-beta dust model, without gas drag or a fitted
+   size distribution. The nucleus itself always follows its supplied elements. */
+function cometDustPropagate(position,velocity,days,mu,beta,steps){
+  var state=[position.x,position.y,position.z,velocity.x,velocity.y,velocity.z],k1=new Float64Array(6),k2=new Float64Array(6),k3=new Float64Array(6),k4=new Float64Array(6),work=new Float64Array(6),dt=days/steps;
+  function derivative(s,k){var rr=s[0]*s[0]+s[1]*s[1]+s[2]*s[2],a=-mu*(1-beta)/Math.max(rr*Math.sqrt(rr),1e-20);k[0]=s[3];k[1]=s[4];k[2]=s[5];k[3]=s[0]*a;k[4]=s[1]*a;k[5]=s[2]*a;}
+  for(var i=0;i<steps;i++){derivative(state,k1);for(var j=0;j<6;j++)work[j]=state[j]+k1[j]*dt*.5;derivative(work,k2);for(j=0;j<6;j++)work[j]=state[j]+k2[j]*dt*.5;derivative(work,k3);for(j=0;j<6;j++)work[j]=state[j]+k3[j]*dt;derivative(work,k4);for(j=0;j<6;j++)state[j]+=dt*(k1[j]+2*k2[j]+2*k3[j]+k4[j])/6;}
+  return new THREE.Vector3(state[0],state[1],state[2]);
+}
+var cometWorkP=new THREE.Vector3(),cometWorkV=new THREE.Vector3(),cometRadial=new THREE.Vector3(),cometTangent=new THREE.Vector3(),cometNormal=new THREE.Vector3();
+function cometTailSnapshot(record,epochMs){
+  var bucket=Math.floor(epochMs/COMET_TAIL_BUCKET_MS);if(bucket===record.tailBucket)return;record.tailBucket=bucket;record.tailSimUpdates++;
+  var epoch=bucket*COMET_TAIL_BUCKET_MS,currentP=new THREE.Vector3(),currentV=new THREE.Vector3();cometStateAt(record,epoch,currentP,currentV);
+  var radial=currentP.clone().normalize(),normal=new THREE.Vector3().crossVectors(currentP,currentV).normalize(),tangent=new THREE.Vector3().crossVectors(normal,radial).normalize();
+  var activity=cometActivity(record,currentP.length()),maxAge=4+25*Math.sqrt(activity),mu=Math.pow(rad(record.elements.n),2)*Math.pow(record.elements.a,3);
+  for(var i=0;i<COMET_BLOBS;i++){
+    var age=maxAge*(i+1)/COMET_BLOBS,beta=0.06+0.025*i/(COMET_BLOBS-1);cometStateAt(record,epoch-age*86400000,cometWorkP,cometWorkV);
+    var offset=cometDustPropagate(cometWorkP,cometWorkV,age,mu,beta,96).sub(currentP).multiplyScalar(SOLAR_AU_KM*1000);
+    record.dustOffsetsBasisM[i].set(offset.dot(radial),offset.dot(tangent),offset.dot(normal));record.dustAgesDays[i]=age;
+  }
+}
+var cometAxis=new THREE.Vector3(),cometSide=new THREE.Vector3(),cometUp=new THREE.Vector3(),cometPrevious=new THREE.Vector3(),cometCentre=new THREE.Vector3(),cometOffset=new THREE.Vector3();
+function cometParcel(mesh,index,centre,along,length,width,reference,weight){
+  var u=mesh.material.uniforms;cometAxis.copy(along).normalize();cometSide.crossVectors(cometAxis,reference);
+  if(cometSide.lengthSq()<1e-12)cometSide.crossVectors(cometAxis,new THREE.Vector3(0,1,0));
+  if(cometSide.lengthSq()<1e-12)cometSide.set(1,0,0);cometSide.normalize();cometUp.crossVectors(cometAxis,cometSide).normalize();
+  u.uCenters.value[index].copy(centre);u.uAxisX.value[index].copy(cometAxis).multiplyScalar(Math.max(length,1));u.uAxisY.value[index].copy(cometSide).multiplyScalar(width);u.uAxisZ.value[index].copy(cometUp).multiplyScalar(width*.78);u.uWeights.value[index]=weight;
+  return centre.length()+Math.max(length,width);
+}
+function cometBuildTailView(record){
+  var a=record.activity,core=record.boundRadiusM,comaRadius=core*10+4e6*Math.sqrt(a),ionLength=core*20+1.2e9*Math.sqrt(a),bound=comaRadius;
+  record.comaRadiusM=comaRadius;var cu=record.coma.material.uniforms;cu.uAxisX.value[0].set(comaRadius,0,0);cu.uAxisY.value[0].set(0,comaRadius,0);cu.uAxisZ.value[0].set(0,0,comaRadius);
+  cometPrevious.set(0,0,0);
+  for(var i=0;i<COMET_BLOBS;i++){
+    var q=record.dustOffsetsBasisM[i];cometOffset.copy(record.away).multiplyScalar(q.x).addScaledVector(record.tangent,q.y).addScaledVector(record.normal,q.z);
+    cometCentre.copy(cometPrevious).add(cometOffset).multiplyScalar(.5);cometAxis.copy(cometOffset).sub(cometPrevious);var distance=cometOffset.length(),width=core*2+distance*.055,length=cometAxis.length()*.8+core;
+    bound=Math.max(bound,cometParcel(record.dust,i,cometCentre,cometAxis,length,width,record.normal,core/(width*width)));cometPrevious.copy(cometOffset);
+    var f0=i/COMET_BLOBS,f1=(i+1)/COMET_BLOBS,mid=(f0+f1)*.5;cometCentre.copy(record.away).multiplyScalar(ionLength*mid);width=core*2+ionLength*(.003+mid*.012);
+    bound=Math.max(bound,cometParcel(record.ion,i,cometCentre,record.away,ionLength/COMET_BLOBS*.85,width,record.normal,core*1.8/(width*width)));
+  }
+  record.tailBoundRadiusM=bound;record.warm.bound=bound;
+}
+for(var cometIndex=0;cometIndex<COMET_SPECS.length;cometIndex++){
+  var spec=COMET_SPECS[cometIndex],shape=cometNucleusShape(spec),group=new THREE.Group();group.visible=false;scene.add(group);
+  var nucleus=new THREE.Mesh(shape.geometry,smallMaterial([0.21,0.20,0.18],spec.seed));nucleus.frustumCulled=false;group.add(nucleus);
+  var coma=cometGas(0,[0.70,0.73,0.70]),dust=cometGas(1,[0.92,0.82,0.65]),ion=cometGas(2,[0.28,0.53,0.86]);group.add(coma,dust,ion);
+  var world=label(spec.name,'彗星核 · 真實尺度',new THREE.Vector3(),-16,-5.0,false),bound=shape.geometry.boundingSphere.radius;
+  var record={name:spec.name,spec:spec,elements:smallElements(spec.values),group:group,nucleus:nucleus,coma:coma,dust:dust,ion:ion,posAU:new THREE.Vector3(),velAUPerDay:new THREE.Vector3(),world:world,mark:null,boundRadiusM:bound,lobes:shape.lobes,pole:spec.pole?solarPoleQuaternion(spec.pole[0],spec.pole[1]):new THREE.Quaternion(),spin:0,
+    away:new THREE.Vector3(),tangent:new THREE.Vector3(),normal:new THREE.Vector3(),overviewDirection:new THREE.Vector3(),activity:0,flux:0,tailBucket:null,tailSimUpdates:0,dustOffsetsBasisM:[],dustAgesDays:new Float64Array(COMET_BLOBS),tailBoundRadiusM:bound};
+  for(var ci=0;ci<COMET_BLOBS;ci++)record.dustOffsetsBasisM.push(new THREE.Vector3());
+  record.mark=mark(spec.name,world,bound*1.25*COMET_M_LY,'p');record.mark.trueWorld=world;record.mark.comet=record;record.warm={group:group,bound:bound};cometWarmGroups.push(record.warm);comets.push(record);
+  var alias=spec.bilobed?['67P','楚留莫夫','格拉希門克','Churyumov','Gerasimenko','Rosetta','彗星']:['2P','恩克','Encke','彗星'];
+  BODY_INFO[spec.name]={kind:'彗星',radiusKm:spec.diameterKm/2,diameterLabel:spec.bilobed?'核等效直徑':'核估計直徑',rotationHours:spec.rotationHours,periodDays:spec.values[7],parentName:'太陽',aliases:alias,
+    description:spec.bilobed?'羅塞塔號近距離探測過的雙葉彗星，核最長尺度約 4.3 公里，體積約 18.8 立方公里，相當於直徑約 3.3 公里的球。此處以這些尺寸約束程序雙葉形狀，並非探測器測繪網格。':'約每 3.3 年繞太陽一周的短週期彗星，核估計直徑約 4.8 公里。此數值用作等效球的體積尺度；核的細部形狀、長軸及朝向未解析，以不規則岩面示意。',
+    appearance:'彗髮、淡藍離子尾與偏暖塵尾是隨日距變化的稀薄散射示意，並非當日實拍或測量的尾長。微弱彗尾採固定顯示增益，亮度未經光度校準；靠近或退遠不會額外增亮。離子尾背向太陽；塵尾依先前釋放的粒子與輻射壓彎曲，核維持真實尺度。',
+    confidence:'核尺寸採公開資料；位置用 2026-10-07 Horizons 元素作近似二體外推。'+(spec.bilobed?'自轉採羅塞塔任務時期約 12.055 小時，噴氣會改變週期。':'約 11.083 小時自轉屬不確定估值；極軸未知。')+'自轉初相位與表面為示意；目前活動強度未經當日觀測確認。',
+    sourceLabel:spec.bilobed?'Rosetta 核尺寸研究':'NASA 彗星資料',sourceUrl:spec.source,physicalSourceUrl:spec.source,activitySourceUrl:spec.activitySource,
+    orbitSourceUrl:'https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND=%27DES%3D'+spec.short+'%3B+CAP%27&OBJ_DATA=YES&MAKE_EPHEM=YES&CENTER=500%4010&START_TIME=2026-10-07&STOP_TIME=2026-10-08&STEP_SIZE=1d&REF_PLANE=ECLIPTIC&REF_SYSTEM=ICRF&OUT_UNITS=AU-D&CSV_FORMAT=YES&EPHEM_TYPE=ELEMENTS'};
+}
+var cometSpinQ=new THREE.Quaternion(),cometInvQ=new THREE.Quaternion(),cometMatrix=new THREE.Matrix4(),cometView=new THREE.Vector3(),cometSpinAxis=new THREE.Vector3(0,1,0);
+function updateComets(epochMs){
+  if(!Number.isFinite(epochMs))epochMs=Date.now();
+  for(var i=0;i<comets.length;i++){
+    var c=comets[i];cometStateAt(c,epochMs,c.posAU,c.velAUPerDay);c.world.copy(c.posAU).applyQuaternion(auRoot.quaternion).multiplyScalar(AU_LY);
+    c.away.copy(c.posAU).normalize().applyQuaternion(auRoot.quaternion);c.normal.crossVectors(c.posAU,c.velAUPerDay).normalize().applyQuaternion(auRoot.quaternion);c.tangent.crossVectors(c.normal,c.away).normalize();
+    c.overviewDirection.copy(c.normal).addScaledVector(c.away,-.35).normalize();c.flux=1/c.posAU.lengthSq();c.activity=cometActivity(c,c.posAU.length());
+    c.spin=(((epochMs-SOLAR_SNAPSHOT_MS)/3600000/c.spec.rotationHours)%1+1)%1;cometTailSnapshot(c,epochMs);cometBuildTailView(c);
+  }
+}
+function cometOverviewRadius(landmark){
+  var c=landmark&&landmark.comet;if(!c)return 0;
+  return Math.max(c.boundRadiusM*4,c.tailBoundRadiusM/Math.sin(rad(25))*1.15)*COMET_M_LY;
+}
+function updateCometView(S,L){
+  if(!(S>0)||!Number.isFinite(S))return;var pixelScale=renderer.domElement.height/(2*Math.max(VIEW.tanF.value,.00001));
+  for(var i=0;i<comets.length;i++){
+    var c=comets[i],distance=c.world.distanceTo(P),r=c.boundRadiusM*COMET_M_LY,pixels=r*pixelScale/Math.max(distance,r),active=c.activity*c.flux>0.000001;
+    var bodyVisible=smallVisible(c.world,r,.4,0),gasVisible=active&&smallVisible(c.world,c.tailBoundRadiusM*COMET_M_LY,.7,c.tailBoundRadiusM*COMET_M_LY*40);
+    c.group.visible=bodyVisible||gasVisible;if(!c.group.visible)continue;
+    c.group.position.copy(c.world).sub(P).divideScalar(S);c.group.scale.setScalar(COMET_M_LY/S);c.nucleus.visible=bodyVisible;
+    cometSpinQ.setFromAxisAngle(cometSpinAxis,c.spin*Math.PI*2);c.nucleus.quaternion.copy(auRoot.quaternion).multiply(c.pole).multiply(cometSpinQ);smallSetLighting(c.nucleus.material,c.posAU,pixels);
+    cometInvQ.copy(c.nucleus.quaternion).invert();cometMatrix.makeRotationFromQuaternion(cometInvQ);cometView.copy(P).sub(c.world).divideScalar(COMET_M_LY);
+    var exposure=typeof finU!=='undefined'?Math.max(finU.uExpo.value,.0001):1,preset=typeof BRIGHT!=='undefined'?BRIGHT[brightI]:null,base=preset&&preset.exposure||1;
+    var meshes=[c.coma,c.dust,c.ion];
+    for(var j=0;j<meshes.length;j++){
+      var m=meshes[j],u=m.material.uniforms;m.visible=gasVisible;if(!gasVisible)continue;
+      u.uStrength.value=c.activity*c.flux*(j===0?1.4:j===1?2.8:1.1)*COMET_GAS_DISPLAY_GAIN[j]*base/exposure;
+      u.uCoreM.value=c.boundRadiusM;u.uAway.value.copy(c.away);u.uCameraM.value.copy(cometView);u.uNucleusInverse.value.setFromMatrix4(cometMatrix);u.uNucClip.value=pixels>.5?1:0;u.uNucCount.value=c.lobes.length;
+      for(var k=0;k<c.lobes.length;k++){u.uNucCenters.value[k].copy(c.lobes[k].c);u.uNucAxes.value[k].copy(c.lobes[k].a);}
+    }
+  }
+}
+updateComets(Date.now());
 
 
 // Source: 50-stars.js
@@ -2220,6 +2710,119 @@ var HYG = {n:0};
 /* name, galactic longitude, latitude, distance (ly), colour, marker size, kind (s star, n nebula, r ring nebula, c cluster),
    then the true size: for stars the radius in units of the Sun's radius, for nebulae and clusters the radius in light-years */
 var RSUN_LY = 7.35e-8;
+/* The Sun is absent from the bundled HYG catalogue. Its physical surface and
+   corona therefore hand over to one photometric point, without a distance-layer
+   gap or a billboard whose apparent diameter stays huge across interstellar space. */
+var SOLAR_LIGHT=null,solarLightScale=1,solarLightViewport=new THREE.Vector4();
+function solarLightPhotometry(distanceLy,telescope,exposure,pixelHeight,tanF,pixelRatio){
+  var radius=SOLAR_LIGHT ? SOLAR_LIGHT.radiusLy : RSUN_LY;
+  var distance=Math.max(Number.isFinite(distanceLy)?distanceLy:Infinity,radius);
+  var teleView=Math.max(1,Number.isFinite(telescope)?telescope:1),expo=Math.max(0.0001,Number.isFinite(exposure)?exposure:1);
+  var ratio=Math.max(0.1,Number.isFinite(pixelRatio)?pixelRatio:1),height=Math.max(1,pixelHeight),tan=Math.max(1e-8,tanF);
+  var absolute=SOLAR_LIGHT ? SOLAR_LIGHT.absoluteMagnitudeV : 4.83;
+  var magnitude=absolute+5*Math.log10(distance/32.6156);
+  // Flux relative to a magnitude-zero source; the physical term obeys 1/d².
+  var physicalFlux=Math.pow(10,-0.4*absolute)*Math.pow(32.6156/distance,2);
+  // Match the existing HYG viewer's virtual telescope gain. Magnification alone
+  // does not specify a real aperture; this is an instrument/display convention.
+  var effectiveMagnitude=magnitude-2*Math.log10(teleView)-2.5*Math.log10(expo);
+  var detected=1-sstep(6.5,8.0,effectiveMagnitude),radiusPixels=radius/distance*height/(2*tan);
+  var resolved=sstep(0.75*ratio,2.5*ratio,radiusPixels),flux=physicalFlux*Math.pow(teleView,0.8);
+  // The catalogue already uses display-relative intensities. A fixed calibration
+  // keeps faint detectable points above RGBA8 quantisation before the final
+  // exposure pass; unlike a minimum-brightness floor, it preserves faint flux ratios.
+  var displayFlux=flux*16;
+  // A bounded display shoulder avoids half-float overflow/glare at nearby solar
+  // distances. It does not alter the physical radius or illumination of planets.
+  var intensity=Number.isFinite(displayFlux)?1.6*displayFlux/(1+displayFlux/5):8;
+  return {magnitude:magnitude,physicalFlux:physicalFlux,effectiveMagnitude:effectiveMagnitude,
+    resolved:resolved,pointWeight:distanceLy>radius?(1-resolved)*detected:0,
+    intensity:intensity,pointSize:Math.max(2,7*ratio),radiusPixels:radiusPixels};
+}
+function solarLightView(drawRenderer,viewCamera){
+  var viewport=drawRenderer.getCurrentViewport(solarLightViewport),target=drawRenderer.getRenderTarget();
+  var tan=1/Math.max(Math.abs(viewCamera.projectionMatrix.elements[5]),1e-8);
+  var telescope=Math.max(1,Math.tan(rad(25))/tan);
+  // Cube capture is a 90-degree view with its own pixel density, independent of
+  // the telescope and screen resolution used for the main camera.
+  var ratio=target && target.isWebGLCubeRenderTarget?Math.max(0.35,viewport.w/1024):drawRenderer.getPixelRatio();
+  var exposure=typeof finU!=='undefined'?finU.uExpo.value:1;
+  return solarLightPhotometry(SOLAR_LIGHT.world.distanceTo(P),telescope,exposure,viewport.w,tan,ratio);
+}
+function solarBodyBeforeRender(drawRenderer,drawScene,viewCamera){
+  this.userData.solarAlpha=this.material.uniforms.uAlpha.value;
+  this.material.uniforms.uAlpha.value=solarLightView(drawRenderer,viewCamera).resolved;
+}
+function solarBodyAfterRender(){this.material.uniforms.uAlpha.value=this.userData.solarAlpha;}
+function solarCoronaBeforeRender(drawRenderer,drawScene,viewCamera){
+  var u=this.material.uniforms;
+  this.userData.solarCoronaState=[u.uAlpha.value,u.uResolved.value,u.uRadius.value];
+  u.uAlpha.value=solarLightView(drawRenderer,viewCamera).resolved;
+  // Fully resolved mode contains only the source-centred physical corona. The
+  // unresolved point is drawn by the separate magnitude-based PSF below.
+  u.uResolved.value=1;
+  u.uRadius.value=SOLAR_LIGHT.radiusLy/Math.max(this.scale.x*SOLAR_LIGHT.coronaUnit,1e-30);
+}
+function solarCoronaAfterRender(){
+  var u=this.material.uniforms,s=this.userData.solarCoronaState;
+  u.uAlpha.value=s[0];u.uResolved.value=s[1];u.uRadius.value=s[2];
+}
+function solarPointBeforeRender(drawRenderer,drawScene,viewCamera){
+  var u=this.material.uniforms,p=solarLightView(drawRenderer,viewCamera);
+  this.userData.solarPointState=[u.uIntensity.value,u.uWeight.value,u.uPointSize.value,u.uRadiusScene.value];
+  u.uIntensity.value=p.intensity;u.uWeight.value=p.pointWeight;u.uPointSize.value=p.pointSize;
+  u.uRadiusScene.value=SOLAR_LIGHT.radiusLy/solarLightScale;
+}
+function solarPointAfterRender(){
+  var u=this.material.uniforms,s=this.userData.solarPointState;
+  u.uIntensity.value=s[0];u.uWeight.value=s[1];u.uPointSize.value=s[2];u.uRadiusScene.value=s[3];
+}
+function createSolarLightPoint(){
+  var sun=solarByName['太陽'];if(!sun)return;
+  var geometry=new THREE.BufferGeometry();geometry.setAttribute('position',new THREE.BufferAttribute(new Float32Array([0,0,0]),3));
+  var material=new THREE.ShaderMaterial({uniforms:{uTint:{value:new THREE.Vector3(1,0.94,0.84)},uIntensity:{value:0},
+    uWeight:{value:0},uPointSize:{value:2},uRadiusScene:{value:0}},
+    vertexShader:'uniform float uPointSize; uniform float uRadiusScene; void main(){ vec4 mv=modelViewMatrix*vec4(position,1.0);' +
+      // The point represents the solar photosphere. Its near-side depth avoids
+      // self-occlusion during the point/surface blend; foreground bodies still occlude it.
+      ' float sourceDistance=length(mv.xyz); mv.xyz*=max(0.0,1.0-uRadiusScene/max(sourceDistance,1e-20));' +
+      ' gl_Position=projectionMatrix*mv; gl_PointSize=uPointSize; }',
+    fragmentShader:'uniform vec3 uTint; uniform float uIntensity; uniform float uWeight; void main(){' +
+      ' vec2 p=gl_PointCoord*2.0-1.0; float r2=dot(p,p); if(r2>1.0 || uWeight<=0.0)discard;' +
+      ' float psf=exp(-r2*8.0)*(1.0-smoothstep(0.7,1.0,r2)); gl_FragColor=vec4(uTint*uIntensity*uWeight*psf,1.0); }',
+    transparent:true,depthTest:true,depthWrite:false,blending:THREE.AdditiveBlending});
+  var point=new THREE.Points(geometry,material);point.frustumCulled=false;point.name='太陽遠景光點';lyRoot.add(point);
+  SOLAR_LIGHT={world:sun.world,radiusLy:sun.radiusAU*AU_LY,absoluteMagnitudeV:BODY_INFO['太陽'].absoluteMagnitudeV,
+    body:sun.mesh,corona:sun.dot,coronaUnit:sun.dotRecord.unit,point:point};
+  // Remove only the two Sun-specific global distance gates. Other catalogue
+  // stars and all solar-system planets retain their existing layer behaviour.
+  for(var i=layers.length-1;i>=0;i--)if(layers[i].obj===sun.mesh || layers[i].obj===sun.dot)layers.splice(i,1);
+  sun.mesh.onBeforeRender=solarBodyBeforeRender;sun.mesh.onAfterRender=solarBodyAfterRender;
+  sun.dot.onBeforeRender=solarCoronaBeforeRender;sun.dot.onAfterRender=solarCoronaAfterRender;
+  point.onBeforeRender=solarPointBeforeRender;point.onAfterRender=solarPointAfterRender;
+  // Keep the old far-Sun slot in the dot registry, preserving subsequent stellar
+  // pattern seeds. This one-vertex point's world centre is independent of scale.
+  dots.push({m:point,w:sun.world,R:SOLAR_LIGHT.radiusLy,k:0,star:true,unit:1,cls:'p',photometric:true});
+}
+function updateSolarVisibility(S){
+  if(!SOLAR_LIGHT || !(S>0) || !Number.isFinite(S))return;
+  solarLightScale=S;
+  var tan=VIEW.tanF.value,exposure=typeof finU!=='undefined'?finU.uExpo.value:1;
+  var p=solarLightPhotometry(SOLAR_LIGHT.world.distanceTo(P),Math.max(1,Math.tan(rad(25))/tan),exposure,
+    typeof rtMain!=='undefined'?rtMain.height:renderer.domElement.height,tan,renderer.getPixelRatio());
+  SOLAR_LIGHT.body.material.uniforms.uAlpha.value=p.resolved;
+  SOLAR_LIGHT.corona.scale.setScalar(SOLAR_LIGHT.radiusLy*7/SOLAR_LIGHT.coronaUnit);
+  var u=SOLAR_LIGHT.corona.material.uniforms;u.uAlpha.value=p.resolved;u.uResolved.value=1;u.uRadius.value=1/7;
+  // Keep the tiny point available to every cube face. Resolved geometry only
+  // needs submission if the main view or the existing 90-degree cube can resolve it.
+  var cubeSize=typeof bhSky!=='undefined'?bhSky.size:0;
+  var cubeResolved=cubeSize>0?solarLightPhotometry(SOLAR_LIGHT.world.distanceTo(P),1,exposure,cubeSize,1,Math.max(0.35,cubeSize/1024)).resolved:0;
+  SOLAR_LIGHT.body.visible=SOLAR_LIGHT.corona.visible=p.resolved>0 || cubeResolved>0;
+  SOLAR_LIGHT.point.visible=true;
+  SOLAR_LIGHT.point.position.copy(SOLAR_LIGHT.world);
+  u=SOLAR_LIGHT.point.material.uniforms;u.uIntensity.value=p.intensity;u.uWeight.value=p.pointWeight;
+  u.uPointSize.value=p.pointSize;u.uRadiusScene.value=SOLAR_LIGHT.radiusLy/S;
+}
 /* how each nebula is built: kind (0 star-forming cloud, 1 shell around a dying star, 2 supernova wreck), inner colour, outer colour, extra detail */
 var NEB = {
   '獵戶座大星雲':[0, [0.55,0.95,0.80], [1.0,0.36,0.55], 0], '礁湖星雲':[0, [1.0,0.85,0.75], [1.0,0.25,0.42], 0],
@@ -2253,7 +2856,7 @@ var STARS = [
 ];
 (function(){
   var named = [], near = [], far = [], members = [], i, v, c;
-  dot(new THREE.Vector3(), lyRoot, [1.0,0.9,0.7], RSUN_LY, 0.011, true, -1.2, -0.5, 4.3, 5.0, 'p');
+  createSolarLightPoint();
   /* a cluster or a nursery of young stars: a swarm of points that can be scaled about its own centre */
   function swarm(list, centre){
     var g = new THREE.Group(); g.position.copy(centre); g.scale.setScalar(K('n')); lyRoot.add(g);
@@ -2306,8 +2909,6 @@ var STARS = [
   blackHole('蓋亞 BH1', '離我們最近的黑洞，黑影約 150 公里寬', bh1, 7.8e-12, 0, 2.2, 4.4, 1.2, 2.0, 4.4, 5.0);
   companion(bh1, new THREE.Vector3(2.0e-5, 2e-6, -8e-6), RSUN_LY, [1.0,0.93,0.78], 1.2, 2.0, 4.4, 5.0);
 })();
-
-
 
 
 // Source: 55-systems.js
@@ -2866,7 +3467,18 @@ var VOLUME_CACHE = {valid:false, signature:[], scratch:[], hits:0, renders:0};
 var RENDER_CONTEXT_LOST = false;
 function invalidateVolumeCache(){ VOLUME_CACHE.valid = false; }
 function renderContextLost(){
-  RENDER_CONTEXT_LOST=true;invalidateVolumeCache();resetBlackHoleSkyCache();
+  RENDER_CONTEXT_LOST=true;invalidateVolumeCache();
+  // r128 replaces its GPU resource manager on restore, but an existing target
+  // retains the old manager's dispose listener. Remove it while the context is
+  // still lost (GL deletions are no-ops), before a later resize can try to delete
+  // handles from the old context generation. Keep the target/texture JS objects;
+  // Three recreates their GPU storage on first use after restore.
+  var targets=[rtMain,rtVol,rtComp,rtBH].concat(rtDown||[],rtUp||[]),seen=new Set();
+  if(bhSky)targets.push(bhSky.target,bhSky.write);
+  for(var i=0;i<targets.length;i++){
+    var target=targets[i];if(target && !seen.has(target)){seen.add(target);target.dispose();}
+  }
+  resetBlackHoleSkyCache();
 }
 function renderContextRestored(){
   RENDER_CONTEXT_LOST=false;invalidateVolumeCache();resetBlackHoleSkyCache();
@@ -3628,6 +4240,7 @@ function setPoolStar(bi){
 /* P is where you are, in light-years from the Sun (kept in full precision); the scene is redrawn around you each frame */
 var startEarth = typeof solarByName !== 'undefined' && solarByName['地球'];
 var P = startEarth ? startEarth.world.clone().add(startEarth.world.clone().normalize().negate().add(new THREE.Vector3(0,0.35,0)).normalize().multiplyScalar(startEarth.radiusAU*AU_LY*7)) : new THREE.Vector3(0.9,0.55,1.6).normalize().multiplyScalar(3.2*AU_LY);
+var MAX_PITCH=Math.PI/2-1e-7;
 var yaw = 0, pitch = 0, look = {x:0, y:0}, thrust = 0, held = 0, homing = false;
 function faceTo(target){
   var d = target.clone().sub(P).normalize();
@@ -3721,7 +4334,7 @@ canvas.addEventListener('pointermove', function(e){
   if(touches.size === 1){
     /* Swipe steers in the same direction as the joystick; zoom makes turning finer. */
     if(dx !== 0 || dy !== 0) manualLook();
-    yaw -= dx*0.0035/tele; pitch = clamp(pitch - dy*0.0035/tele, -1.5, 1.5);
+    yaw -= dx*0.0035/tele; pitch = clamp(pitch - dy*0.0035/tele, -MAX_PITCH, MAX_PITCH);
   } else if(touches.size === 2){
     var d = touchDist();
     if(pinchD > 0 && d > 0) setTele(teleT*Math.pow(d/pinchD, 1.6));
@@ -3760,7 +4373,8 @@ window.addEventListener('resize', function(){
 var EXPLORER = {
   selected:null, mode:'free', open:false, elapsed:0, duration:0, afterTravel:'follow',
   direction:new THREE.Vector3(), offset:new THREE.Vector3(), axis:new THREE.Vector3(0,1,0),
-  startRadius:0, endRadius:0, refresh:0, catalogSignature:'', distanceNode:null, lightNode:null
+  startDirection:new THREE.Vector3(), travelTurn:new THREE.Quaternion(), currentTurn:new THREE.Quaternion(),
+  startRadius:0, endRadius:0, refresh:0, catalogSignature:'', distanceNode:null, lightNode:null, terrainNode:null
 };
 var explorerPanel = $('#explorer'), explorerSearch = $('#destinationSearch'), explorerList = $('#destinationList');
 /* Keep the sky quiet. Reparenting retains the original observing-control handlers. */
@@ -3850,6 +4464,19 @@ function updateExplorerDistance(){
   var distance = P.distanceTo(m.trueWorld || m.w);
   EXPLORER.distanceNode.textContent = fmtDist(distance);
   if(EXPLORER.lightNode) EXPLORER.lightNode.textContent = distance < 1e7 ? fmtLight(distance).replace(/^光要走 /, '') : '須依宇宙膨脹模型計算';
+  updateExplorerTerrain();
+}
+function updateExplorerTerrain(){
+  var m=EXPLORER.selected,link=$('#terrainSource');
+  var status=typeof terrainStatus==='function'?terrainStatus(m):null;
+  if(!status){link.hidden=true;return;}
+  if(EXPLORER.terrainNode){
+    var summary=status.ready?'實測高度 · '+status.resolution:status.state==='failed'||status.state==='unsupported'?'暫用程序地形':status.state==='idle'||status.state==='prefetched'?'接近時載入':'準備中';
+    if(EXPLORER.terrainNode.textContent!==summary)EXPLORER.terrainNode.textContent=summary;
+  }
+  var appearance=$('#objectAppearance');
+  if(appearance.textContent!==status.text)appearance.textContent=status.text;
+  link.href=status.sourceUrl;link.textContent=status.sourceLabel+' 高程資料 ↗';link.hidden=false;
 }
 function prepareExplorerAtmosphere(m){
   var air=m && m.solarBody && m.solarBody.atmosphere;
@@ -3860,12 +4487,14 @@ function selectExplorerObject(m, showCard){
   prepareExplorerAtmosphere(m);
   if(EXPLORER.mode !== 'free' && (!EXPLORER.selected || EXPLORER.selected.name !== m.name || !EXPLORER.selected.w.equals(m.w))) cancelExplorerTravel();
   EXPLORER.selected = m;
+  if(typeof requestTerrain==='function')requestTerrain(m,'prefetch');
   var info = explorerInfo(m), card = $('#objectCard'), facts = $('#objectFacts');
   $('#objectName').textContent = m.name; $('#objectKind').textContent = explorerKind(m);
   $('#objectDescription').textContent = info.description || '選擇飛抵、跟隨或環繞，從不同距離觀察這個宇宙地標。';
   while(facts.firstChild) facts.removeChild(facts.firstChild);
   EXPLORER.distanceNode = explorerFact('距離觀測者', '—');
-  EXPLORER.lightNode = null;
+  EXPLORER.lightNode = null;EXPLORER.terrainNode=null;
+  if(typeof terrainStatus==='function' && terrainStatus(m))EXPLORER.terrainNode=explorerFact('地形','接近時載入');
   var solarDistance = (m.trueWorld || m.w).length(), cosmic = solarDistance >= 1e8 && typeof COSMOLOGY !== 'undefined';
   if(cosmic){
     /* Cosmological light-cone values are anchored to Earth, never the freely flying observer. */
@@ -3896,6 +4525,7 @@ function selectExplorerObject(m, showCard){
       }
     }catch(e){}
   }
+  $('#objectCometOverview').hidden=!m.comet;
   card.hidden = false; updateExplorerDistance(); renderExplorerDestinations(); syncExplorerTravel();
   openExplorer(true, false);
   if(showCard){
@@ -3928,23 +4558,27 @@ function cancelExplorerTravel(){
 function explorerResetInput(){
   resetFlightInput(); homing = false;
 }
-function beginExplorerTravel(afterTravel){
+function beginExplorerTravel(afterTravel, desiredRadius, desiredDirection){
   var m = EXPLORER.selected; if(!m) return;
   prepareExplorerAtmosphere(m);
+  if(typeof requestTerrain==='function')requestTerrain(m,'prepare');
   explorerResetInput();
-  var radius = explorerSafeRadius(m);
+  var safeRadius=explorerSafeRadius(m),radius = Math.max(safeRadius,desiredRadius||safeRadius);
   EXPLORER.direction.copy(P).sub(m.w);
   var currentRadius = EXPLORER.direction.length();
   if(currentRadius > 0) EXPLORER.direction.divideScalar(currentRadius); else EXPLORER.direction.set(0.6,0.25,1).normalize();
-  EXPLORER.startRadius = Math.max(currentRadius, radius);
+  EXPLORER.startDirection.copy(EXPLORER.direction);EXPLORER.travelTurn.identity();
+  if(desiredDirection && desiredDirection.lengthSq()>0)EXPLORER.travelTurn.setFromUnitVectors(EXPLORER.startDirection,desiredDirection.clone().normalize());
+  EXPLORER.startRadius = Math.max(currentRadius, safeRadius);
   EXPLORER.endRadius = radius;
-  EXPLORER.duration = clamp(2.2 + Math.log10(Math.max(EXPLORER.startRadius/radius, 1))*0.42, 2.2, 8.5);
+  EXPLORER.duration = clamp(2.2 + Math.log10(Math.max(EXPLORER.startRadius/radius, radius/EXPLORER.startRadius,1))*0.42, 2.2, 8.5);
   EXPLORER.elapsed = 0; EXPLORER.afterTravel = afterTravel || 'follow'; EXPLORER.mode = 'travel';
   EXPLORER.axis.set(0,1,0); if(m.cls === 'p') EXPLORER.axis.applyQuaternion(auRoot.quaternion);
   setTele(1); $('#tip').classList.add('gone'); syncExplorerTravel(); openExplorer(false); canvas.focus({preventScroll:true});
 }
 function beginExplorerFollow(){
   var m = EXPLORER.selected; if(!m) return;
+  if(typeof requestTerrain==='function')requestTerrain(m,'prepare');
   explorerResetInput();
   EXPLORER.offset.copy(P).sub(m.w);
   var radius = explorerSafeRadius(m);
@@ -3957,6 +4591,7 @@ function beginExplorerFollow(){
 }
 function beginExplorerOrbit(){
   var m = EXPLORER.selected; if(!m) return;
+  if(typeof requestTerrain==='function')requestTerrain(m,'prepare');
   var radius = explorerSafeRadius(m), distance = P.distanceTo(m.w);
   if(distance > radius*6 || distance < radius*0.999999){ beginExplorerTravel('orbit'); return; }
   explorerResetInput(); EXPLORER.offset.copy(P).sub(m.w); EXPLORER.mode = 'orbit';
@@ -3986,6 +4621,8 @@ function updateExplorer(dt){
       EXPLORER.elapsed += dt;
       var fraction = clamp(EXPLORER.elapsed/EXPLORER.duration, 0, 1), ease = fraction*fraction*(3 - 2*fraction);
       var radius = Math.exp(Math.log(EXPLORER.startRadius)*(1 - ease) + Math.log(EXPLORER.endRadius)*ease);
+      EXPLORER.currentTurn.identity().slerp(EXPLORER.travelTurn,ease);
+      EXPLORER.direction.copy(EXPLORER.startDirection).applyQuaternion(EXPLORER.currentTurn);
       EXPLORER.offset.copy(EXPLORER.direction).multiplyScalar(Math.max(radius, explorerSafeRadius(m)));
       if(fraction >= 1){ EXPLORER.mode = EXPLORER.afterTravel; syncExplorerTravel(); }
     } else if(EXPLORER.mode === 'orbit'){
@@ -4040,6 +4677,11 @@ labelsEl.addEventListener('keydown', function(e){
   if(el && (e.key === 'Enter' || e.key === ' ')){ e.preventDefault(); e.stopPropagation(); selectExplorerObject(el._explorerMark, true); }
 });
 $('#objectFly').addEventListener('click', function(){ beginExplorerTravel('follow'); });
+$('#objectCometOverview').addEventListener('click',function(){
+  var m=EXPLORER.selected;if(!m || !m.comet)return;
+  var radius=cometOverviewRadius(m);
+  beginExplorerTravel('follow',radius,m.comet.overviewDirection);
+});
 $('#objectFollow').addEventListener('click', beginExplorerFollow);
 $('#objectOrbit').addEventListener('click', beginExplorerOrbit);
 $('#objectRelease').addEventListener('click', cancelExplorerTravel);
@@ -4120,10 +4762,11 @@ function prepareUniverse(){
     try{
     var textures=STARTUP_TEXTURES.filter(function(task){return task.texture;}),profiles=Object.keys(AIRS);
     var warmSmallBodies=typeof prepareSmallBodyRendering==='function';
+    var warmComets=typeof cometWarmGroups!=='undefined' && typeof preparePhysicalGroups==='function';
     var stages=[scene,volScene,topScene],postMaterials=[compMat,downMat,upMat,finMat,bhMat];
     var controls=Array.from(document.body.children).filter(function(el){return el.id!=='loading' && el.id!=='fail' && el.tagName!=='SCRIPT';});
     controls.forEach(function(el){el.inert=true;});
-    BOOT.total=STARTUP_TEXTURES.length+textures.length+profiles.length+3+stages.length+postMaterials.length+1+(warmSmallBodies?1:0);
+    BOOT.total=STARTUP_TEXTURES.length+textures.length+profiles.length+3+stages.length+postMaterials.length+1+(warmSmallBodies?1:0)+(warmComets?1:0);
     bootProgress('準備星空');
       profiles.forEach(function(name){airDepthLookup(AIRS[name]);});
       await Promise.all(STARTUP_TEXTURES.map(function(task){return task.promise.then(function(done){
@@ -4150,6 +4793,7 @@ function prepareUniverse(){
         }
       }finally{postQuad.material=savedPostMaterial;}
       if(warmSmallBodies){await bootYield();await prepareSmallBodyRendering();bootProgress('即將啟程',true);}
+      if(warmComets){await bootYield();await preparePhysicalGroups(cometWarmGroups,cometWarmState);bootProgress('即將啟程',true);}
       await bootYield();resetFlightInput();last=performance.now();frameDeadline=0;frameTimingReset=true;
       BOOT.firstFrame=true;
       try{frame(last+1000/60);}finally{BOOT.firstFrame=false;}
@@ -4229,6 +4873,7 @@ function frame(now){
   var epochMs = Date.now();
   if(typeof updateSolarSystem === 'function') updateSolarSystem(epochMs);
   if(typeof updateSmallBodies === 'function') updateSmallBodies(epochMs);
+  if(typeof updateComets === 'function') updateComets(epochMs);
   if(typeof updateExtraSystems === 'function') updateExtraSystems(epochMs);
 
   /* turning */
@@ -4237,7 +4882,7 @@ function frame(now){
   var fovNow = 2*Math.atan(TAN0/tele)*180/Math.PI;
   if(Math.abs(camera.fov - fovNow) > 1e-9){ camera.fov = fovNow; camera.updateProjectionMatrix(); VIEW.tanF.value = TAN0/tele; }
   updateTelescopeControl();
-  yaw -= lx*0.75*dt/tele; pitch = clamp(pitch - ly*0.575*dt/tele, -1.5, 1.5);
+  yaw -= lx*0.75*dt/tele; pitch = clamp(pitch - ly*0.575*dt/tele, -MAX_PITCH, MAX_PITCH);
   var cp = Math.cos(pitch);
   fwdV.set(-Math.sin(yaw)*cp, Math.sin(pitch), -Math.cos(yaw)*cp);
 
@@ -4345,7 +4990,9 @@ function frame(now){
   }
   if(typeof updateSurfaceDetails === 'function') updateSurfaceDetails(dt);
   if(typeof updateExposure === 'function') updateExposure(dt);
+  if(typeof updateSolarVisibility === 'function') updateSolarVisibility(S);
   if(typeof updateSmallBodyView === 'function') updateSmallBodyView(S,L);
+  if(typeof updateCometView === 'function') updateCometView(S,L);
   if(!plain){
     try{ drawFrame(); }catch(err){ plain = true; }
   }
