@@ -193,6 +193,9 @@ body.booting>:not(#loading):not(#fail):not(script){visibility:hidden}
 .explorer-search-label{display:block;font-size:11px;color:var(--ink-dim);margin-bottom:8px}
 #destinationSearch{display:block;width:100%;min-height:44px;padding:10px 12px;border-radius:10px;border:1px solid rgba(243,217,162,.24);background:rgba(0,0,0,.17);font:inherit;font-size:14px;color:var(--ink);-webkit-user-select:text;user-select:text}
 #destinationSearch::placeholder{color:var(--ink-faint)}
+.destination-filters{display:flex;flex-wrap:wrap;gap:6px;margin-top:9px}
+.destination-filters button{min-height:44px;padding:0 10px;border:1px solid var(--line);border-radius:999px;font-size:10px;color:var(--ink-dim)}
+.destination-filters button[aria-pressed="true"]{color:var(--gold);border-color:rgba(243,217,162,.38);background:rgba(243,217,162,.06)}
 .explorer-list-heading{display:flex;justify-content:space-between;gap:12px;margin:17px 0 7px;font-size:10px;letter-spacing:.05em;color:var(--ink-faint)}
 #destinationList{list-style:none;padding:0;margin:0;max-height:164px;overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin}
 #destinationList li{margin:0;padding:0}
@@ -358,7 +361,13 @@ body.booting>:not(#loading):not(#fail):not(script){visibility:hidden}
   </div>
   <div class="explorer-scroll">
     <label class="explorer-search-label" for="destinationSearch">尋找目的地</label>
-    <input id="destinationSearch" type="search" autocomplete="off" spellcheck="false" placeholder="土星、比鄰星、仙女座…">
+    <input id="destinationSearch" type="search" autocomplete="off" spellcheck="false" placeholder="地球、小行星、黑洞…">
+    <div class="destination-filters" role="group" aria-label="快速尋找目的地">
+      <button type="button" data-destination-filter="" aria-pressed="true">全部</button>
+      <button type="button" data-destination-filter="小行星" aria-pressed="false">小行星</button>
+      <button type="button" data-destination-filter="碎石群" aria-pressed="false">碎石群</button>
+      <button type="button" data-destination-filter="黑洞" aria-pressed="false">黑洞</button>
+    </div>
     <div class="explorer-list-heading"><span>天體與地標</span><span id="destinationCount"></span></div>
     <ul id="destinationList" aria-label="可探索的目的地"></ul>
     <p id="destinationEmpty" class="explorer-muted" hidden>沒有找到符合的天體，試試另一個名稱。</p>
@@ -1841,6 +1850,304 @@ function updateSolarSystem(epochMs){
 })();
 
 
+// Source: 45-small-bodies.js
+/* ---------- small worlds and metre-scale rocks ----------
+   Dimensions / spin poles: JPL SBDB physical parameters. Heliocentric elements:
+   JPL Horizons, JD 2461320.5 TDB (2026-10-07), ICRF J2000 ecliptic, AU/day.
+   Two-body propagation omits perturbations, light-time and the UTC–TDB offset.
+   Surface shapes, craters, boulder placements and initial spin phase are
+   PROCEDURAL ILLUSTRATIONS, not registered spacecraft shape/terrain models.
+   All vertices and instance translations below use local km or m; only CPU
+   doubles contain heliocentric coordinates. No physical object is enlarged. */
+var SMALL_KM_LY = AU_LY/SOLAR_AU_KM, SMALL_M_LY = SMALL_KM_LY/1000;
+var smallBodies = [], smallRockGeometries = [], smallBodyWarmState = {ready:false,draws:0};
+var SMALL_BODY_SPECS = [
+  {name:'穀神星',english:'Ceres',id:'1',axes:[964.4,964.2,891.8],diameter:939.4,rotation:9.074170,pole:[291.421,66.758],gm:62.6284,seed:19011,relief:0.012,tint:[0.36,0.35,0.33],
+    elements:[2.766049894171390,0.07977283949611841,10.58729854613541,80.24893309033530,73.18046725970271,300.2509563724407,0.2142466595931865,1680.306244604099]},
+  {name:'灶神星',english:'Vesta',id:'4',axes:[569.24,554.48,452.66],diameter:522.77,rotation:5.3421276322,pole:[309.06110,42.232386],gm:17.2882844,seed:40291,relief:0.037,tint:[0.44,0.41,0.37],
+    elements:[2.361223743298933,0.09023166130151669,7.143879342056698,103.6997073277475,151.4318941436808,113.8227057606623,0.2716429020087856,1325.269305171673]},
+  {name:'貝努',english:'Bennu',id:'101955',axes:[0.5047,0.4918,0.4567],diameter:0.48444,rotation:4.296061,pole:[85.4522,-60.3678],gm:4.8904e-9,seed:101955,relief:0.027,tint:[0.28,0.27,0.25],
+    elements:[1.125915840840086,0.2036769213474340,6.033011478556734,1.966454290772896,66.40069784604785,171.4610223613754,0.8249833427794570,436.3724469722279]}
+];
+function smallRng(seed){var state=seed>>>0;return function(){state=(Math.imul(state,1664525)+1013904223)>>>0;return state/4294967296;};}
+function smallDirection(random,out){var y=random()*2-1,a=random()*Math.PI*2,r=Math.sqrt(1-y*y);return out.set(r*Math.cos(a),y,r*Math.sin(a));}
+var SMALL_ROCK_VS = `
+attribute vec4 aSurface;
+varying vec3 vShape; varying vec3 vN; varying vec3 vW; varying vec3 vHost;
+varying float vSize; varying float vSeed;
+void main(){
+  vec4 p=vec4(position,1.0); vec3 n=normal; float size=aSurface.w; float seed=0.0;
+  #ifdef USE_INSTANCING
+    mat3 im=mat3(instanceMatrix);
+    // Inverse transpose for orthogonal, possibly non-uniform instance scales.
+    n=im*(n/max(vec3(dot(im[0],im[0]),dot(im[1],im[1]),dot(im[2],im[2])),vec3(1.0e-20)));
+    p=instanceMatrix*p; size*=length(im[0]); seed=dot(instanceMatrix[3].xyz,vec3(0.071,0.137,0.193));
+  #endif
+  vShape=aSurface.xyz; vSeed=seed; vHost=p.xyz;
+  vN=normalize(mat3(modelMatrix)*n); vW=(modelMatrix*p).xyz;
+  vSize=size*length(modelMatrix[0].xyz);
+  gl_Position=projectionMatrix*modelViewMatrix*p;
+}`;
+var SMALL_ROCK_FS = `
+uniform vec3 uSun; uniform vec3 uTint; uniform float uFlux; uniform float uDisplayGain;
+uniform float uSeed; uniform vec3 uHostAxes; uniform vec3 uSunBody; uniform float uHostShadow;
+varying vec3 vShape; varying vec3 vN; varying vec3 vW; varying vec3 vHost;
+varying float vSize; varying float vSeed;
+` + NOISE_GL + `
+void main(){
+  vec3 N=normalize(vN),p=vShape+vec3(uSeed+vSeed);
+  float footprint=length(fwidth(vShape));
+  if(dot(N,uSun)<-0.18){gl_FragColor=vec4(0.0,0.0,0.0,1.0);return;}
+  if(uHostShadow>0.5){
+    // A conservative interior ellipsoid blocks sunlight behind Bennu. This is
+    // an inexpensive host shadow, not a claim of measured rock-to-rock shadows.
+    vec3 o=vHost/uHostAxes,d=uSunBody/uHostAxes;
+    float a=dot(d,d),b=dot(o,d),c=dot(o,o)-1.0,disc=b*b-a*c;
+    if(b<0.0 && disc>0.0 && (-b-sqrt(disc))/a>0.000001){gl_FragColor=vec4(0.0,0.0,0.0,1.0);return;}
+  }
+  float coarse=n3(p*6.0),h=0.0;
+  if(footprint<0.065){
+    vec3 q=p*18.0,cell=floor(q),f=fract(q)-0.5;
+    float crater=length(f)/(0.21+0.12*h3(cell));
+    float bowl=1.0-smoothstep(0.0,0.88,crater),rim=1.0-smoothstep(0.0,0.22,abs(crater-1.0));
+    // Compact-support bowls/rims do not form seams at cell boundaries.
+    h=(0.0008*rim-0.0017*bowl)*(1.0-smoothstep(0.022,0.065,footprint));
+    h+=(n3(p*47.0)-0.5)*0.0015*(1.0-smoothstep(0.008,0.025,footprint));
+    h*=vSize;
+    vec3 dx=dFdx(vW),dy=dFdy(vW),r1=cross(dy,N),r2=cross(N,dx);
+    float det=dot(dx,r1);
+    if(abs(det)>1.0e-25)N=normalize(abs(det)*N-sign(det)*(dFdx(h)*r1+dFdy(h)*r2));
+  }
+  vec3 albedo=uTint*(0.68+0.55*coarse);
+  if(footprint<0.018)albedo*=1.0+(n3(p*91.0)-0.5)*0.16*(1.0-smoothstep(0.006,0.018,footprint));
+  vec3 V=-vW/max(length(vW),1.0e-12);
+  float mu=max(dot(N,uSun),0.0),nv=max(dot(N,V),0.001);
+  // Rough particulate reflection, with a small broad highlight. No emissive
+  // floor: local display adaptation never turns the unlit side grey.
+  float diffuse=mu*(0.76+0.24/(mu+nv+0.1));
+  vec3 H=uSun+V;H/=max(length(H),1.0e-12);float nh=max(dot(N,H),0.0);float nh2=nh*nh;
+  float spec=0.012*nh2*nh2*nh2*nh2*mu;
+  gl_FragColor=vec4((albedo*diffuse+vec3(spec))*uFlux*uDisplayGain,1.0);
+}`;
+function smallMaterial(tint,seed){
+  return new THREE.ShaderMaterial({vertexShader:SMALL_ROCK_VS,fragmentShader:SMALL_ROCK_FS,extensions:{derivatives:true},
+    uniforms:{uSun:{value:new THREE.Vector3(1,0,0)},uTint:{value:new THREE.Vector3().fromArray(tint)},uFlux:{value:1},uDisplayGain:{value:1},uSeed:{value:seed/7919},uHostAxes:{value:new THREE.Vector3(1,1,1)},uSunBody:{value:new THREE.Vector3(1,0,0)},uHostShadow:{value:0}}});
+}
+function smallSurfaceAttribute(geometry,scale){
+  var p=geometry.attributes.position,a=new Float32Array(p.count*4);
+  for(var i=0;i<p.count;i++){a[i*4]=p.getX(i)/scale;a[i*4+1]=p.getY(i)/scale;a[i*4+2]=p.getZ(i)/scale;a[i*4+3]=scale;}
+  geometry.setAttribute('aSurface',new THREE.BufferAttribute(a,4));
+}
+/* The local spin axis is Y: measured X/Y equatorial diameters map to X/Z;
+   measured polar Z maps to Y. Extents are fitted after procedural relief. */
+function smallWorldShape(spec){
+  var random=smallRng(spec.seed),craters=[],v=new THREE.Vector3();
+  for(var i=0;i<24;i++){smallDirection(random,v);craters.push([v.x,v.y,v.z,0.055+random()*0.19,0.3+random()*0.7]);}
+  var half=new THREE.Vector3(spec.axes[0]/2,spec.axes[2]/2,spec.axes[1]/2);
+  function radial(x,y,z){
+    var f=0.38*Math.sin(x*9.3+y*3.7+0.7)*Math.sin(z*10.8-y*4.1)+0.24*Math.sin(x*23+y*17+z*19);
+    if(spec.id==='101955')f+=0.55*(1-y*y)-0.26*Math.abs(y); // illustrative equatorial rubble ridge
+    else for(var j=0;j<craters.length;j++){
+      var c=craters[j],d=Math.sqrt(Math.max(0,2-2*(x*c[0]+y*c[1]+z*c[2])))/c[3];
+      if(d<1.3)f+=c[4]*(0.20*Math.exp(-Math.pow((d-1)*6,2))-0.6*Math.pow(Math.max(0,1-d*d),2));
+    }
+    if(spec.id==='4')f-=0.5*Math.pow(Math.max(0,(-y-0.65)/0.35),2);
+    return 1+spec.relief*f;
+  }
+  var geometry=new THREE.SphereGeometry(1,128,96),p=geometry.attributes.position;
+  var min=new THREE.Vector3(Infinity,Infinity,Infinity),max=new THREE.Vector3(-Infinity,-Infinity,-Infinity);
+  for(i=0;i<p.count;i++){v.fromBufferAttribute(p,i).normalize();v.multiplyScalar(radial(v.x,v.y,v.z));p.setXYZ(i,v.x,v.y,v.z);min.min(v);max.max(v);}
+  var centre=min.clone().add(max).multiplyScalar(0.5),fit=new THREE.Vector3(2*half.x/(max.x-min.x),2*half.y/(max.y-min.y),2*half.z/(max.z-min.z));
+  for(i=0;i<p.count;i++){v.fromBufferAttribute(p,i).sub(centre).multiply(fit);p.setXYZ(i,v.x,v.y,v.z);}
+  geometry.computeVertexNormals();geometry.computeBoundingBox();geometry.computeBoundingSphere();smallSurfaceAttribute(geometry,Math.max(half.x,half.y,half.z));
+  return {geometry:geometry,half:half,point:function(direction,out){return out.copy(direction).multiplyScalar(radial(direction.x,direction.y,direction.z)).sub(centre).multiply(fit);}};
+}
+/* Three shared irregular prototypes. Their largest box extent is exactly two
+   local units, so instance scale = specified maximum rock dimension / 2. */
+for(var smallShapeIndex=0;smallShapeIndex<3;smallShapeIndex++){
+  var smallPrototype=new THREE.IcosahedronGeometry(1,1),smallPos=smallPrototype.attributes.position;
+  var smallVec=new THREE.Vector3(),smallMin=new THREE.Vector3(Infinity,Infinity,Infinity),smallMax=new THREE.Vector3(-Infinity,-Infinity,-Infinity);
+  for(var spi=0;spi<smallPos.count;spi++){
+    smallVec.fromBufferAttribute(smallPos,spi).normalize();var x=smallVec.x,y=smallVec.y,z=smallVec.z;
+    var f=1+0.18*Math.sin(x*7.1+y*4.3+smallShapeIndex*2.1)*Math.cos(z*8.2-x*3.8);
+    smallVec.multiplyScalar(f).multiply(new THREE.Vector3(1,0.7+smallShapeIndex*0.10,0.82+smallShapeIndex*0.07));
+    smallPos.setXYZ(spi,smallVec.x,smallVec.y,smallVec.z);smallMin.min(smallVec);smallMax.max(smallVec);
+  }
+  var smallCentre=smallMin.clone().add(smallMax).multiplyScalar(0.5),smallExtent=smallMax.clone().sub(smallMin);
+  var smallFit=2/Math.max(smallExtent.x,smallExtent.y,smallExtent.z);
+  for(spi=0;spi<smallPos.count;spi++){smallVec.fromBufferAttribute(smallPos,spi).sub(smallCentre).multiplyScalar(smallFit);smallPos.setXYZ(spi,smallVec.x,smallVec.y,smallVec.z);}
+  smallPrototype.computeVertexNormals();smallPrototype.computeBoundingBox();smallPrototype.computeBoundingSphere();smallSurfaceAttribute(smallPrototype,1);smallRockGeometries.push(smallPrototype);
+}
+var smallSupportsInstancing=renderer.capabilities.isWebGL2 || !!renderer.extensions.get('ANGLE_instanced_arrays');
+/* A no-extension WebGL1 path keeps the same rocks in three static merged
+   batches, rather than silently losing them or issuing hundreds of draws. */
+function smallBatch(geometry,material,matrices){
+  var mesh,i,j;
+  if(smallSupportsInstancing){mesh=new THREE.InstancedMesh(geometry,material,matrices.length);for(i=0;i<matrices.length;i++)mesh.setMatrixAt(i,matrices[i]);mesh.instanceMatrix.needsUpdate=true;}
+  else {
+    var source=geometry.index?geometry.toNonIndexed():geometry,count=source.attributes.position.count;
+    var positions=new Float32Array(count*matrices.length*3),normals=new Float32Array(positions.length),surfaces=new Float32Array(count*matrices.length*4);
+    var p=new THREE.Vector3(),n=new THREE.Vector3(),normalMatrix=new THREE.Matrix3(),surface=source.attributes.aSurface;
+    for(i=0;i<matrices.length;i++){
+      var scale=new THREE.Vector3().setFromMatrixScale(matrices[i]).x;normalMatrix.getNormalMatrix(matrices[i]);
+      for(j=0;j<count;j++){
+        var ix=i*count+j;p.fromBufferAttribute(source.attributes.position,j).applyMatrix4(matrices[i]);n.fromBufferAttribute(source.attributes.normal,j).applyMatrix3(normalMatrix).normalize();
+        p.toArray(positions,ix*3);n.toArray(normals,ix*3);surfaces[ix*4]=surface.getX(j);surfaces[ix*4+1]=surface.getY(j);surfaces[ix*4+2]=surface.getZ(j);surfaces[ix*4+3]=surface.getW(j)*scale;
+      }
+    }
+    var merged=new THREE.BufferGeometry();merged.setAttribute('position',new THREE.BufferAttribute(positions,3));merged.setAttribute('normal',new THREE.BufferAttribute(normals,3));merged.setAttribute('aSurface',new THREE.BufferAttribute(surfaces,4));merged.computeBoundingSphere();mesh=new THREE.Mesh(merged,material);if(source!==geometry)source.dispose();
+  }
+  mesh.frustumCulled=false;mesh.userData.rockCount=matrices.length;mesh.userData.localMatrices=matrices;return mesh;
+}
+function smallBoulders(record,shape){
+  var random=smallRng(77101955),matrices=[[],[],[]],sizes=[],dir=new THREE.Vector3(),point=new THREE.Vector3(),outward=new THREE.Vector3();
+  var quaternion=new THREE.Quaternion(),roll=new THREE.Quaternion(),scale=new THREE.Vector3(),matrix=new THREE.Matrix4(),axis=new THREE.Vector3(0,1,0),box=new THREE.Box3();
+  var material=smallMaterial([0.29,0.28,0.26],77101955);material.uniforms.uHostShadow.value=1;material.uniforms.uHostAxes.value.copy(shape.half).multiplyScalar(0.92);
+  var bound=record.boundRadiusKm,attempts=0;
+  while(sizes.length<144 && attempts++<3000){
+    smallDirection(random,dir);shape.point(dir,point);
+    outward.copy(point).divide(new THREE.Vector3(shape.half.x*shape.half.x,shape.half.y*shape.half.y,shape.half.z*shape.half.z)).normalize();
+    var diameter=0.5+6.9*Math.pow(random(),2),radius=diameter/2000,type=sizes.length%3;
+    point.addScaledVector(outward,radius*0.22);quaternion.setFromUnitVectors(axis,outward);roll.setFromAxisAngle(axis,random()*Math.PI*2);quaternion.multiply(roll);scale.setScalar(radius);matrix.compose(point,quaternion,scale);
+    box.copy(smallRockGeometries[type].boundingBox).applyMatrix4(matrix);
+    // Keep the complete illustrated assembly inside the measured three-axis
+    // envelope. The actual union bound, not the equivalent radius, sets clearance.
+    if(box.min.x < -shape.half.x || box.max.x > shape.half.x || box.min.y < -shape.half.y || box.max.y > shape.half.y || box.min.z < -shape.half.z || box.max.z > shape.half.z)continue;
+    matrices[type].push(matrix.clone());sizes.push(diameter);bound=Math.max(bound,point.length()+radius*smallRockGeometries[type].boundingSphere.radius);
+  }
+  for(var i=0;i<3;i++){var batch=smallBatch(smallRockGeometries[i],material,matrices[i]);record.group.add(batch);record.boulderBatches.push(batch);}
+  record.boulderSizesM=sizes;record.boulderMaterial=material;record.boundRadiusKm=bound;
+}
+function smallElements(values){return {a:values[0],e:values[1],i:values[2],node:values[3],w:values[4],M:values[5],n:values[6],period:values[7]};}
+for(var smallIndex=0;smallIndex<SMALL_BODY_SPECS.length;smallIndex++){
+  var smallSpec=SMALL_BODY_SPECS[smallIndex],smallShape=smallWorldShape(smallSpec),smallGroup=new THREE.Group();scene.add(smallGroup);smallGroup.visible=false;
+  var smallMat=smallMaterial(smallSpec.tint,smallSpec.seed),smallMesh=new THREE.Mesh(smallShape.geometry,smallMat);smallMesh.frustumCulled=false;smallGroup.add(smallMesh);
+  var smallWorld=label(smallSpec.name,smallSpec.english+' · 真實尺寸',new THREE.Vector3(),-16,-4.1,false);
+  var smallRecord={name:smallSpec.name,spec:smallSpec,group:smallGroup,mesh:smallMesh,world:smallWorld,posAU:new THREE.Vector3(),elements:smallElements(smallSpec.elements),pole:solarPoleQuaternion(smallSpec.pole[0],smallSpec.pole[1]),spin:0,boundRadiusKm:smallShape.geometry.boundingSphere.radius,boulderBatches:[]};
+  if(smallSpec.id==='101955')smallBoulders(smallRecord,smallShape);
+  smallRecord.mark=mark(smallSpec.name,smallWorld,smallRecord.boundRadiusKm*SMALL_KM_LY*1.18,'p');smallRecord.mark.trueWorld=smallWorld;smallRecord.mark.physicalRadiusKm=smallRecord.boundRadiusKm;
+  smallBodies.push(smallRecord);
+  var physicalURL='https://ssd-api.jpl.nasa.gov/sbdb.api?sstr='+smallSpec.id+'&phys-par=true&full-prec=true';
+  BODY_INFO[smallSpec.name]={kind:smallSpec.id==='1'?'矮行星／小行星':smallSpec.id==='4'?'主帶小行星':'近地小行星',radiusKm:smallSpec.diameter/2,diameterLabel:'等效直徑',
+    massText:'約 '+(smallSpec.gm/6.67430e-20).toExponential(3)+' 公斤',rotationHours:smallSpec.rotation,periodDays:smallSpec.elements[7],parentName:'太陽',
+    aliases:[smallSpec.english,smallSpec.id,smallSpec.id==='101955'?'貝努小行星':'小行星',smallSpec.id==='1'?'谷神星':smallSpec.id==='4'?'竈神星':'Bennu asteroid'],
+    description:smallSpec.id==='1'?'主小行星帶中最大的天體，也是一顆接近球形的矮行星。三軸尺寸約 964 × 964 × 892 公里。':smallSpec.id==='4'?'一顆保存早期太陽系歷史的不規則岩質原行星，南極附近有巨大的撞擊盆地。畫面以程序地形示意，三軸尺寸約 569 × 554 × 453 公里。':'約 500 公尺寬的碎石堆小行星，NASA 的 OSIRIS-REx 曾在此採樣並把樣本送回地球。三軸尺寸約 505 × 492 × 457 公尺。',
+    dimensionsKm:smallSpec.axes.slice(),
+    appearance:'不規則輪廓與凹凸材質為程序示意，非探測器測繪模型。'+(smallSpec.id==='101955'?'144 顆 0.5–7.4 公尺表面岩塊與本體同轉；分布非逐塊量測。尺度參考 NASA OSIRIS-REx 影像，並非永久漂浮碎石環。':''),
+    confidence:'尺寸、自轉週期與極軸採 JPL 資料；位置依 2026-10-07 Horizons 元素作近似二體推算，未計其他天體攝動。表面與自轉初始相位為示意。',sourceLabel:'NASA／JPL SBDB',sourceUrl:physicalURL,physicalSourceUrl:physicalURL,
+    orbitSourceUrl:'https://ssd.jpl.nasa.gov/api/horizons.api?format=json&COMMAND='+smallSpec.id+'%3B&OBJ_DATA=NO&MAKE_EPHEM=YES&EPHEM_TYPE=ELEMENTS&CENTER=500%4010&START_TIME=2026-10-07&STOP_TIME=2026-10-08&STEP_SIZE=1d&REF_PLANE=ECLIPTIC&REF_SYSTEM=ICRF&OUT_UNITS=AU-D&CSV_FORMAT=YES'};
+}
+/* A deliberately local collision-fragment demonstration, NOT an asteroid-belt
+   density map. Its representative 2.7 AU anchor is not a surveyed object. */
+var smallDebris=(function(){
+  var group=new THREE.Group();scene.add(group);group.visible=false;
+  var random=smallRng(2700600),matrices=[[],[],[]],sizes=[],centres=[],bounds=[],bound=0,p=new THREE.Vector3(),axis=new THREE.Vector3(),q=new THREE.Quaternion(),scale=new THREE.Vector3(),m=new THREE.Matrix4();
+  for(var i=0;i<600;i++){
+    var diameter=i<18?5+7*random():0.3+11.7*Math.pow(random(),4),radius=diameter/2,type=i%3,extent=radius*smallRockGeometries[type].boundingSphere.radius,clear=false;
+    // Reject until a valid location is found; never insert an overlapping
+    // fragment merely because an attempt budget was exhausted. The fixed
+    // 200 m region is comfortably larger than this sparse packing requires.
+    while(!clear){
+      smallDirection(random,p).multiplyScalar((200-extent)*Math.cbrt(random()));clear=true;
+      for(var j=0;j<centres.length;j++)if(p.distanceToSquared(centres[j])<Math.pow(extent+bounds[j]+3,2)){clear=false;break;}
+    }
+    smallDirection(random,axis);q.setFromAxisAngle(axis,random()*Math.PI*2);scale.setScalar(radius);m.compose(p,q,scale);matrices[type].push(m.clone());sizes.push(diameter);centres.push(p.clone());bounds.push(extent);bound=Math.max(bound,p.length()+extent);
+  }
+  var material=smallMaterial([0.38,0.35,0.31],2700600),batches=[];
+  for(i=0;i<3;i++){var batch=smallBatch(smallRockGeometries[i],material,matrices[i]);group.add(batch);batches.push(batch);}
+  var world=label('小行星碎石群（示意）','局部碰撞碎石示意 · 公尺級實際尺寸',new THREE.Vector3(),-16,-8.0,false);
+  // Explorer multiplies a landmark's clearance by 2.1: arrival is ~140 m
+  // from the centre, inside this local 400 m demonstration region.
+  var landmark=mark('小行星碎石群（示意）',world,140/2.1*SMALL_M_LY,'p');landmark.trueWorld=world;
+  BODY_INFO[landmark.name]={kind:'小行星碎石群／程序示意',aliases:['碎石','石頭','隕石','小石頭','debris','rocks'],parentName:'太陽',
+    description:'主帶 2.7 AU 附近的一處局部碰撞碎石分布視覺示意，非巡天真實位置，也不代表主帶的平均密度。600 顆岩塊最大尺寸約 0.3–12 公尺，區域直徑約 400 公尺。導航停在距群中心約 140 公尺，可在附近觀察真實尺度的小石頭。',
+    appearance:'程序岩形、材質及分布；只有附近才顯示。沒有放大岩塊，也沒有把整片主帶填滿。',confidence:'碰撞碎石視覺示意；非實測天體目錄'};
+  return {group:group,batches:batches,material:material,world:world,posAU:new THREE.Vector3(),mark:landmark,count:600,sizesM:sizes,centresM:centres,boundRadiusM:bound,elements:{a:2.7,e:0,i:2,node:80,w:0,M:35,n:360/(365.2568983*Math.pow(2.7,1.5))}};
+})();
+var smallSpinQ=new THREE.Quaternion(),smallSpinAxis=new THREE.Vector3(0,1,0),smallViewVector=new THREE.Vector3(),smallSunVector=new THREE.Vector3(),smallInverseQ=new THREE.Quaternion();
+function updateSmallBodies(epochMs){
+  if(!Number.isFinite(epochMs))epochMs=Date.now();var days=(epochMs-SOLAR_SNAPSHOT_MS)/86400000;
+  for(var i=0;i<smallBodies.length;i++){
+    var b=smallBodies[i],el=b.elements;solarKeplerPosition(el,el.M+el.n*days,b.posAU);b.world.copy(b.posAU).applyQuaternion(auRoot.quaternion).multiplyScalar(AU_LY);
+    b.spin=((days*24/b.spec.rotation)%1+1)%1;
+  }
+  var e=smallDebris.elements;solarKeplerPosition(e,e.M+e.n*days,smallDebris.posAU);smallDebris.world.copy(smallDebris.posAU).applyQuaternion(auRoot.quaternion).multiplyScalar(AU_LY);
+}
+function smallVisible(world,boundLy,minPixels,maxDistanceLy){
+  smallViewVector.copy(world).sub(P);var distance=smallViewVector.length();if(maxDistanceLy && distance>maxDistanceLy)return false;
+  var z=smallViewVector.dot(VIEW.fwd.value),tan=VIEW.tanF.value,aspect=VIEW.aspect.value;
+  if(z+boundLy<=0)return false;
+  if(Math.abs(smallViewVector.dot(VIEW.right.value))>Math.max(z,0)*tan*aspect+boundLy*Math.sqrt(1+tan*tan*aspect*aspect))return false;
+  if(Math.abs(smallViewVector.dot(VIEW.up.value))>Math.max(z,0)*tan+boundLy*Math.sqrt(1+tan*tan))return false;
+  return distance<=boundLy || boundLy*renderer.domElement.height/(2*tan*Math.max(distance,1e-30))>=minPixels;
+}
+function smallSetLighting(material,posAU,pixels){
+  var u=material.uniforms,flux=1/Math.max(posAU.lengthSq(),0.0001);
+  smallSunVector.copy(posAU).applyQuaternion(auRoot.quaternion).normalize().negate();u.uSun.value.copy(smallSunVector);u.uFlux.value=flux;
+  var exposure=typeof finU!=='undefined'?Math.max(finU.uExpo.value,0.0001):1;
+  var preset=typeof BRIGHT!=='undefined'?BRIGHT[brightI]:null,base=preset&&preset.exposure||1;
+  // Local HDR display approximation. The physical inverse-square flux remains
+  // explicit; only a resolved, nearby rocky surface receives readability gain.
+  var resolved=sstep(2,25,pixels),local=base*1.8/Math.max(flux*exposure,0.0001);
+  u.uDisplayGain.value=1+(clamp(local,0.2,80)-1)*resolved;
+}
+function updateSmallBodyView(S,L){
+  if(!(S>0) || !Number.isFinite(S))return;
+  var pixels=renderer.domElement.height/(2*Math.max(VIEW.tanF.value,0.00001));
+  for(var i=0;i<smallBodies.length;i++){
+    var b=smallBodies[i],r=b.boundRadiusKm*SMALL_KM_LY,d=b.world.distanceTo(P);
+    b.group.visible=smallVisible(b.world,r,0.45,0);if(!b.group.visible)continue;
+    b.group.position.copy(b.world).sub(P).divideScalar(S);b.group.scale.setScalar(SMALL_KM_LY/S);
+    smallSpinQ.setFromAxisAngle(smallSpinAxis,b.spin*Math.PI*2);b.group.quaternion.copy(auRoot.quaternion).multiply(b.pole).multiply(smallSpinQ);
+    smallSetLighting(b.mesh.material,b.posAU,r*pixels/Math.max(d,1e-30));
+    if(b.boulderMaterial){smallSetLighting(b.boulderMaterial,b.posAU,r*pixels/Math.max(d,1e-30));smallInverseQ.copy(b.group.quaternion).invert();b.boulderMaterial.uniforms.uSunBody.value.copy(smallSunVector).applyQuaternion(smallInverseQ);}
+  }
+  var field=smallDebris,dist=field.world.distanceTo(P),bound=field.boundRadiusM*SMALL_M_LY;
+  field.group.visible=smallVisible(field.world,bound,0,18000*SMALL_M_LY);if(!field.group.visible)return;
+  field.group.position.copy(field.world).sub(P).divideScalar(S);field.group.scale.setScalar(SMALL_M_LY/S);field.group.quaternion.identity();
+  smallSetLighting(field.material,field.posAU,6*SMALL_M_LY*pixels/Math.max(dist,SMALL_M_LY));
+}
+updateSmallBodies(Date.now());
+/* Render ORIGINAL meshes once into a tiny private target after shader compile.
+   compile() alone does not upload geometry/instance buffers. Nothing is cloned;
+   every scene, transform and renderer mutation is restored before yielding. */
+var smallBodyWarmPromise;
+function prepareSmallBodyRendering(){
+  if(smallBodyWarmPromise)return smallBodyWarmPromise;
+  smallBodyWarmPromise=(async function(){
+    var target=new THREE.WebGLRenderTarget(8,8,{depthBuffer:true,stencilBuffer:false}),warmScene=new THREE.Scene(),warmCamera=new THREE.PerspectiveCamera(50,1,0.01,100);
+    warmCamera.position.set(0,0,3);warmCamera.lookAt(0,0,0);
+    var groups=smallBodies.map(function(b){return {group:b.group,bound:b.boundRadiusKm};});groups.push({group:smallDebris.group,bound:smallDebris.boundRadiusM});
+    try{
+      for(var i=0;i<groups.length;i++){
+        await new Promise(function(resolve){setTimeout(resolve,0);});
+        if(typeof bootVisible==='function')await bootVisible();
+        var group=groups[i].group,parent=group.parent,index=parent?parent.children.indexOf(group):-1;
+        var position=group.position.clone(),quaternion=group.quaternion.clone(),scale=group.scale.clone(),visible=group.visible,auto=group.matrixAutoUpdate,matrix=group.matrix.clone(),worldMatrix=group.matrixWorld.clone(),worldDirty=group.matrixWorldNeedsUpdate;
+        var childState=[];group.traverse(function(o){childState.push({o:o,visible:o.visible,culled:o.frustumCulled});o.visible=true;o.frustumCulled=false;});
+        var previousTarget=renderer.getRenderTarget(),face=renderer.getActiveCubeFace(),mip=renderer.getActiveMipmapLevel(),viewport=renderer.getViewport(new THREE.Vector4()),scissor=renderer.getScissor(new THREE.Vector4()),scissorTest=renderer.getScissorTest(),clear=renderer.getClearColor(new THREE.Color()).clone(),alpha=renderer.getClearAlpha(),autoClear=renderer.autoClear;
+        try{
+          warmScene.add(group);group.position.set(0,0,0);group.quaternion.identity();group.scale.setScalar(1/Math.max(groups[i].bound,1e-9));group.matrixAutoUpdate=true;
+          renderer.setRenderTarget(target);renderer.setViewport(0,0,8,8);renderer.setScissor(0,0,8,8);renderer.setScissorTest(false);renderer.setClearColor(0,1);renderer.autoClear=true;renderer.clear();renderer.render(warmScene,warmCamera);smallBodyWarmState.draws+=group.children.length;
+        }finally{
+          warmScene.remove(group);if(parent){parent.add(group);parent.children.splice(parent.children.indexOf(group),1);parent.children.splice(index,0,group);}
+          group.position.copy(position);group.quaternion.copy(quaternion);group.scale.copy(scale);group.visible=visible;group.matrixAutoUpdate=auto;group.matrix.copy(matrix);group.matrixWorld.copy(worldMatrix);group.matrixWorldNeedsUpdate=worldDirty;
+          for(var j=0;j<childState.length;j++){childState[j].o.visible=childState[j].visible;childState[j].o.frustumCulled=childState[j].culled;}
+          // Child matrices were computed in the temporary frame. Recompute
+          // them from the restored parent before any later real-world render.
+          group.updateWorldMatrix(true,true);
+          // These APIs hold the renderer's default-framebuffer state. Restore
+          // it first, then let a non-null target reapply its own viewport and
+          // scissor. Reversing the order overwrites that target's dimensions.
+          renderer.setViewport(viewport);renderer.setScissor(scissor);renderer.setScissorTest(scissorTest);renderer.setRenderTarget(previousTarget,face,mip);renderer.setClearColor(clear,alpha);renderer.autoClear=autoClear;
+        }
+      }
+      smallBodyWarmState.ready=true;
+    }finally{target.dispose();}
+  })();return smallBodyWarmPromise;
+}
+
+
 // Source: 50-stars.js
 /* ---------- the real sky: every star you can see with the naked eye, plus every catalogued star within 80 light-years ----------
    From the HYG database (CC BY-SA 4.0): true positions in three dimensions, true brightness and colour.
@@ -2388,6 +2695,7 @@ var PLACES = [
 ];
 function fmtDist(ly){
   var au = ly/AU_LY, km = au*1.495979e8;
+  if(km < 1) return (km*1000).toLocaleString('zh-TW',{maximumFractionDigits:km<0.01?2:1}) + ' 公尺';
   if(km < 1e4) return Math.round(km).toLocaleString('en-US') + ' 公里';
   if(au < 0.1) return (km/1e4 < 100 ? +(km/1e4).toFixed(1) : Math.round(km/1e4).toLocaleString('en-US')) + ' 萬公里';
   if(au < 1000) return (au < 10 ? au.toFixed(2) : Math.round(au).toLocaleString('en-US')) + ' 天文單位';
@@ -2409,6 +2717,76 @@ function fmtLight(ly){
   if(ly < 1e8) return '光要走 ' + (ly/1e4 < 100 ? +(ly/1e4).toFixed(1) : Math.round(ly/1e4).toLocaleString('en-US')) + ' 萬年';
   return '光要走 ' + (ly/1e8 < 100 ? +(ly/1e8).toFixed(1) : Math.round(ly/1e8).toLocaleString('en-US')) + ' 億年';
 }
+
+
+// Source: 62-blackholes.js
+/* ---------- sourced dormant black hole and searchable black-hole names ----------
+   Gaia Collaboration (2024), A&A, DOI 10.1051/0004-6361/202449763:
+   https://arxiv.org/html/2404.10486v1, Table 2 (combined solution) and Eq. 5.
+   The position is the system barycentre at J2017.5, not a current ephemeris.
+   In the existing renderer hole.rs means the approximate SHADOW radius, 2.6 Rs;
+   Rs = 2 GM/c^2 is the Schwarzschild radius. Neither is a material surface. */
+(function(){
+  var aliases = {
+    '天鵝座 X-1':['Cygnus X-1','Cyg X-1','CygX-1','天鹅座 X-1'],
+    '蓋亞 BH1':['Gaia BH1','Gaia BH 1','GaiaBH1','盖亚 BH1'],
+    '人馬座 A*':['Sagittarius A*','Sgr A*','SgrA*','銀心黑洞','人马座 A*'],
+    'M87*':['M87','M87 black hole','Messier 87','室女座 A 黑洞'],
+    'TON 618':['TON618','Tonantzintla 618']
+  };
+  Object.keys(aliases).forEach(function(name){
+    var info = BODY_INFO[name];
+    if(!info) return;
+    var names = Array.isArray(info.aliases) ? info.aliases.slice() : [];
+    aliases[name].forEach(function(alias){ if(names.indexOf(alias) < 0) names.push(alias); });
+    info.aliases = names;
+    /* Keep the original provenance and uncertainty: adding names does not
+       turn those inherited distances, masses or shadow scales into measurements. */
+    info.description += ' 黑影是光線彎曲形成的範圍，不是黑洞的固體表面，也不等同事件視界。';
+    if(name === '蓋亞 BH1'){
+      info.appearance = '安靜黑洞：不繪製明亮吸積盤；黑影與重力透鏡使用非旋轉近似。伴星的位置、外觀與尺度沿用原始示意模型。';
+    } else {
+      info.appearance = '黑影、吸積盤與重力透鏡使用簡化非旋轉模型；盤的朝向、紋理與亮度是示意，並非此天體的即時觀測影像。';
+    }
+  });
+
+  var name = '蓋亞 BH3';
+  var massSolar = 32.70, parallaxMas = 1.6933;
+  var parsecLy = 3.2615637771674336, distanceLy = 1000/parallaxMas*parsecLy;
+  /* IAU nominal solar mass parameter (m^3/s^2), exact c (m/s).
+     The model's existing AU_LY conversion is shared by all body distances. */
+  var solarGM = 1.3271244e20, c = 299792458;
+  var schwarzschildKm = 2*solarGM*massSolar/(c*c)/1000;
+  var shadowKm = 2.6*schwarzschildKm, shadowLy = shadowKm*AU_LY/149597870.7;
+  /* Table 2 ICRS barycentre: RA 294.8278502301 deg, Dec 14.9309190869 deg.
+     The standard ICRS-to-Galactic matrix gives this l,b; no orbital offset,
+     proper motion or radial-velocity propagation is silently invented. */
+  var position = gal(51.6716633181, -3.4880842034, distanceLy);
+  var holeIndex = holes.length, markIndex = marks.length;
+  blackHole(name, '安靜黑洞 · 約 32.7 個太陽質量', position, shadowLy, 0,
+    1.2, 4.4, 1.2, 2.0, 4.4, 5.0);
+  var hole = holes[holeIndex], landmark = marks[markIndex];
+  hole.name = name;
+  hole.schwarzschildRadiusKm = schwarzschildKm;
+  landmark.trueWorld = hole.w;
+  landmark.blackHole = hole;
+  /* No dot(), body(), disc, jet or nearby debris: a dormant black hole does
+     not emit its own visible light. The measured companion is not positioned
+     here without a matching binary model. Only background lensing is rendered. */
+  BODY_INFO[name] = {
+    kind:'安靜恆星級黑洞',
+    aliases:['Gaia BH3','Gaia BH 3','GaiaBH3','盖亚 BH3','Gaia DR3 4318465066420528000'],
+    massText:'32.70 ± 0.82 個太陽質量（雙星軌道解）',
+    schwarzschildRadiusKm:schwarzschildKm,
+    schwarzschildRadiusNote:'由質量以 2GM/c² 推算的非旋轉模型半徑；不是直接量得的事件視界或黑影半徑。',
+    shadowRadiusKm:shadowKm,
+    sourceLabel:'Gaia Collaboration（2024），表 2／式 5',
+    sourceUrl:'https://doi.org/10.1051/0004-6361/202449763',
+    confidence:'質量、視差與參考方向來自雙星觀測解；場景固定於 J2017.5 系統質心；黑影採非旋轉近似。',
+    description:'天鷹座方向的安靜黑洞，透過伴星的運動發現。距太陽約 1,926 ± 19 光年，質量約為太陽的 32.7 倍；它本身不發出可見光，也沒有明亮的吸積盤。',
+    appearance:'不添加明亮吸積盤、噴流、黑洞自發光或周圍石頭，只呈現背景光線彎曲與黑影，因此可能十分昏暗。模型黑影半徑約為 Schwarzschild 半徑的 2.6 倍，與事件視界不同；伴星尚未重建。'
+  };
+})();
 
 
 // Source: 70-renderer.js
@@ -3331,6 +3709,9 @@ function openExplorer(open, focusSearch){
 }
 function renderExplorerDestinations(){
   var catalog = explorerCatalog(), q = explorerSearch.value.trim().toLocaleLowerCase();
+  document.querySelectorAll('[data-destination-filter]').forEach(function(button){
+    button.setAttribute('aria-pressed',String(q===button.getAttribute('data-destination-filter')));
+  });
   EXPLORER.catalogSignature = catalog.map(function(m){ return m.name; }).join('|');
   var matches = catalog.filter(function(m){
     var aliases = explorerInfo(m).aliases || [];
@@ -3352,6 +3733,9 @@ function explorerFact(label, value){
   var row = document.createElement('div'), dt = document.createElement('dt'), dd = document.createElement('dd');
   row.className = 'fact-row'; dt.textContent = label; dd.textContent = String(value);
   row.appendChild(dt); row.appendChild(dd); $('#objectFacts').appendChild(row); return dd;
+}
+function explorerSize(km){
+  return km<1?(km*1000).toLocaleString('zh-TW',{maximumFractionDigits:2})+' 公尺':km.toLocaleString('zh-TW',{maximumFractionDigits:1})+' 公里';
 }
 function explorerYears(years){
   if(years >= 1e8) return (years/1e8).toLocaleString('zh-TW', {maximumFractionDigits:2}) + ' 億年';
@@ -3389,8 +3773,9 @@ function selectExplorerObject(m, showCard){
       explorerFact('發光時宇宙年齡', explorerYears(epoch.cosmicAgeYears));
     } else explorerFact('宇宙學推算', '超出模型的可觀測範圍');
   } else EXPLORER.lightNode = explorerFact('光行時間', '—');
-  if(Number.isFinite(info.radiusKm)) explorerFact('直徑', (info.radiusKm*2).toLocaleString('zh-TW', {maximumFractionDigits:1}) + ' 公里');
+  if(Number.isFinite(info.radiusKm)) explorerFact(info.diameterLabel||'直徑', explorerSize(info.radiusKm*2));
   else if(info.radiusKm === null) explorerFact('直徑', '尚無實測值');
+  if(Number.isFinite(info.schwarzschildRadiusKm)) explorerFact('史瓦西半徑', explorerSize(info.schwarzschildRadiusKm)+'（非旋轉模型）');
   if(info.massText) explorerFact('質量', info.massText);
   if(info.temperatureText) explorerFact('溫度', info.temperatureText);
   if(Number.isFinite(info.periodDays)) explorerFact('公轉週期', info.periodDays.toLocaleString('zh-TW', {maximumFractionDigits:4}) + ' 天');
@@ -3529,6 +3914,11 @@ $('#sourceBtn').addEventListener('click', function(){
   $('#explorerSources').scrollIntoView({behavior:'smooth', block:'start'});
 });
 explorerSearch.addEventListener('input', renderExplorerDestinations);
+document.querySelectorAll('[data-destination-filter]').forEach(function(button){
+  button.addEventListener('click',function(){
+    explorerSearch.value=button.getAttribute('data-destination-filter');renderExplorerDestinations();
+  });
+});
 explorerSearch.addEventListener('focus', function(){ keys = {}; });
 explorerPanel.addEventListener('focusin', function(){ keys = {}; });
 explorerPanel.addEventListener('keydown', function(e){ e.stopPropagation(); });
@@ -3605,15 +3995,34 @@ async function bootProgramsReady(){
   }
   throw new Error('Graphics preparation timed out');
 }
+async function bootFrameReady(){
+  var context=renderer.getContext();
+  if(!renderer.capabilities.isWebGL2 || typeof context.fenceSync!=='function')return;
+  var fence=context.fenceSync(context.SYNC_GPU_COMMANDS_COMPLETE,0);
+  if(!fence)throw new Error('Graphics frame could not be prepared');
+  try{
+    context.flush();
+    for(var attempt=0;attempt<1500;attempt++){
+      await bootVisible();
+      if(context.isContextLost())throw new Error('Graphics context lost before entry');
+      var status=context.clientWaitSync(fence,0,0);
+      if(status===context.ALREADY_SIGNALED || status===context.CONDITION_SATISFIED)return;
+      if(status===context.WAIT_FAILED)throw new Error('Graphics preparation failed');
+      await new Promise(function(resolve){setTimeout(resolve,20);});
+    }
+    throw new Error('Graphics frame preparation timed out');
+  }finally{context.deleteSync(fence);}
+}
 function prepareUniverse(){
   if(BOOT.promise)return BOOT.promise;
   BOOT.promise=(async function(){
     try{
     var textures=STARTUP_TEXTURES.filter(function(task){return task.texture;}),profiles=Object.keys(AIRS);
+    var warmSmallBodies=typeof prepareSmallBodyRendering==='function';
     var stages=[scene,volScene,topScene],postMaterials=[compMat,downMat,upMat,finMat,bhMat];
     var controls=Array.from(document.body.children).filter(function(el){return el.id!=='loading' && el.id!=='fail' && el.tagName!=='SCRIPT';});
     controls.forEach(function(el){el.inert=true;});
-    BOOT.total=STARTUP_TEXTURES.length+textures.length+profiles.length+3+stages.length+postMaterials.length+1;
+    BOOT.total=STARTUP_TEXTURES.length+textures.length+profiles.length+3+stages.length+postMaterials.length+1+(warmSmallBodies?1:0);
     bootProgress('準備星空');
       profiles.forEach(function(name){airDepthLookup(AIRS[name]);});
       await Promise.all(STARTUP_TEXTURES.map(function(task){return task.promise.then(function(done){
@@ -3639,13 +4048,15 @@ function prepareUniverse(){
           await bootProgramsReady();bootProgress('即將啟程',true);
         }
       }finally{postQuad.material=savedPostMaterial;}
+      if(warmSmallBodies){await bootYield();await prepareSmallBodyRendering();bootProgress('即將啟程',true);}
       await bootYield();resetFlightInput();last=performance.now();frameDeadline=0;frameTimingReset=true;
       BOOT.firstFrame=true;
       try{frame(last+1000/60);}finally{BOOT.firstFrame=false;}
+      await bootFrameReady();
       if(renderer.getContext().isContextLost())throw new Error('Graphics context lost before entry');
       bootProgress('即將啟程',true);
-      // Let the first real view reach a presentation frame while the loader is
-      // still covering it; do not block the main thread with a GPU fence/readback.
+      // GPU completion above is polled without blocking. Give the prepared
+      // view a presentation frame before removing the covering loader.
       await new Promise(function(resolve){requestAnimationFrame(resolve);});await bootVisible();
       if(renderer.getContext().isContextLost())throw new Error('Graphics context lost before presentation');
       BOOT.ready=true;last=performance.now();frameDeadline=0;frameTimingReset=true;resetFlightInput();
@@ -3706,6 +4117,7 @@ function frame(now){
   frameTimingReset=false;
   var epochMs = Date.now();
   if(typeof updateSolarSystem === 'function') updateSolarSystem(epochMs);
+  if(typeof updateSmallBodies === 'function') updateSmallBodies(epochMs);
   if(typeof updateExtraSystems === 'function') updateExtraSystems(epochMs);
 
   /* turning */
@@ -3822,6 +4234,7 @@ function frame(now){
   }
   if(typeof updateSurfaceDetails === 'function') updateSurfaceDetails(dt);
   if(typeof updateExposure === 'function') updateExposure(dt);
+  if(typeof updateSmallBodyView === 'function') updateSmallBodyView(S,L);
   if(!plain){
     try{ drawFrame(); }catch(err){ plain = true; }
   }
