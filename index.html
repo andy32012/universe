@@ -14,7 +14,8 @@
 <link rel="manifest" href="manifest.json">
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@500;900&display=swap" rel="stylesheet">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@500;900&display=swap" rel="stylesheet" crossorigin>
 <style>
 /* Deep space is the whole page, so the interface stays dark in both themes. */
 :root{
@@ -27,6 +28,12 @@
   --line:rgba(238,240,246,.14);
   --serif:"Noto Serif TC","Songti TC","PMingLiU",serif;
   --sans:-apple-system,BlinkMacSystemFont,"PingFang TC","Noto Sans TC","Microsoft JhengHei","Segoe UI",sans-serif;
+  /* layout: the notch sides, how high the flight controls sit, where the hint floats */
+  --sl:env(safe-area-inset-left,0px);
+  --sr:env(safe-area-inset-right,0px);
+  --sb:env(safe-area-inset-bottom,0px);
+  --ctl-b:26px;
+  --tip-b:176px;
   box-sizing:border-box;
   padding-top:env(safe-area-inset-top,0px);
   padding-bottom:env(safe-area-inset-bottom,0px);
@@ -61,7 +68,7 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--gold);outline-o
 
 #hud{
   position:fixed;left:0;right:0;top:0;z-index:5;pointer-events:none;
-  padding:calc(env(safe-area-inset-top,0px) + 16px) 120px 0 18px;
+  padding:calc(env(safe-area-inset-top,0px) + 16px) calc(var(--sr) + 120px) 0 calc(var(--sl) + 18px);
 }
 #hud .k{margin:0;font-size:12px;letter-spacing:.14em;color:var(--ink-dim)}
 #place{
@@ -69,44 +76,39 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--gold);outline-o
   text-shadow:0 2px 20px rgba(0,0,0,.8);
 }
 
-.stats{display:flex;gap:18px;margin:10px 0 0;text-shadow:0 1px 8px #000}
+.stats{display:flex;flex-wrap:wrap;gap:6px 18px;margin:10px 0 0;text-shadow:0 1px 8px #000}
 .stats div{min-width:0}
 .stats dt{font-size:11.5px;letter-spacing:.1em;color:var(--ink-dim)}
 .stats dd{margin:1px 0 0;font-size:clamp(15px,4vw,19px);font-weight:600;font-variant-numeric:tabular-nums;line-height:1.25;white-space:nowrap}
 .stats dd small{display:block;font-size:11.5px;font-weight:400;color:var(--ink-dim)}
 .stats .edge dd{color:var(--gold)}
 #near{margin:8px 0 0;font-size:12.5px;color:var(--ink-dim);text-shadow:0 1px 8px #000}
-#goHome{
-  position:fixed;right:16px;top:calc(env(safe-area-inset-top,0px) + 16px);z-index:6;
+#tools{
+  position:fixed;right:calc(var(--sr) + 16px);top:calc(env(safe-area-inset-top,0px) + 16px);z-index:6;
+  display:flex;flex-direction:column;align-items:flex-end;gap:8px;
+}
+#tools button{
   min-height:40px;padding:0 15px;border-radius:999px;font-size:13px;
   background:var(--panel);border:1px solid var(--line);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);
 }
-#tip{position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom,0px) + 176px);transform:translateX(-50%);z-index:4;margin:0;white-space:nowrap;pointer-events:none;
+#tip{position:fixed;left:50%;bottom:calc(var(--sb) + var(--tip-b));transform:translateX(-50%);z-index:4;margin:0;width:max-content;max-width:calc(100% - 32px);text-align:center;pointer-events:none;
   font-size:12.5px;color:var(--ink-dim);padding:7px 14px;border-radius:999px;background:rgba(8,9,14,.55);border:1px solid var(--line);transition:opacity .8s}
 #tip.gone{opacity:0}
-#scaleBtn{
-  position:fixed;right:16px;top:calc(env(safe-area-inset-top,0px) + 64px);z-index:6;
-  min-height:40px;padding:0 15px;border-radius:999px;font-size:13px;color:var(--gold);
-  background:var(--panel);border:1px solid rgba(243,217,162,.4);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);
-}
-#brightBtn,#hdrBtn,#teleBtn{
-  position:fixed;right:16px;z-index:6;min-height:40px;padding:0 15px;border-radius:999px;font-size:13px;
-  background:var(--panel);border:1px solid var(--line);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);
-}
-#brightBtn{top:calc(env(safe-area-inset-top,0px) + 112px)}
-#teleBtn{top:calc(env(safe-area-inset-top,0px) + 160px)}
-#hdrBtn{top:calc(env(safe-area-inset-top,0px) + 208px);color:var(--gold)}
+#tools #scaleBtn{color:var(--gold);border-color:rgba(243,217,162,.4)}
+#hdrBtn{color:var(--gold)}
 #hdrBtn[hidden]{display:none}
 #hdr{position:fixed;inset:0;width:100%;height:100%;z-index:1;pointer-events:none}
 #scaleNote{margin:4px 0 0;font-size:11.5px;color:var(--ink-faint);text-shadow:0 1px 8px #000}
-#credit{position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom,0px) + 4px);transform:translateX(-50%);z-index:4;margin:0;white-space:nowrap;pointer-events:none;font-size:10px;color:var(--ink-faint);text-shadow:0 1px 4px #000}
+/* the sources must stay readable on a phone, so the credit wraps between sources instead of running off the screen */
+#credit{position:fixed;left:50%;bottom:calc(var(--sb) + 4px);transform:translateX(-50%);z-index:4;margin:0;width:max-content;max-width:calc(100% - 32px);text-align:center;line-height:1.4;pointer-events:none;font-size:10px;color:var(--ink-faint);text-shadow:0 1px 4px #000}
+#credit span{display:inline-block;margin:0 .6em}
 #cross{position:fixed;left:50%;top:50%;z-index:3;width:18px;height:18px;margin:-9px 0 0 -9px;pointer-events:none;opacity:.7}
 #cross::before,#cross::after{content:"";position:absolute;background:var(--ink)}
 #cross::before{left:8px;top:2px;width:2px;height:14px}
 #cross::after{left:2px;top:8px;width:14px;height:2px}
 /* flight controls: the left pad turns your view, the right buttons fly */
 #stick{
-  position:fixed;left:calc(env(safe-area-inset-left,0px) + 22px);bottom:calc(env(safe-area-inset-bottom,0px) + 26px);z-index:6;
+  position:fixed;left:calc(var(--sl) + 22px);bottom:calc(var(--sb) + var(--ctl-b));z-index:6;
   width:132px;height:132px;border-radius:50%;touch-action:none;
   background:var(--panel);border:1px solid var(--line);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);
 }
@@ -116,7 +118,7 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--gold);outline-o
 #stick .u{left:50%;top:3px;transform:translateX(-50%)} #stick .d{left:50%;bottom:3px;transform:translateX(-50%)}
 #stick .l{left:5px;top:50%;transform:translateY(-50%)} #stick .r{right:5px;top:50%;transform:translateY(-50%)}
 #fly{
-  position:fixed;right:calc(env(safe-area-inset-right,0px) + 22px);bottom:calc(env(safe-area-inset-bottom,0px) + 26px);z-index:6;
+  position:fixed;right:calc(var(--sr) + 22px);bottom:calc(var(--sb) + var(--ctl-b));z-index:6;
   display:flex;flex-direction:column;align-items:center;gap:12px;
 }
 #fly button{
@@ -129,8 +131,35 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--gold);outline-o
 #fail{position:fixed;inset:0;z-index:20;display:flex;align-items:center;justify-content:center;padding:32px;text-align:center;background:var(--space);font-size:15px;line-height:1.7}
 #fail[hidden]{display:none}
 @media (min-width:860px){
-  #hud{padding-left:28px}
-  #stick{left:32px;bottom:32px} #fly{right:32px;bottom:32px}
+  :root{--ctl-b:32px}
+  #hud{padding-left:calc(var(--sl) + 28px)}
+  #stick{left:calc(var(--sl) + 32px)} #fly{right:calc(var(--sr) + 32px)}
+}
+/* narrower screens: the credit wraps onto two or three lines, so the controls sit above it */
+@media (max-width:859px){
+  :root{--ctl-b:56px}
+}
+/* phones held upright: the hint floats above the flight buttons instead of beside them */
+@media (max-width:600px){
+  :root{--tip-b:calc(var(--ctl-b) + 196px)}
+}
+@media (max-width:360px){
+  :root{--ctl-b:72px}
+}
+/* phones held sideways: little height, so the buttons go into two columns, the flight buttons sit side by side and the readout tightens */
+@media (orientation:landscape) and (max-height:500px){
+  :root{--ctl-b:40px;--tip-b:var(--ctl-b)}
+  #hud{padding-top:calc(env(safe-area-inset-top,0px) + 10px);padding-right:calc(var(--sr) + 240px)}
+  #place{font-size:30px}
+  .stats{margin-top:6px}
+  .stats dd{font-size:15px}
+  #near{margin-top:5px}
+  #tools{display:grid;grid-template-columns:auto auto;top:calc(env(safe-area-inset-top,0px) + 10px)}
+  #stick{width:112px;height:112px}
+  #knob{width:46px;height:46px;margin:-23px 0 0 -23px}
+  #fly{flex-direction:row;align-items:flex-end}
+  #tip{max-width:calc(100% - 2*(var(--sr) + 22px + 104px + 12px + 66px + 16px))}
+  #credit{font-size:9px}
 }
 </style>
 </head>
@@ -148,13 +177,15 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--gold);outline-o
   <p id="near"></p>
   <p id="scaleNote"></p>
 </header>
-<button type="button" id="goHome">回太陽系</button>
-<button type="button" id="scaleBtn">比例：放大</button>
-<button type="button" id="brightBtn">亮度：高</button>
-<button type="button" id="teleBtn">望遠鏡：1×</button>
-<button type="button" id="hdrBtn" hidden>HDR：關</button>
+<div id="tools">
+  <button type="button" id="goHome">回太陽系</button>
+  <button type="button" id="scaleBtn">比例：放大</button>
+  <button type="button" id="brightBtn">亮度：高</button>
+  <button type="button" id="teleBtn">望遠鏡：1×</button>
+  <button type="button" id="hdrBtn" hidden>HDR：關</button>
+</div>
 <div id="cross" aria-hidden="true"></div>
-<p id="credit">恆星資料：HYG Database（CC BY-SA 4.0）　行星貼圖：Solar System Scope（CC BY 4.0）　黑洞與大氣算法參考：oseiskar/black-hole、wwwtyro/glsl-atmosphere</p>
+<p id="credit"><span>恆星資料：HYG Database（CC BY-SA 4.0）</span><span>行星貼圖：Solar System Scope（CC BY 4.0）</span><span>黑洞與大氣算法參考：oseiskar/black-hole、wwwtyro/glsl-atmosphere</span></p>
 <p id="tip">左邊轉頭，右邊按住前進，雙指拉開是望遠鏡</p>
 
 <div id="stick" role="group" aria-label="視角：往左右上下推來轉頭">
@@ -180,7 +211,7 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--gold);outline-o
 'use strict';
 var $ = function(s){ return document.querySelector(s); };
 function fail(m){ $('#failT').textContent = m; $('#fail').hidden = false; }
-if(!window.THREE){ fail('3D 繪圖元件沒有載入成功。請確認網路連線後重新整理頁面。'); return; }
+if(!window.THREE){ fail('3D 繪圖元件無法在這個瀏覽器上執行。請更新瀏覽器，或換一個瀏覽器再試。'); return; }
 var canvas = $('#gl'), renderer;
 try{ renderer = new THREE.WebGLRenderer({canvas:canvas, antialias:true, powerPreference:'high-performance'}); }
 catch(e){ fail('這台裝置的瀏覽器無法啟用 WebGL，所以畫不出宇宙。請換一個瀏覽器再試。'); return; }
@@ -1391,7 +1422,7 @@ function holdButton(id, dir){
   var b = $(id);
   function down(e){ thrust = dir; homing = false; $('#tip').classList.add('gone'); b.classList.add('on'); try{ b.setPointerCapture(e.pointerId); }catch(err){} e.preventDefault(); }
   function up(){ if(thrust === dir) thrust = 0; b.classList.remove('on'); }
-  b.addEventListener('pointerdown', down); b.addEventListener('pointerup', up); b.addEventListener('pointercancel', up);
+  b.addEventListener('pointerdown', down); b.addEventListener('pointerup', up); b.addEventListener('pointercancel', up); b.addEventListener('lostpointercapture', up);
   b.addEventListener('contextmenu', function(e){ e.preventDefault(); });
 }
 holdButton('#fwd', 1); holdButton('#back', -1);
@@ -1448,6 +1479,15 @@ function teleText(v){ return v < 10 ? (Math.round(v*10)/10) + '\u00d7' : Math.ro
 var keys = {};
 window.addEventListener('keydown', function(e){ keys[e.key.toLowerCase()] = true; if(e.key.indexOf('Arrow') === 0 || e.key === ' ') e.preventDefault(); if(e.key.toLowerCase() === 'w' || e.key.toLowerCase() === 's') homing = false; });
 window.addEventListener('keyup', function(e){ keys[e.key.toLowerCase()] = false; });
+/* a key or finger let go while the page was in the background never reports it, so drop every held input when focus leaves */
+function releaseAll(){
+  for(var k in keys) keys[k] = false;
+  thrust = 0; $('#fwd').classList.remove('on'); $('#back').classList.remove('on');
+  stickId = null; look.x = look.y = 0; knob.style.transform = 'translate(0,0)';
+  touches.clear(); pinchD = 0;
+}
+window.addEventListener('blur', releaseAll);
+document.addEventListener('visibilitychange', function(){ if(document.hidden) releaseAll(); });
 window.addEventListener('resize', function(){
   camera.aspect = window.innerWidth/window.innerHeight; camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight, false);
@@ -1631,6 +1671,12 @@ function frame(now){
 }
 requestAnimationFrame(frame);
 })();
+</script>
+<script>
+/* keep a copy for offline use once the page is installed; only works when served over http(s) */
+if('serviceWorker' in navigator && /^https?:$/.test(location.protocol)){
+  window.addEventListener('load', function(){ navigator.serviceWorker.register('sw.js').catch(function(){}); });
+}
 </script>
 </body>
 </html>
