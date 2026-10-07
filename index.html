@@ -84,11 +84,6 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--gold);outline-o
 #tip{position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom,0px) + 176px);transform:translateX(-50%);z-index:4;margin:0;white-space:nowrap;pointer-events:none;
   font-size:12.5px;color:var(--ink-dim);padding:7px 14px;border-radius:999px;background:rgba(8,9,14,.55);border:1px solid var(--line);transition:opacity .8s}
 #tip.gone{opacity:0}
-#scaleBtn{
-  position:fixed;right:16px;top:calc(env(safe-area-inset-top,0px) + 64px);z-index:6;
-  min-height:40px;padding:0 15px;border-radius:999px;font-size:13px;color:var(--gold);
-  background:var(--panel);border:1px solid rgba(243,217,162,.4);-webkit-backdrop-filter:none;backdrop-filter:none;
-}
 #brightBtn,#hdrBtn,#teleBtn{
   position:fixed;right:16px;z-index:6;min-height:40px;padding:0 15px;border-radius:999px;font-size:13px;
   background:var(--panel);border:1px solid var(--line);-webkit-backdrop-filter:none;backdrop-filter:none;
@@ -98,8 +93,6 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--gold);outline-o
 #hdrBtn{top:calc(env(safe-area-inset-top,0px) + 208px);color:var(--gold)}
 #hdrBtn[hidden]{display:none}
 #hdr{position:fixed;inset:0;width:100%;height:100%;z-index:1;pointer-events:none}
-#scaleNote{margin:4px 0 0;font-size:11.5px;color:var(--ink-faint);text-shadow:0 1px 8px #000}
-#credit{position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom,0px) + 4px);transform:translateX(-50%);z-index:4;margin:0;white-space:nowrap;pointer-events:none;font-size:10px;color:var(--ink-faint);text-shadow:0 1px 4px #000}
 #cross{position:fixed;left:50%;top:50%;z-index:3;width:18px;height:18px;margin:-9px 0 0 -9px;pointer-events:none;opacity:.7}
 #cross::before,#cross::after{content:"";position:absolute;background:var(--ink)}
 #cross::before{left:8px;top:2px;width:2px;height:14px}
@@ -247,16 +240,11 @@ body.booting>:not(#loading):not(#fail):not(script){visibility:hidden}
 .explorer-quality{display:grid;grid-template-columns:1fr auto;align-items:center;gap:12px;margin-top:14px}
 .explorer-quality label{font-size:12px;color:var(--ink-dim)}
 #qualitySelect{max-width:172px;padding:10px;min-height:44px;border:1px solid var(--line);border-radius:9px;background:#151b27;color:var(--ink);font:inherit;font-size:12px}
-#explorerScale{margin-top:17px}
-#explorer #scaleBtn{position:static;top:auto;right:auto;min-height:25px;padding:0 8px;width:auto;border-radius:5px;border-color:rgba(243,217,162,.19);background:rgba(243,217,162,.04);font-size:9px;letter-spacing:.06em;color:var(--gold)}
-#explorer #scaleNote,.explorer-control-guide{margin:8px 0 0;font-size:10px;color:var(--ink-faint);line-height:1.8;text-shadow:none}
 #explorerPositionFacts{margin:0}
 #explorerPositionFacts dt{font-size:10px;color:var(--ink-faint);line-height:1.5}
 #explorerPositionFacts dd{font-size:12px;line-height:1.7;margin:4px 0 14px;font-variant-numeric:tabular-nums}
 #explorerPositionFacts small{display:block;font-size:10px;color:var(--ink-dim)}
 #explorer #near{font-size:11px;line-height:1.7;margin:0;color:var(--ink-dim);text-shadow:none}
-#explorer #credit{position:static;left:auto;bottom:auto;transform:none;max-width:none;margin:0;color:var(--ink-dim);font-size:10px;line-height:1.9;white-space:normal;pointer-events:auto;text-shadow:none}
-#explorerAttribution>a{display:inline-block;min-height:32px;margin-top:8px;line-height:32px;color:var(--gold);font-size:10px;text-underline-offset:3px}
 
 #explorerTravel{position:fixed;bottom:calc(env(safe-area-inset-bottom,0px) + 196px);left:50%;transform:translateX(-50%);z-index:7;display:flex;align-items:center;gap:10px;max-width:calc(100% - 32px);min-height:40px;border:1px solid rgba(243,217,162,.2);border-radius:999px;padding:5px 8px 5px 14px;background:rgba(10,13,22,.82);backdrop-filter:none;-webkit-backdrop-filter:none;font-size:11px}
 .travel-dot{width:4px;height:4px;border-radius:50%;background:var(--gold);flex-shrink:0}
@@ -346,16 +334,16 @@ body.booting>:not(#loading):not(#fail):not(script){visibility:hidden}
     <div class="edge"><dt>至地球觀測視界（示意）</dt><dd id="dEdge">—<small id="dPct"></small></dd></div>
   </dl>
   <p id="near"></p>
-  <p id="scaleNote"></p>
 </header>
 <button type="button" id="goHome">回太陽系</button>
-<span id="scaleBtn" role="status" style="display:flex;align-items:center">實際比例</span>
 <button type="button" id="brightBtn">亮度：高</button>
 <button type="button" id="teleBtn" aria-pressed="false" aria-label="開啟望遠鏡，放大至 10 倍">開啟望遠鏡
 1×</button>
 <button type="button" id="hdrBtn" hidden>HDR：關</button>
 <div id="cross" aria-hidden="true"></div>
-<p id="credit">恆星資料：HYG Database（CC BY-SA 4.0）　行星貼圖：Solar System Scope（CC BY 4.0）　黑洞與大氣算法參考：oseiskar/black-hole、wwwtyro/glsl-atmosphere</p>
+<!-- Attribution: HYG Database (CC BY-SA 4.0); Solar System Scope textures (CC BY 4.0).
+     Algorithm references: oseiskar/black-hole (MIT), wwwtyro/glsl-atmosphere (public domain).
+     Full sources, processing notes and licenses are documented in README.md. -->
 <p id="tip">左邊轉頭，右邊按住前進，雙指拉開是望遠鏡</p>
 
 <div id="stick" role="group" aria-label="視角：往左右上下推來轉頭">
@@ -448,19 +436,11 @@ body.booting>:not(#loading):not(#fail):not(script){visibility:hidden}
           <label for="qualitySelect">畫面品質</label>
           <select id="qualitySelect"><option value="high">高畫質</option><option value="balanced">均衡</option><option value="auto">自動調整</option></select>
         </div>
-        <div id="explorerScale"></div>
-        <p class="explorer-control-guide">拖曳轉向，W／S 前進後退；雙指或滾輪調整倍率，按「關閉望遠鏡」回到 1×。</p>
       </div>
     </details>
     <details id="explorerPosition" class="explorer-detail">
       <summary>航行資訊</summary>
       <div class="explorer-detail-body"><dl id="explorerPositionFacts"></dl><div id="explorerNearby"></div></div>
-    </details>
-    <details id="explorerSources" class="explorer-detail">
-      <summary>資料來源與模型</summary>
-      <div class="explorer-detail-body" id="explorerAttribution">
-        <a href="https://github.com/andy32012/universe#readme" target="_blank" rel="noopener noreferrer">完整資料與授權 ↗</a>
-      </div>
     </details>
   </div>
 </aside>
@@ -4930,10 +4910,8 @@ function applyScale(){
   for(i=0;i<moved.length;i++){
     var M = moved[i]; M.b.position.copy(M.hole).addScaledVector(M.off, K('s')); M.d.position.copy(M.b.position); M.rec.w.copy(M.b.position);
   }
-  $('#scaleBtn').textContent = '實際比例';
   if(typeof updateSolarSystem === 'function') updateSolarSystem(Date.now());
   if(typeof updateExtraSystems === 'function') updateExtraSystems(Date.now());
-  $('#scaleNote').textContent = '天體本體與距離採同一實際比例；未知尺寸標明估算。用探索或望遠鏡看清遠方。';
 }
 var BRIGHT = [{key:'natural',label:'自然',exposure:1,auto:true},{key:'photo',label:'攝影',exposure:3,auto:true},{key:'guide',label:'固定曝光',exposure:1.6,auto:false}], brightI = 0;
 function applyBright(){ var preset = BRIGHT[brightI]; $('#brightBtn').textContent = '觀感：' + preset.label; finU.uExpo.value = preset.exposure; STARGAIN.value = preset.key === 'natural' ? 1.0 : (preset.key === 'photo' ? 1.7 : 1.3); }
@@ -5022,15 +5000,12 @@ var EXPLORER = {
 var explorerPanel = $('#explorer'), explorerSearch = $('#destinationSearch'), explorerList = $('#destinationList');
 /* Keep the sky quiet. Reparenting retains the original observing-control handlers. */
 (function arrangeExplorer(){
-  var lookControls = $('#explorerLookControls'), scale = $('#explorerScale'), facts = $('#explorerPositionFacts');
+  var lookControls = $('#explorerLookControls'), facts = $('#explorerPositionFacts');
   lookControls.appendChild($('#brightBtn')); lookControls.appendChild($('#hdrBtn'));
-  scale.appendChild($('#scaleBtn')); $('#scaleBtn').style.display = 'inline-flex'; scale.appendChild($('#scaleNote'));
-  $('#scaleNote').textContent = '天體與距離採實際比例；未知尺寸與外觀會標明模型或示意。';
   var edge = $('#hud .edge'); if(edge) facts.appendChild(edge);
   var light = $('#dLight'), lightRow = document.createElement('div'), lightLabel = document.createElement('dt'), lightValue = document.createElement('dd');
   lightLabel.textContent = '距太陽的光行時間'; lightValue.appendChild(light); lightRow.appendChild(lightLabel); lightRow.appendChild(lightValue); facts.appendChild(lightRow);
   $('#explorerNearby').appendChild($('#near'));
-  var credits = $('#credit'), attribution = $('#explorerAttribution'); attribution.insertBefore(credits, attribution.firstChild);
   $('#goHome').textContent = '回地球'; $('#goHome').setAttribute('aria-label', '回到地球附近');
   $('#tip').textContent = '拖曳轉向 · 按住前進';
   $('#teleBtn').title = '點擊開啟或關閉望遠鏡；雙指縮放或滑鼠滾輪調整倍率';
