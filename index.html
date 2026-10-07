@@ -3282,7 +3282,7 @@ function frame(now){
   var fovNow = 2*Math.atan(TAN0/tele)*180/Math.PI;
   if(Math.abs(camera.fov - fovNow) > 1e-9){ camera.fov = fovNow; camera.updateProjectionMatrix(); VIEW.tanF.value = TAN0/tele; }
   updateTelescopeControl();
-  yaw -= lx*1.5*dt/tele; pitch = clamp(pitch - ly*1.15*dt/tele, -1.5, 1.5);
+  yaw -= lx*0.75*dt/tele; pitch = clamp(pitch - ly*0.575*dt/tele, -1.5, 1.5);
   var cp = Math.cos(pitch);
   fwdV.set(-Math.sin(yaw)*cp, Math.sin(pitch), -Math.cos(yaw)*cp);
 
@@ -3301,7 +3301,7 @@ function frame(now){
   if(th !== 0 && !homing){
     if(typeof cancelExplorerTravel === 'function') cancelExplorerTravel();
     held = Math.min(held + dt, 6);
-    P.addScaledVector(fwdV, th*Sm*(0.75 + 0.2*held)*dt);
+    P.addScaledVector(fwdV, th*Sm*(0.375 + 0.1*held)*dt);
     if(P.length() > EDGE*2.2) P.setLength(EDGE*2.2);
   } else held = 0;
   if(homing){
