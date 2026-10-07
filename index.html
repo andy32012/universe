@@ -274,6 +274,14 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--gold);outline-o
   .explorer-open #stick,.explorer-open #fly,.explorer-open #teleBtn,.explorer-open #sourceBtn{visibility:hidden}
 }
 
+.music-row{display:flex;align-items:center;gap:12px}
+#musicToggle{min-height:44px;padding:0 16px;border:1px solid rgba(243,217,162,.4);border-radius:9px;background:rgba(243,217,162,.04);color:var(--gold);font-size:12px;white-space:nowrap}
+#musicToggle[aria-pressed="true"]{background:var(--gold);border-color:var(--gold);color:#1a1b21;font-weight:600}
+#musicToggle:disabled{opacity:.45;cursor:default}
+#musicState{min-width:0;font-size:11px;color:var(--ink-dim);font-variant-numeric:tabular-nums}
+.music-volume{display:grid;grid-template-columns:auto 1fr 3.2em;align-items:center;gap:12px;margin-top:12px;font-size:12px;color:var(--ink-dim)}
+#musicVolume{width:100%;min-height:44px;margin:0;accent-color:var(--gold);touch-action:pan-y}
+#musicVolumeText{text-align:right;font-size:11px;font-variant-numeric:tabular-nums}
 </style>
 </head>
 <body>
@@ -338,6 +346,21 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--gold);outline-o
       <a id="objectSource" target="_blank" rel="noopener noreferrer" hidden></a>
     </section>
 
+    <details id="explorerMusic" class="explorer-detail">
+      <summary>宇宙音樂</summary>
+      <div class="explorer-detail-body">
+        <div class="music-row">
+          <button type="button" id="musicToggle" aria-pressed="false">播放音樂</button>
+          <span id="musicState" role="status">關閉</span>
+        </div>
+        <div class="music-volume">
+          <label for="musicVolume">音量</label>
+          <input id="musicVolume" type="range" min="0" max="100" step="1" value="60">
+          <output id="musicVolumeText" for="musicVolume">60%</output>
+        </div>
+        <p class="explorer-muted">以程式即時生成的藝術化宇宙聲景，一輪約 30 分鐘，結尾無縫接回開頭。太空真空無法傳遞聲波，這不是太空中錄到的聲音。</p>
+      </div>
+    </details>
     <details id="explorerSettings" class="explorer-detail">
       <summary>畫面與觀測</summary>
       <div class="explorer-detail-body">
@@ -3405,6 +3428,228 @@ function frame(now){
 requestAnimationFrame(frame);
 })();
 
+</script>
+<script>
+/* 宇宙音樂：Web Audio 程序生成的藝術化聲景。
+ * 所有事件都由「循環時間」決定：音符依時段編號（取循環內的餘數）播種，
+ * 連續參數是週期整除 CYCLE 的函數，所以第 30 分鐘接回第 0 秒時與其他時段的銜接方式相同。 */
+(function(){
+'use strict';
+var CYCLE = 1800, SECTION = 300, PAD_SLOT = 20, BELL_SLOT = 1.5, CTRL_STEP = 1;
+var LOOKAHEAD = 4, TICK = 250, TAU = Math.PI * 2;
+var PAD_N = CYCLE / PAD_SLOT, BELL_N = CYCLE / BELL_SLOT;
+// 每 5 分鐘換一個調式；第 6 段接回第 1 段，和段落間的換調相同。
+var SECTIONS = [
+  { root: 38, scale: [0, 2, 4, 7, 9, 11] },
+  { root: 41, scale: [0, 2, 3, 7, 9, 10] },
+  { root: 36, scale: [0, 2, 4, 6, 7, 11] },
+  { root: 43, scale: [0, 3, 5, 7, 10] },
+  { root: 39, scale: [0, 2, 4, 7, 11] },
+  { root: 40, scale: [0, 2, 3, 7, 8, 10] }
+];
+
+function mod(a, n){ return ((a % n) + n) % n; }
+function hz(m){ return 440 * Math.pow(2, (m - 69) / 12); }
+function rng(layer, slot){
+  var s = (Math.imul(slot + 1, 0x9E3779B1) ^ Math.imul(layer + 7, 0x85EBCA77)) >>> 0;
+  return function(){
+    s = (s + 0x6D2B79F5) >>> 0;
+    var t = Math.imul(s ^ s >>> 15, s | 1);
+    t ^= t + Math.imul(t ^ t >>> 7, t | 61);
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+function sectionAt(u){ return SECTIONS[Math.floor(mod(u, CYCLE) / SECTION) % SECTIONS.length]; }
+// 0–1 的疏密起伏，週期 1800 s 與 600 s。
+function density(u){ var p = mod(u, CYCLE) / CYCLE; return 0.5 - 0.32 * Math.cos(TAU * p) - 0.18 * Math.cos(TAU * 3 * p + 1.3); }
+function droneCut(u){ return 170 + 520 * (0.5 - 0.5 * Math.cos(TAU * mod(u, CYCLE) / 600)); }
+function windFreq(u){ var p = mod(u, CYCLE) / CYCLE; return 320 + 620 * (0.5 + 0.5 * Math.sin(TAU * 2 * p + 0.7)); }
+function windGain(u){ return 0.010 + 0.028 * density(u); }
+
+function noiseBuffer(ctx, seconds, decay){
+  var len = Math.floor(ctx.sampleRate * seconds), buf = ctx.createBuffer(2, len, ctx.sampleRate);
+  for(var c = 0; c < 2; c++){
+    var d = buf.getChannelData(c), r = rng(90 + c, decay ? 1 : 0);
+    for(var i = 0; i < len; i++){
+      var v = r() * 2 - 1;
+      d[i] = decay ? v * Math.pow(1 - i / len, decay) : v;
+    }
+  }
+  return buf;
+}
+
+function Engine(ctx, out){
+  this.ctx = ctx;
+  var verb = ctx.createConvolver(), wet = ctx.createGain(), dry = ctx.createGain();
+  verb.buffer = noiseBuffer(ctx, 6, 3.2);
+  wet.gain.value = 0.55; dry.gain.value = 0.6;
+  verb.connect(wet); wet.connect(out); dry.connect(out);
+  this.bus = ctx.createGain(); this.bus.connect(dry); this.bus.connect(verb);
+  this.space = ctx.createGain(); this.space.gain.value = 0.9; this.space.connect(verb);
+
+  this.droneFilter = ctx.createBiquadFilter(); this.droneFilter.type = 'lowpass'; this.droneFilter.Q.value = 0.6;
+  var droneGain = ctx.createGain(); droneGain.gain.value = 0.11;
+  this.droneFilter.connect(droneGain); droneGain.connect(this.bus);
+  // 根音、低八度、五度，彼此微幅失諧形成緩慢拍頻。
+  this.drones = [[-12, 'sine', 0, 0.9], [0, 'triangle', -4, 0.45], [7, 'sine', 5, 0.32], [12, 'triangle', 3, 0.12]].map(function(v){
+    var o = ctx.createOscillator(), g = ctx.createGain();
+    o.type = v[1]; o.detune.value = v[2]; g.gain.value = v[3];
+    o.connect(g); g.connect(this.droneFilter);
+    return { osc: o, step: v[0] };
+  }, this);
+
+  this.wind = ctx.createBufferSource(); this.wind.buffer = noiseBuffer(ctx, 4, 0); this.wind.loop = true;
+  this.windFilter = ctx.createBiquadFilter(); this.windFilter.type = 'bandpass'; this.windFilter.Q.value = 0.8;
+  this.windGain = ctx.createGain(); this.windGain.gain.value = 0;
+  this.wind.connect(this.windFilter); this.windFilter.connect(this.windGain); this.windGain.connect(this.bus);
+}
+Engine.prototype.at = function(u){ return this.t0 + (u - this.u0); };
+// u0：開始的循環時間（不必取餘數）；when：對應的 AudioContext 時間。
+Engine.prototype.start = function(u0, when){
+  this.u0 = u0; this.t0 = when;
+  var sec = sectionAt(u0);
+  this.drones.forEach(function(d){ d.osc.frequency.setValueAtTime(hz(sec.root + d.step), when); d.osc.start(when); });
+  this.droneFilter.frequency.setValueAtTime(droneCut(u0), when);
+  this.windFilter.frequency.setValueAtTime(windFreq(u0), when);
+  this.windGain.gain.setValueAtTime(windGain(u0), when);
+  this.wind.start(when);
+  this.padNext = Math.ceil(u0 / PAD_SLOT);
+  this.bellNext = Math.ceil(u0 / BELL_SLOT);
+  this.ctrlNext = Math.ceil(u0 / CTRL_STEP);
+  this.secNext = Math.ceil(u0 / SECTION);
+};
+Engine.prototype.cycleTime = function(t){ return mod(this.u0 + (t - this.t0), CYCLE); };
+Engine.prototype.pump = function(now){
+  var u = this.u0 + (now - this.t0), end = u + LOOKAHEAD;
+  // 分頁長時間被節流時跳過已過去的事件，不一次補排。
+  if(this.padNext * PAD_SLOT < u) this.padNext = Math.ceil(u / PAD_SLOT);
+  if(this.bellNext * BELL_SLOT < u) this.bellNext = Math.ceil(u / BELL_SLOT);
+  if(this.ctrlNext * CTRL_STEP < u) this.ctrlNext = Math.ceil(u / CTRL_STEP);
+  if(this.secNext * SECTION < u) this.secNext = Math.ceil(u / SECTION);
+  for(; this.ctrlNext * CTRL_STEP < end; this.ctrlNext++) this.control(this.ctrlNext * CTRL_STEP);
+  for(; this.secNext * SECTION < end; this.secNext++) this.modulate(this.secNext * SECTION);
+  for(; this.padNext * PAD_SLOT < end; this.padNext++) this.pad(this.padNext);
+  for(; this.bellNext * BELL_SLOT < end; this.bellNext++) this.bell(this.bellNext);
+};
+Engine.prototype.control = function(u){
+  var t = this.at(u);
+  this.droneFilter.frequency.linearRampToValueAtTime(droneCut(u), t);
+  this.windFilter.frequency.linearRampToValueAtTime(windFreq(u), t);
+  this.windGain.gain.linearRampToValueAtTime(windGain(u), t);
+};
+Engine.prototype.modulate = function(u){
+  var t = this.at(u), sec = sectionAt(u);
+  this.drones.forEach(function(d){ d.osc.frequency.setTargetAtTime(hz(sec.root + d.step), t, 6); });
+};
+Engine.prototype.voice = function(t, dest, pan){
+  var g = this.ctx.createGain(), p = this.ctx.createStereoPanner ? this.ctx.createStereoPanner() : null;
+  g.gain.value = 0;
+  if(p){ p.pan.value = pan; g.connect(p); p.connect(dest); } else g.connect(dest);
+  return g;
+};
+Engine.prototype.pad = function(n){
+  var u = n * PAD_SLOT, r = rng(1, mod(n, PAD_N)), sec = sectionAt(u), sc = sec.scale;
+  var t = this.at(u), peak = 0.022 + 0.016 * density(u), ctx = this.ctx;
+  var used = {};
+  for(var k = 0; k < 3; k++){
+    var deg = Math.floor(r() * sc.length);
+    if(used[deg]) deg = (deg + 2) % sc.length;
+    used[deg] = 1;
+    var midi = sec.root + 24 + sc[deg] + (k === 2 && r() < 0.5 ? 12 : 0);
+    var lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 500 + 900 * r(); lp.Q.value = 0.4;
+    var g = this.voice(t, this.bus, (r() - 0.5) * 1.2);
+    lp.connect(g);
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(peak, t + 7);
+    g.gain.setValueAtTime(peak, t + 17);
+    g.gain.linearRampToValueAtTime(0, t + 28);
+    [['sawtooth', -7, 0.6], ['triangle', 6, 1]].forEach(function(v){
+      var o = ctx.createOscillator(), og = ctx.createGain();
+      o.type = v[0]; o.frequency.value = hz(midi); o.detune.value = v[1]; og.gain.value = v[2];
+      o.connect(og); og.connect(lp); o.start(t); o.stop(t + 28.1);
+    });
+  }
+};
+Engine.prototype.bell = function(n){
+  var u = n * BELL_SLOT, r = rng(2, mod(n, BELL_N));
+  if(r() > 0.05 + 0.2 * density(u)) return;
+  var sec = sectionAt(u), sc = sec.scale, ctx = this.ctx, t = this.at(u) + r() * 0.6;
+  var f = hz(sec.root + 48 + sc[Math.floor(r() * sc.length)] + (r() < 0.3 ? 12 : 0));
+  var dur = 4 + 4 * r(), peak = 0.03 + 0.03 * r();
+  var g = this.voice(t, this.space, (r() - 0.5) * 1.6);
+  g.gain.setValueAtTime(0, t);
+  g.gain.linearRampToValueAtTime(peak, t + 0.015);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  [[1, 1], [2.76, 0.18], [5.4, 0.05]].forEach(function(v){
+    var o = ctx.createOscillator(), og = ctx.createGain();
+    o.frequency.value = f * v[0]; og.gain.value = v[1];
+    o.connect(og); og.connect(g); o.start(t); o.stop(t + dur + 0.05);
+  });
+};
+
+var ctx = null, engine = null, master = null, timer = 0, offTimer = 0, on = false;
+var btn = document.getElementById('musicToggle'), state = document.getElementById('musicState');
+var vol = document.getElementById('musicVolume'), volText = document.getElementById('musicVolumeText');
+var level = 0.6;
+try { var saved = parseFloat(localStorage.getItem('universe-music-volume')); if(saved >= 0 && saved <= 1) level = saved; } catch(e){}
+vol.value = Math.round(level * 100); volText.textContent = vol.value + '%';
+
+function gainFor(v){ return v * v * 0.9; }
+function clock(s){ s = Math.floor(s); return Math.floor(s / 60) + ':' + ('0' + s % 60).slice(-2); }
+function showState(){
+  btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+  btn.textContent = on ? '停止音樂' : '播放音樂';
+  state.textContent = on && engine ? '播放中 · ' + clock(engine.cycleTime(ctx.currentTime)) + ' / 30:00' : '關閉';
+}
+function tick(){ if(engine && ctx.state === 'running') engine.pump(ctx.currentTime); if(on) showState(); }
+function run(go){
+  clearInterval(timer); timer = 0;
+  if(go){ tick(); timer = setInterval(tick, TICK); }
+}
+function ensure(){
+  if(ctx) return true;
+  var AC = window.AudioContext || window.webkitAudioContext;
+  if(!AC){ state.textContent = '此瀏覽器不支援 Web Audio'; btn.disabled = true; return false; }
+  ctx = new AC();
+  master = ctx.createGain(); master.gain.value = 0;
+  var comp = ctx.createDynamicsCompressor();
+  comp.threshold.value = -20; comp.knee.value = 12; comp.ratio.value = 3;
+  master.connect(comp); comp.connect(ctx.destination);
+  engine = new Engine(ctx, master);
+  engine.start(0, ctx.currentTime + 0.05);
+  return true;
+}
+function fadeTo(v, seconds){
+  var now = ctx.currentTime, g = master.gain;
+  if(g.cancelAndHoldAtTime) g.cancelAndHoldAtTime(now); else { g.cancelScheduledValues(now); g.setValueAtTime(g.value, now); }
+  g.linearRampToValueAtTime(v, now + seconds);
+}
+function setOn(next){
+  if(next && !ensure()) return;
+  on = next; clearTimeout(offTimer);
+  if(on){
+    ctx.resume().then(function(){ if(!on) return; run(!document.hidden); fadeTo(gainFor(level), 2.5); showState(); });
+  } else if(ctx){
+    fadeTo(0, 1.2);
+    offTimer = setTimeout(function(){ if(!on){ run(false); ctx.suspend(); } }, 1300);
+  }
+  showState();
+}
+btn.addEventListener('click', function(){ setOn(!on); });
+vol.addEventListener('input', function(){
+  level = vol.value / 100; volText.textContent = vol.value + '%';
+  if(on && ctx){ var g = master.gain; g.cancelScheduledValues(ctx.currentTime); g.setTargetAtTime(gainFor(level), ctx.currentTime, 0.08); }
+  try { localStorage.setItem('universe-music-volume', String(level)); } catch(e){}
+});
+// 切到背景時暫停整個音訊時鐘；回來時從同一個循環位置繼續。
+document.addEventListener('visibilitychange', function(){
+  if(!ctx || !on) return;
+  if(document.hidden){ run(false); ctx.suspend(); }
+  else ctx.resume().then(function(){ if(on && !document.hidden) run(true); });
+});
+// 供獨立檢查以離線渲染驗證循環接縫。
+window.UniverseMusic = { CYCLE: CYCLE, Engine: Engine };
+})();
 </script>
 </body>
 </html>
