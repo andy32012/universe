@@ -1125,8 +1125,12 @@ var VOL_FS = VOL_HEAD +
   /* glow (rgb) and dust (a) at one point inside the cloud; the cloud fills a ball of radius 1 */
   'vec4 neb(vec3 p){' +
   ' float r = length(p);' +
+  // Dark-cloud density and emission both contain this exact compact support.
+  ' if(uType >= 2.5 && uType < 3.5 && r >= 0.9) return vec4(0.0);' +
   ' float reach = 0.55 + 0.62*F1(normalize(p + 0.0001)*1.25 + uSeed*0.7);' +          /* how far the cloud reaches in this direction: no two sides alike */
   ' float edge = (uType > 0.5 && uType < 2.5) ? 1.0 - smoothstep(0.80, 1.0, r) : (1.0 - smoothstep(reach*0.60, reach, r))*(1.0 - smoothstep(0.90, 1.0, r));' +
+  // Reflection-cloud emission and dust are entirely multiplied by edge.
+  ' if(uType >= 3.5 && edge == 0.0) return vec4(0.0);' +
   ' vec3 q = p*2.3 + uSeed; float w = F1(q*0.8); vec3 qw = q + vec3(w*1.7, -w*1.2, w*1.4);' +
   ' float n = F2(qw); float n2 = F1(qw*3.1 + vec3(n*2.0, w*1.6, -n*1.8)); float n3 = F2(qw*8.3 + n2*1.5);' +
   ' float dA = uFine.x > 0.0 ? F1(qw*66.0 + n3*1.3) : 0.47;' +
@@ -1228,7 +1232,7 @@ var VOL_FS = VOL_HEAD +
   ' for(int i=0;i<STEPS;i++){ if(float(i) >= uSamples) break; vec3 p = uRo + rd*t; vec4 sm = neb(p);' +
   /* Integrate extinction over each segment so dense clouds do not brighten when the step count changes. */
   '  float sigma = max(sm.a*3.0, 0.0); float tr = exp(-sigma*dt); float segment = sigma > 0.0001 ? (1.0 - tr)/sigma : dt;' +
-  '  col += T*sm.rgb*segment*0.95*dustLight(p); T *= tr; if(t < tc) starT = T;' +
+  '  if(any(notEqual(sm.rgb, vec3(0.0)))) col += T*sm.rgb*segment*0.95*dustLight(p); T *= tr; if(t < tc) starT = T;' +
   '  t += dt; if(T < 0.01) break; }' +
   ' if(tc > 0.0 && uType < 2.5){ vec3 u1 = normalize(cross(uAxis, vec3(0.03,1.0,0.07))); vec3 u2 = cross(uAxis, u1);' +
   '  for(int k=0;k<4;k++){ if(uType > 0.5 && k > 0) break;' +
@@ -1385,16 +1389,31 @@ function makePlanetRing(radius,pos,sunDir,a,b,c,d){
     void main(){vRingP=uBasis*position;vRad=length(position.xz)/uRingRadiusScale;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}`;
   var fs=`uniform sampler2D uRingMap;uniform float uMapReady;uniform float uFlux;uniform float uDisplayGain;uniform float uAlpha;uniform vec3 uRingN;
     varying vec3 vRingP;varying float vRad;`+ECLIPSE_GL+`
+    // Exact box-pixel coverage of a locally straight radial edge. Derivatives
+    // span one pixel, so the support extends half that footprint on each side
+    // of the measured edge; neither ring radius nor geometry is enlarged.
+    float ringEdgeCoverage(float distance,float major,float minor){
+      if(major<0.0000001)return step(0.0,distance);
+      float halfWidth=0.5*(major+minor),flatWidth=0.5*(major-minor);
+      if(distance<=-halfWidth)return 0.0;
+      if(distance>=halfWidth)return 1.0;
+      if(minor<major*0.00001 || abs(distance)<=flatWidth)return clamp(0.5+distance/major,0.0,1.0);
+      float tail=halfWidth-abs(distance);tail=tail*tail/(2.0*major*minor);
+      return distance<0.0?tail:1.0-tail;
+    }
     void main(){
-      if(vRad<1.24 || vRad>2.27) discard;
+      vec2 gradient=abs(vec2(dFdx(vRad),dFdy(vRad)));
+      float major=max(gradient.x,gradient.y),minor=min(gradient.x,gradient.y);
+      float coverage=max(0.0,ringEdgeCoverage(vRad-1.24,major,minor)-ringEdgeCoverage(vRad-2.27,major,minor));
+      if(coverage<=0.0)discard;
       vec4 rc=uMapReady>0.5 ? texture2D(uRingMap,vec2((vRad-1.24)/1.03,0.5)) : vec4(0.80,0.74,0.61,0.7);
       if(vRad>1.93 && vRad<2.02 && uMapReady<0.5) rc.a*=0.1;
       float sunHeight=abs(dot(uRingN,uSun)),visibility=eclipseAt(vRingP);
       float light=(0.10+0.90*sqrt(sunHeight))*uFlux*visibility;
       // Texture opacity encodes approximate optical depth; particle phase functions are not measured.
-      gl_FragColor=vec4(rc.rgb*light*uDisplayGain,rc.a*uAlpha);
+      gl_FragColor=vec4(rc.rgb*light*uDisplayGain,rc.a*uAlpha*coverage);
     }`;
-  var m=new THREE.ShaderMaterial({uniforms:u,vertexShader:vs,fragmentShader:fs,transparent:true,depthWrite:false,side:THREE.DoubleSide});
+  var m=new THREE.ShaderMaterial({uniforms:u,vertexShader:vs,fragmentShader:fs,transparent:true,depthWrite:false,side:THREE.DoubleSide,extensions:{derivatives:true}});
   if(tex!==WHITE) mapped.push({u:{uHasMap:u.uMapReady},t:tex});
   var geometry=new THREE.RingGeometry(1.2*u.uRingRadiusScale.value,2.3*u.uRingRadiusScale.value,192,1); geometry.rotateX(-Math.PI/2);
   var mesh=new THREE.Mesh(geometry,m); mesh.position.copy(pos); mesh.scale.setScalar(radius*K('p'));
@@ -1938,6 +1957,24 @@ function smallSurfaceAttribute(geometry,scale){
   for(var i=0;i<p.count;i++){a[i*4]=p.getX(i)/scale;a[i*4+1]=p.getY(i)/scale;a[i*4+2]=p.getZ(i)/scale;a[i*4+3]=scale;}
   geometry.setAttribute('aSurface',new THREE.BufferAttribute(a,4));
 }
+/* Full SphereGeometry keeps separate UV vertices along its seam and poles.
+   Smooth only these copies, once at creation. Topology avoids float rounding
+   at sin(2*pi), while positions, UVs and the faceted loose rocks stay intact. */
+function smallSmoothWorldNormals(geometry){
+  var normal=geometry.attributes.normal,width=geometry.parameters.widthSegments;
+  var height=geometry.parameters.heightSegments,stride=width+1;
+  function smoothCopies(start,count,step){
+    var x=0,y=0,z=0,i,index;
+    for(i=0;i<count;i++){index=start+i*step;x+=normal.getX(index);y+=normal.getY(index);z+=normal.getZ(index);}
+    var length=Math.sqrt(x*x+y*y+z*z);
+    if(!(length>0) || !Number.isFinite(length))return;
+    x/=length;y/=length;z/=length;
+    for(i=0;i<count;i++)normal.setXYZ(start+i*step,x,y,z);
+  }
+  for(var row=1;row<height;row++)smoothCopies(row*stride,2,width);
+  smoothCopies(0,stride,1);smoothCopies(height*stride,stride,1);
+  normal.needsUpdate=true;
+}
 /* The local spin axis is Y: measured X/Y equatorial diameters map to X/Z;
    measured polar Z maps to Y. Extents are fitted after procedural relief. */
 function smallWorldShape(spec){
@@ -1959,7 +1996,7 @@ function smallWorldShape(spec){
   for(i=0;i<p.count;i++){v.fromBufferAttribute(p,i).normalize();v.multiplyScalar(radial(v.x,v.y,v.z));p.setXYZ(i,v.x,v.y,v.z);min.min(v);max.max(v);}
   var centre=min.clone().add(max).multiplyScalar(0.5),fit=new THREE.Vector3(2*half.x/(max.x-min.x),2*half.y/(max.y-min.y),2*half.z/(max.z-min.z));
   for(i=0;i<p.count;i++){v.fromBufferAttribute(p,i).sub(centre).multiply(fit);p.setXYZ(i,v.x,v.y,v.z);}
-  geometry.computeVertexNormals();geometry.computeBoundingBox();geometry.computeBoundingSphere();smallSurfaceAttribute(geometry,Math.max(half.x,half.y,half.z));
+  geometry.computeVertexNormals();smallSmoothWorldNormals(geometry);geometry.computeBoundingBox();geometry.computeBoundingSphere();smallSurfaceAttribute(geometry,Math.max(half.x,half.y,half.z));
   return {geometry:geometry,half:half,point:function(direction,out){return out.copy(direction).multiplyScalar(radial(direction.x,direction.y,direction.z)).sub(centre).multiply(fit);}};
 }
 /* Three shared irregular prototypes. Their largest box extent is exactly two
@@ -2826,9 +2863,16 @@ var RENDER_LEVELS = [
 var RENDER_BUDGET = {level:3, ema:0, slow:0, fast:0, lastChange:0, lastResize:0, lastSample:0,
   resizeCount:0, volumePasses:0, blackHolePass:false};
 var VOLUME_CACHE = {valid:false, signature:[], scratch:[], hits:0, renders:0};
+var RENDER_CONTEXT_LOST = false;
 function invalidateVolumeCache(){ VOLUME_CACHE.valid = false; }
-canvas.addEventListener('webglcontextlost', invalidateVolumeCache);
-canvas.addEventListener('webglcontextrestored', invalidateVolumeCache);
+function renderContextLost(){
+  RENDER_CONTEXT_LOST=true;invalidateVolumeCache();resetBlackHoleSkyCache();
+}
+function renderContextRestored(){
+  RENDER_CONTEXT_LOST=false;invalidateVolumeCache();resetBlackHoleSkyCache();
+}
+canvas.addEventListener('webglcontextlost', renderContextLost);
+canvas.addEventListener('webglcontextrestored', renderContextRestored);
 var rtMain = mkTarget(true), rtVol = mkTarget(false), rtComp = mkTarget(false), rtDown = [], rtUp = [], BL = 5, volScale = 1.0;
 // Reuse the main pass depth attachment to keep nearby opaque bodies in front
 // of the accumulated distant gas. No extra scene draw or full-size colour target.
@@ -2907,13 +2951,27 @@ var bhMat = postMat('uniform sampler2D tScene; uniform samplerCube tSky; uniform
   ' vec2 q = vec2(dot(d, uRight)/(z*uTanF*uAspect), dot(d, uUp)/(z*uTanF)); float m = max(abs(q.x), abs(q.y));' +
   ' if(m >= 1.0) return allSky;' +
   ' return mix(texture2D(tScene, q*0.5 + 0.5).rgb, allSky, uSkyReady*smoothstep(0.84, 1.0, m)); }' +
+  /* First-order primitive of the SAME ray acceleration along x=perp+rd*s:
+     a=-1.5*b^2*x/|x|^5. Its transverse component integrates to
+     -perp/b^2*(1.5*u-0.5*u^3), u=s/sqrt(b^2+s^2). Keeping the parallel
+     component also handles a finite observer, including outward-looking rays. */
+  'vec3 lensWeakDelta(vec3 perp, vec3 rd, float b2, float observerS){' +
+  ' if(b2<=0.0) return vec3(0.0);' +
+  ' float r=sqrt(b2+observerS*observerS), u=observerS/r, factor;' +
+  /* For outgoing near-axis rays, 1-1.5u+0.5u^3 is almost zero. Factor it
+     as 0.5*(1-u)^2*(u+2), obtaining 1-u without subtracting two close floats.
+     This avoids subtracting two O(1/b) primitives in Float32. */
+  ' if(observerS>=0.0){float q=b2/(r*(r+observerS));factor=0.5*q*q*(u+2.0);}' +
+  ' else factor=1.0-1.5*u+0.5*u*u*u;' +
+  ' return -perp/b2*factor-rd*(0.5*b2/(r*r*r)); }' +
   'void main(){ vec2 ndc = vUv*2.0 - 1.0;' +
   ' vec3 rd = normalize(uFwd + uRight*(ndc.x*uAspect*uTanF) + uUp*(ndc.y*uTanF));' +
   ' float tm = -dot(uRo, rd); vec3 perp = uRo + rd*tm; float b = length(perp); float ro2 = dot(uRo, uRo);' +
   ' const float RS = 45.0;' +
   ' if(b > RS || (tm < 0.0 && ro2 > RS*RS)){' +                  /* passes far from the hole: only the slight bending of starlight */
-  '  vec3 d0 = rd; if(tm > 0.0){ d0 = normalize(rd - perp/b*(2.0/b)); } gl_FragColor = vec4(sky(d0), 1.0); return; }' +
+  '  vec3 d0=normalize(rd+lensWeakDelta(perp,rd,b*b,-tm)); gl_FragColor = vec4(sky(d0), 1.0); return; }' +
   ' vec3 x = ro2 > RS*RS ? perp - rd*sqrt(RS*RS - b*b) : uRo; vec3 v = rd;' +
+  ' float startS=dot(x,rd);' +
   ' vec3 hv = cross(x, v); float h2 = dot(hv, hv);' +
   ' vec3 e1 = normalize(cross(uDn, vec3(0.31, 0.12, 0.94))); vec3 e2 = cross(uDn, e1);' +
   ' vec3 col = vec3(0.0); float T = 1.0; float fell = 0.0;' +
@@ -2943,7 +3001,20 @@ var bhMat = postMat('uniform sampler2D tScene; uniform samplerCube tSky; uniform
   '    float al = clamp(0.35 + 1.1*tex, 0.0, 1.0)*0.94*fade;' +
   '    col += T*hue*inten*2.6*al; T *= 1.0 - al; } }' +
   '  x = xn; if(T < 0.01) break; }' +
-  ' if(fell < 0.5){ col += T*sky(normalize(v)); }' +
+  ' if(fell < 0.5){' +
+  /* Matched weak-field tails: subtract the first-order contribution of the
+     marched segment before adding observer-to-infinity bending. Fade only
+     its higher-order remainder near the cutoff, so both sides meet exactly.
+     Inbound b<=18 rays (the photon ring and disc) retain the existing result.
+     Outward rays also converge at observer radius 45, avoiding another seam. */
+  '  if(b>18.0 || (tm<0.0 && ro2>576.0)){' +
+  '   float observerR=sqrt(ro2), outward=tm<0.0?1.0:0.0;' +
+  '   float tailMix=max(smoothstep(18.0,24.0,b),outward*smoothstep(24.0,32.0,observerR));' +
+  '   float outerMix=max(smoothstep(32.0,45.0,b),outward*smoothstep(32.0,45.0,observerR));' +
+  '   vec3 insideDelta=lensWeakDelta(perp,rd,b*b,startS)-lensWeakDelta(perp,rd,b*b,dot(x,rd));' +
+  '   vec3 remainder=v-rd-insideDelta;' +
+  '   v+=tailMix*(lensWeakDelta(perp,rd,b*b,-tm)-insideDelta-outerMix*remainder);' +
+  '  } col += T*sky(normalize(v)); }' +
   ' gl_FragColor = vec4(col, 1.0); }', bhU);
 var rtBH = mkTarget(false);
 /* The black-hole shader can look behind the observer. Cache the actual scene in six
@@ -2952,6 +3023,16 @@ var rtBH = mkTarget(false);
 var bhSky = {target:null, write:null, camera:null, size:0, ready:false, failed:false, dirty:true, useHDR:HDR,
   face:0, tile:0, lastFace:-1e9, lastUpdate:-1e9, hole:null, scale:null, cycleHole:null, cycleScale:null,
   origin:new THREE.Vector3(), captureOrigin:new THREE.Vector3()};
+function resetBlackHoleSkyCache(){
+  if(!bhSky)return;
+  bhSky.ready=false;bhSky.failed=false;bhSky.dirty=true;bhSky.size=0;
+  bhSky.face=bhSky.tile=0;bhSky.lastFace=bhSky.lastUpdate=-1e9;
+  bhSky.hole=bhSky.scale=bhSky.cycleHole=bhSky.cycleScale=null;
+  bhSky.origin.set(0,0,0);bhSky.captureOrigin.set(0,0,0);
+  bhU.uSkyReady.value=0;bhU.tSky.value=null;
+  // Retain the old target references until ensureBlackHoleSky disposes them.
+  // A restored context must capture all six faces into newly allocated targets.
+}
 function makeSkyTarget(size){
   return new THREE.WebGLCubeRenderTarget(size, {minFilter:THREE.LinearFilter, magFilter:THREE.LinearFilter,
     type:bhSky.useHDR ? THREE.HalfFloatType : THREE.UnsignedByteType, generateMipmaps:false, depthBuffer:true, stencilBuffer:false});
@@ -2970,6 +3051,7 @@ function ensureBlackHoleSky(){
   bhSky.cycleHole = null; bhU.uSkyReady.value = 0; bhU.tSky.value = null;
 }
 function captureSkyFaces(first, count, tile){
+  if(RENDER_CONTEXT_LOST || gl.isContextLost())return false;
   var state = {right:VIEW.right.value.clone(), up:VIEW.up.value.clone(), fwd:VIEW.fwd.value.clone(),
     tan:VIEW.tanF.value, aspect:VIEW.aspect.value, target:renderer.getRenderTarget(),
     face:renderer.getActiveCubeFace ? renderer.getActiveCubeFace() : 0,
@@ -3051,7 +3133,7 @@ function captureSkyFaces(first, count, tile){
   }
 }
 function updateBlackHoleSky(hole){
-  if(bhSky.failed) return;
+  if(RENDER_CONTEXT_LOST || gl.isContextLost() || bhSky.failed) return;
   try{
     ensureBlackHoleSky();
     var now = performance.now()/1000;
@@ -3066,7 +3148,8 @@ function updateBlackHoleSky(hole){
       bhSky.captureOrigin.copy(P);
     }
     if(now - bhSky.lastFace < (QUALITY_MODE === 'auto' ? 0.12 : QUALITY_MODE === 'balanced' ? 1/15 : 1/30)) return;
-    captureSkyFaces(bhSky.face, 1, bhSky.tile);
+    if(captureSkyFaces(bhSky.face, 1, bhSky.tile)===false)return;
+    if(RENDER_CONTEXT_LOST || gl.isContextLost()){renderContextLost();return;}
     bhSky.tile++; bhSky.lastFace = now;
     var side = Math.ceil(bhSky.size/(QUALITY_MODE === 'high' ? 256 : 128));
     if(bhSky.tile === side*side){ bhSky.tile = 0; bhSky.face++; }
@@ -3079,6 +3162,7 @@ function updateBlackHoleSky(hole){
   }catch(err){
     /* A failed optional cache must not disable the normal renderer/HDR fallback. */
     bhU.uSkyReady.value = 0;
+    if(RENDER_CONTEXT_LOST || gl.isContextLost()){renderContextLost();return;}
     if(bhSky.useHDR && !gl.isContextLost()){
       bhSky.useHDR = false; bhSky.size = 0; bhSky.ready = false;
       return; /* Retry the cache using ordinary RGBA without changing main HDR. */
@@ -3144,6 +3228,12 @@ function setQuality(mode){
 }
 setQuality('high');
 function pass(mat, target){ postQuad.material = mat; renderer.setRenderTarget(target); renderer.render(postScene, postCam); }
+/* Main/volume targets are explicitly cleared once by their caller. Leave the
+   post passes' tile-friendly automatic clears and the caller's setting intact. */
+function renderSceneWithoutClear(drawScene,viewCamera){
+  var auto=renderer.autoClear;renderer.autoClear=false;
+  try{renderer.render(drawScene,viewCamera);}finally{renderer.autoClear=auto;}
+}
 var vL = new THREE.Vector3();
 /* Test the view's side planes and forward half-space against a world-space sphere.
    The subtraction stays in JS double precision; GPU astronomical coordinates are
@@ -3383,7 +3473,7 @@ function renderVisibleVolumes(viewCamera, target){
         else{renderer.getScissor(drawContext.scissor).multiplyScalar(renderer.getPixelRatio()).floor();drawContext.scissorTest=renderer.getScissorTest();}
       }
       volumeScissorContext=drawContext;
-      renderer.render(volScene, viewCamera);
+      renderSceneWithoutClear(volScene, viewCamera);
       if(main) VOLUME_CACHE.renders++;
     }
     if(cacheable && !gl.isContextLost()){
@@ -3413,8 +3503,9 @@ function blackHoleAffectsView(hole){
   return pixels >= 0.5;
 }
 function drawFrame(){
+  if(RENDER_CONTEXT_LOST || gl.isContextLost())return;
   var w = rtMain.width, h = rtMain.height, i;
-  renderer.setRenderTarget(rtMain); renderer.setClearColor(0x000000, 1); renderer.clear(); renderer.render(scene, camera);
+  renderer.setRenderTarget(rtMain); renderer.setClearColor(0x000000, 1); renderer.clear(); renderSceneWithoutClear(scene, camera);
   RENDER_BUDGET.volumePasses = renderVisibleVolumes(camera, rtVol);
   var scene0 = rtMain;
   if(RENDER_BUDGET.volumePasses){
@@ -3547,10 +3638,15 @@ camera.rotation.order = 'YXZ';
 
 /* left pad: turn your view */
 var stick = $('#stick'), knob = $('#knob'), stickId = null;
+function manualLook(){
+  homing = false;
+  if(typeof cancelExplorerTravel === 'function') cancelExplorerTravel();
+}
 function stickMove(e){
   var r = stick.getBoundingClientRect(), R = r.width/2;
   var dx = (e.clientX - (r.left + R))/(R*0.72), dy = (e.clientY - (r.top + R))/(R*0.72);
   var m = Math.hypot(dx, dy); if(m > 1){ dx /= m; dy /= m; }
+  if(dx !== 0 || dy !== 0) manualLook();
   look.x = dx; look.y = dy;
   knob.style.transform = 'translate(' + (dx*R*0.55).toFixed(1) + 'px,' + (dy*R*0.55).toFixed(1) + 'px)';
 }
@@ -3624,6 +3720,7 @@ canvas.addEventListener('pointermove', function(e){
   var dx = e.clientX - t.x, dy = e.clientY - t.y; t.x = e.clientX; t.y = e.clientY;
   if(touches.size === 1){
     /* Swipe steers in the same direction as the joystick; zoom makes turning finer. */
+    if(dx !== 0 || dy !== 0) manualLook();
     yaw -= dx*0.0035/tele; pitch = clamp(pitch - dy*0.0035/tele, -1.5, 1.5);
   } else if(touches.size === 2){
     var d = touchDist();
@@ -3638,7 +3735,13 @@ teleButton.addEventListener('click', function(){ if(telescopeActive()) closeTele
 function teleText(v){ return v < 10 ? (Math.round(v*10)/10) + '\u00d7' : Math.round(v).toLocaleString('en-US') + '\u00d7'; }
 updateTelescopeControl();
 var keys = {};
-window.addEventListener('keydown', function(e){ if(e.target && (e.target.isContentEditable || /^(INPUT|TEXTAREA|SELECT|BUTTON)$/.test(e.target.tagName))) return; keys[e.key.toLowerCase()] = true; if(e.key.indexOf('Arrow') === 0 || e.key === ' ') e.preventDefault(); if(e.key.toLowerCase() === 'w' || e.key.toLowerCase() === 's'){ homing = false; if(typeof cancelExplorerTravel === 'function') cancelExplorerTravel(); } });
+window.addEventListener('keydown', function(e){
+  if(e.target && (e.target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName))) return;
+  if(e.target && e.target.tagName === 'BUTTON' && (e.key === 'Enter' || e.key === ' ')) return;
+  var key = e.key.toLowerCase(); keys[key] = true;
+  if(e.key.indexOf('Arrow') === 0 || e.key === ' ') e.preventDefault();
+  if(key === 'w' || key === 's' || key.indexOf('arrow') === 0) manualLook();
+});
 window.addEventListener('keyup', function(e){ keys[e.key.toLowerCase()] = false; });
 function resetFlightInput(){
   keys={};thrust=0;held=0;look.x=look.y=0;stickId=null;touches.clear();pinchD=0;
@@ -3823,9 +3926,7 @@ function cancelExplorerTravel(){
   syncExplorerTravel();
 }
 function explorerResetInput(){
-  keys = {}; thrust = 0; held = 0; homing = false;
-  look.x = look.y = 0; knob.style.transform = 'translate(0,0)';
-  $('#fwd').classList.remove('on'); $('#back').classList.remove('on');
+  resetFlightInput(); homing = false;
 }
 function beginExplorerTravel(afterTravel){
   var m = EXPLORER.selected; if(!m) return;
@@ -4103,11 +4204,21 @@ document.addEventListener('visibilitychange',function(){
   last=performance.now();frameDeadline=0;frameTimingReset=true;
   if(document.hidden && typeof resetFlightInput==='function')resetFlightInput();
 });
+canvas.addEventListener('webglcontextlost',function(){
+  resetFlightInput();last=performance.now();frameDeadline=0;frameTimingReset=true;
+});
+canvas.addEventListener('webglcontextrestored',function(){
+  // Three rebuilds its GL state. Retry the full pipeline with a fresh clock,
+  // rather than retaining a fallback or a time step from the lost context.
+  plain=false;resetFlightInput();last=performance.now();frameDeadline=0;frameTimingReset=true;
+});
 var pick = [];
 function frame(now){
   if(!BOOT.ready && !BOOT.firstFrame)return;
   if(BOOT.ready)requestAnimationFrame(frame);
-  if(document.hidden){last=now;frameDeadline=0;frameTimingReset=true;return;}
+  if(document.hidden || (typeof RENDER_CONTEXT_LOST!=='undefined' && RENDER_CONTEXT_LOST)){
+    last=now;frameDeadline=0;frameTimingReset=true;return;
+  }
   /* A 120 Hz display need not submit this expensive scene 120 times a second.
      Keep the deadline phase, so other refresh rates do not round down to 30 Hz. */
   if(frames>0 && now<frameDeadline-0.5)return;
