@@ -126,7 +126,22 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--gold);outline-o
 #fwd{width:104px;height:104px;font-size:17px;font-weight:600;border-color:rgba(243,217,162,.5) !important;color:var(--gold)}
 #back{width:66px;height:66px;font-size:13px;color:var(--ink-dim)}
 #fly button.on{background:rgba(243,217,162,.22)}
-#fail{position:fixed;inset:0;z-index:20;display:flex;align-items:center;justify-content:center;padding:32px;text-align:center;background:var(--space);font-size:15px;line-height:1.7}
+#loading{position:fixed;inset:0;z-index:30;display:grid;place-items:center;padding:28px;background:radial-gradient(ellipse at 50% 42%,#111522 0,#030408 65%)}
+#loading[hidden]{display:none}
+.loading-card{width:min(300px,100%);text-align:center}
+.loading-orbit{width:54px;height:54px;margin:0 auto 28px;border:1px solid rgba(243,217,162,.22);border-radius:50%;position:relative}
+.loading-orbit::before{content:'';position:absolute;inset:11px;border:1px solid rgba(243,217,162,.5);border-radius:50%}
+.loading-orbit::after{content:'';position:absolute;right:5px;top:5px;width:5px;height:5px;border-radius:50%;background:var(--gold);box-shadow:0 0 14px rgba(243,217,162,.45)}
+#loading h2{margin:0 0 14px;font-size:22px;letter-spacing:.14em;font-weight:500}
+#loadingStage{margin:0;color:var(--ink-dim);font-size:13px;min-height:20px}
+#loadingProgress{display:block;width:100%;height:3px;margin:25px 0 12px;border:0;border-radius:2px;overflow:hidden;background:rgba(238,240,246,.1);accent-color:var(--gold)}
+#loadingProgress::-webkit-progress-bar{background:rgba(238,240,246,.1)}
+#loadingProgress::-webkit-progress-value{background:var(--gold)}
+#loadingProgress::-moz-progress-bar{background:var(--gold)}
+#loadingCount,#loadingNote{font-size:11px;line-height:1.7;color:var(--ink-faint);margin:0}
+#loadingNote{min-height:19px;margin-top:8px}
+body.booting>:not(#loading):not(#fail):not(script){visibility:hidden}
+#fail{position:fixed;inset:0;z-index:40;display:flex;align-items:center;justify-content:center;padding:32px;text-align:center;background:var(--space);font-size:15px;line-height:1.7}
 #fail[hidden]{display:none}
 @media (min-width:860px){
   #hud{padding-left:28px}
@@ -291,7 +306,17 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--gold);outline-o
 
 </style>
 </head>
-<body>
+<body class="booting" aria-busy="true">
+<div id="loading" role="status" aria-live="polite" aria-atomic="true">
+  <div class="loading-card">
+    <div class="loading-orbit" aria-hidden="true"></div>
+    <h2>正在載入宇宙</h2>
+    <p id="loadingStage">準備星空</p>
+    <progress id="loadingProgress" value="0" max="1" aria-label="載入進度"></progress>
+    <p id="loadingCount">正在整理天體資料</p>
+    <p id="loadingNote"></p>
+  </div>
+</div>
 <canvas id="gl" tabindex="0" aria-label="第一人稱宇宙視圖：左下轉頭，右下前進；鍵盤可用方向鍵轉頭、W 前進、S 後退"></canvas>
 <div id="labels"></div>
 
@@ -415,9 +440,13 @@ window.ASSETS = {"n":16166,"data":"m/dFQL+8Ur0S/UBA46W3QGZmZj88ePO/7DPPQDU0ekAAA
 
 // Source: 00-core.js
 (function(){
+function initializeUniverse(){
 'use strict';
 var $ = function(s){ return document.querySelector(s); };
-function fail(m){ $('#failT').textContent = m; $('#fail').hidden = false; }
+function fail(m){
+  $('#failT').textContent = m;$('#fail').hidden = false;
+  $('#loading').hidden=true;document.body.setAttribute('aria-busy','false');
+}
 if(!window.THREE){ fail('3D 繪圖元件沒有載入成功。請確認網路連線後重新整理頁面。'); return; }
 var canvas = $('#gl'), renderer;
 /* The final pass covers every canvas pixel; default-framebuffer MSAA only adds
@@ -513,21 +542,40 @@ var BODY_VS = 'varying vec3 vObj; varying vec3 vNw; varying vec3 vNv; varying ve
 /* Real surface maps (Solar System Scope, CC BY 4.0) are wrapped round the bodies that have them. */
 var WHITE = (function(){ var t = new THREE.DataTexture(new Uint8Array([255,255,255,255]), 1, 1, THREE.RGBAFormat); t.needsUpdate = true; return t; })();
 var ASSETS = window.ASSETS || {tex:{}, named:{}, n:0};
+var STARTUP_TEXTURES = [];
 function loadMap(key){
   var uri = ASSETS.tex && ASSETS.tex[key]; if(!uri) return null;
-  var t;
+  var t, task={key:key,done:false,ok:false}, finish, timeout;
+  task.promise=new Promise(function(resolve){
+    finish=function(ok){
+      if(task.done)return;
+      task.done=true;task.ok=ok;clearTimeout(timeout);
+      if(t){
+        if(!ok){
+          // A valid black pixel is safe for optional night/cloud maps; surface
+          // and ring maps retain their existing procedural fallback (ready=false).
+          var fallback=document.createElement('canvas');fallback.width=fallback.height=1;t.image=fallback;
+        }
+        t.needsUpdate=true;t.ready=ok;
+      }
+      resolve(task);
+    };
+  });
+  STARTUP_TEXTURES.push(task);
   if(window.__texDecode){                       /* test rigs without an image decoder supply their own */
-    var d = window.__texDecode(uri); if(!d) return null;
+    var d = window.__texDecode(uri); if(!d){finish(false);return null;}
     t = new THREE.DataTexture(d.data, d.width, d.height, THREE.RGBAFormat);
   } else {
-    if(typeof Image === 'undefined') return null;
+    if(typeof Image === 'undefined'){finish(false);return null;}
     var img = new Image(); t = new THREE.Texture(img);
-    img.onload = function(){ t.needsUpdate = true; t.ready = true; }; img.src = uri;
+    img.onload = function(){ finish(true); };img.onerror = function(){ finish(false); };
+    timeout=setTimeout(function(){finish(false);},15000);img.src = uri;
   }
   t.flipY = false; t.wrapS = THREE.RepeatWrapping; t.wrapT = THREE.ClampToEdgeWrapping;
   t.minFilter = THREE.LinearMipmapLinearFilter; t.magFilter = THREE.LinearFilter; t.generateMipmaps = true;
   t.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy ? renderer.capabilities.getMaxAnisotropy() : 1);
-  if(window.__texDecode){ t.needsUpdate = true; t.ready = true; }
+  task.texture=t;
+  if(window.__texDecode)finish(true);
   return t;
 }
 
@@ -824,22 +872,52 @@ function airDepthIntegral(radius,mu,A,steps){
   }
   return [odR,odM];
 }
-function airDepthLookup(A){
-  var key=[A.top,A.shR,A.shM].join(':');if(airDepthCache[key])return airDepthCache[key];
-  var width=128,height=64,data=new Uint8Array(width*height*4);
-  for(var y=0;y<height;y++){
-    var h=y/(height-1),radius=1+(A.top-1)*h*h,horizon=-Math.sqrt(Math.max(0,1-1/(radius*radius)));
-    for(var x=0;x<width;x++){
-      var q=x/(width-1),mu=horizon+(1-horizon)*q*q,od=airDepthIntegral(radius,mu,A,40),i=(y*width+x)*4;
-      var r=Math.round(Math.min(1,od[0])*65535),m=Math.round(Math.min(1,od[1])*65535);
-      data[i]=r>>8;data[i+1]=r&255;data[i+2]=m>>8;data[i+3]=m&255;
-    }
-  }
-  var texture=new THREE.DataTexture(data,width,height,THREE.RGBAFormat,THREE.UnsignedByteType);
-  texture.minFilter=THREE.LinearFilter;texture.magFilter=THREE.LinearFilter;texture.generateMipmaps=false;
-  texture.wrapS=texture.wrapT=THREE.ClampToEdgeWrapping;texture.needsUpdate=true;
-  return airDepthCache[key]={texture:texture,size:new THREE.Vector2(width,height)};
+/* Keep first-visit lookup generation out of a flight frame. The shader keeps
+   its analytic fallback until every texel of the identical table is ready. */
+var airDepthJobs=Object.create(null),airDepthQueue=[],airDepthTask=null,airDepthTaskIdle=false;
+function scheduleAirDepth(){
+  if(airDepthTask!==null || !airDepthQueue.length || document.hidden)return;
+  airDepthTaskIdle=typeof window.requestIdleCallback==='function';
+  airDepthTask=airDepthTaskIdle?window.requestIdleCallback(workAirDepth,{timeout:200}):setTimeout(workAirDepth,8);
 }
+function workAirDepth(deadline){
+  airDepthTask=null;
+  if(document.hidden || !airDepthQueue.length)return;
+  var job=airDepthQueue[0],A=job.profile,width=128,height=64,began=performance.now(),count=0;
+  while(job.at<width*height){
+    var y=Math.floor(job.at/width),x=job.at%width;
+    var h=y/(height-1),radius=1+(A.top-1)*h*h,horizon=-Math.sqrt(Math.max(0,1-1/(radius*radius)));
+    var q=x/(width-1),mu=horizon+(1-horizon)*q*q,od=airDepthIntegral(radius,mu,A,40),i=job.at*4;
+    var r=Math.round(Math.min(1,od[0])*65535),m=Math.round(Math.min(1,od[1])*65535);
+    job.data[i]=r>>8;job.data[i+1]=r&255;job.data[i+2]=m>>8;job.data[i+3]=m&255;
+    job.at++;count++;
+    if(count%16===0 && (count>=1024 || performance.now()-began>=2 || (deadline && deadline.timeRemaining()<1)))break;
+  }
+  if(job.at===width*height){
+    var texture=new THREE.DataTexture(job.data,width,height,THREE.RGBAFormat,THREE.UnsignedByteType);
+    texture.minFilter=THREE.LinearFilter;texture.magFilter=THREE.LinearFilter;texture.generateMipmaps=false;
+    texture.wrapS=texture.wrapT=THREE.ClampToEdgeWrapping;texture.needsUpdate=true;
+    airDepthCache[job.key]={texture:texture,size:new THREE.Vector2(width,height)};
+    delete airDepthJobs[job.key];airDepthQueue.shift();
+  }
+  scheduleAirDepth();
+}
+function airDepthLookup(A,priority){
+  var key=[A.top,A.shR,A.shM].join(':');if(airDepthCache[key])return airDepthCache[key];
+  var job=airDepthJobs[key];
+  if(!job){
+    job={key:key,profile:{top:A.top,shR:A.shR,shM:A.shM},data:new Uint8Array(128*64*4),at:0};
+    airDepthJobs[key]=job;airDepthQueue.push(job);
+  }
+  if(priority && airDepthQueue[0]!==job){airDepthQueue.splice(airDepthQueue.indexOf(job),1);airDepthQueue.unshift(job);}
+  scheduleAirDepth();return null;
+}
+document.addEventListener('visibilitychange',function(){
+  if(document.hidden && airDepthTask!==null){
+    if(airDepthTaskIdle)window.cancelIdleCallback(airDepthTask);else clearTimeout(airDepthTask);
+    airDepthTask=null;
+  } else if(!document.hidden)scheduleAirDepth();
+});
 /* scattering strength per colour, haze strength, the two scale heights, where the air ends, sunlight strength */
 var AIRS = {
   '地球':{kr:[37.0, 86.0, 210.0], km:21, shR:0.0012557, shM:0.0001884, top:1.02, I:8.5},
@@ -1221,6 +1299,7 @@ function nebula(pos, R, type, seed, tintA, tintB, extra, a, b, c, d){
   var m = volMaterial(VOL_FS, {uFine:{value:new THREE.Vector3()}, uType:{value:type}, uSeed:{value:seed}, uAxis:{value:pos.clone().normalize().negate()}, uExtra:{value:extra},
     uTintA:{value:new THREE.Vector3().fromArray(tintA)}, uTintB:{value:new THREE.Vector3().fromArray(tintB)}}, NEB_STEPS);
   var mesh = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), m); mesh.renderOrder = 6;
+  mesh.onBeforeRender = volumeScissorBeforeRender; mesh.onAfterRender = volumeScissorAfterRender;
   var Y = addLayer(mesh, a, b, c, d, volScene);
   var rec = {m:mesh, w:pos.clone(), R:R*REACH[type], layer:Y};
   mesh.userData.volumeBounds = {record:rec, nebula:true};
@@ -1234,6 +1313,7 @@ function galaxyVol(centre, R, normal, o, a, b, c, d){
   var m = volMaterial(GALV_FS, {uM:{value:M}, uArms:{value:o.arms || 2}, uB:{value:o.b || 0.2}, uR0:{value:o.r0 || 0.2}, uSeed:{value:o.seed || 1}, uKind:{value:o.kind || 0}, uGain:{value:1},
     uCore:{value:new THREE.Vector3().fromArray(o.core)}, uArmCol:{value:new THREE.Vector3().fromArray(o.arm)}}, GAL_STEPS);
   var mesh = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), m); mesh.renderOrder = 3;
+  mesh.onBeforeRender = volumeScissorBeforeRender; mesh.onAfterRender = volumeScissorAfterRender;
   addLayer(mesh, a, b, c, d, volScene);
   var rec = {m:mesh, w:centre.clone(), R:R, M:M};
   mesh.userData.volumeBounds = {record:rec, nebula:false}; gals.push(rec);
@@ -1424,7 +1504,7 @@ function updateSurfaceDetails(dt){
     if(airPx>0){
       if(!a.userData.airLutReady && airPx>1){
         var lookup=airDepthLookup(a.userData.airProfile);
-        au.uAirLut.value=lookup.texture;au.uAirLutSize.value=lookup.size;au.uAirLutReady.value=1;a.userData.airLutReady=true;
+        if(lookup){au.uAirLut.value=lookup.texture;au.uAirLutSize.value=lookup.size;au.uAirLutReady.value=1;a.userData.airLutReady=true;}
       }
       a.geometry=surfaceGeometry(high?(airPx>180?192:airPx>45?96:48):(airPx>850?128:airPx>240?96:airPx>90?64:48));
       a.getWorldPosition(surfaceV);a.getWorldScale(surfaceV2);
@@ -2711,7 +2791,9 @@ var VOLUME_MATERIAL_STATE = ['visible','transparent','opacity','side','depthTest
    An unfamiliar uniform type disables reuse instead of guessing at its state. */
 function appendVolumeValue(value, out, gpuFloat){
   if(value === null || value === undefined || typeof value === 'number' || typeof value === 'boolean' || typeof value === 'string'){
-    out.push(gpuFloat && typeof value === 'number' ? Math.fround(value) : value); return true;
+    var scalar=gpuFloat && typeof value==='number'?Math.fround(value):value;
+    if(typeof scalar==='number' && !Number.isFinite(scalar))return false;
+    out.push(scalar);return true;
   }
   out.push(value);
   if(value.isTexture){
@@ -2725,12 +2807,22 @@ function appendVolumeValue(value, out, gpuFloat){
     return true;
   }
   if(value.isVector2 || value.isVector3 || value.isVector4 || value.isQuaternion){
-    out.push(gpuFloat ? Math.fround(value.x) : value.x, gpuFloat ? Math.fround(value.y) : value.y,
-      gpuFloat && value.z !== undefined ? Math.fround(value.z) : value.z, gpuFloat && value.w !== undefined ? Math.fround(value.w) : value.w); return true;
+    var x=gpuFloat?Math.fround(value.x):value.x,y=gpuFloat?Math.fround(value.y):value.y;
+    var z=gpuFloat && value.z!==undefined?Math.fround(value.z):value.z,w=gpuFloat && value.w!==undefined?Math.fround(value.w):value.w;
+    if(!Number.isFinite(x) || !Number.isFinite(y) || (z!==undefined && !Number.isFinite(z)) || (w!==undefined && !Number.isFinite(w)))return false;
+    out.push(x,y,z,w);return true;
   }
-  if(value.isColor){ out.push(gpuFloat ? Math.fround(value.r) : value.r, gpuFloat ? Math.fround(value.g) : value.g, gpuFloat ? Math.fround(value.b) : value.b); return true; }
+  if(value.isColor){
+    var r=gpuFloat?Math.fround(value.r):value.r,g=gpuFloat?Math.fround(value.g):value.g,b=gpuFloat?Math.fround(value.b):value.b;
+    if(!Number.isFinite(r) || !Number.isFinite(g) || !Number.isFinite(b))return false;
+    out.push(r,g,b);return true;
+  }
   if(value.isMatrix3 || value.isMatrix4){
-    for(var m=0;m<value.elements.length;m++) out.push(gpuFloat ? Math.fround(value.elements[m]) : value.elements[m]); return true;
+    for(var m=0;m<value.elements.length;m++){
+      var element=gpuFloat?Math.fround(value.elements[m]):value.elements[m];
+      if(!Number.isFinite(element))return false;out.push(element);
+    }
+    return true;
   }
   if(Array.isArray(value) || ArrayBuffer.isView(value)){
     out.push(value.length);
@@ -2738,6 +2830,86 @@ function appendVolumeValue(value, out, gpuFloat){
     return true;
   }
   return false;
+}
+/* Reuse a full-resolution background only across an imperceptibly small
+   translation. Compare against the last rendered origin, never the last hit,
+   so motion accumulates and cannot freeze the sky during a long journey. */
+var VOLUME_ORIGIN_TAG={},VOLUME_ORIGIN_EPS=1.0e-7;
+var VOLUME_NEB_PROGRAM=VOL_FS.split('GSTEPS').join(String(NEB_STEPS)).split('STEPS').join(String(NEB_STEPS));
+var VOLUME_GAL_PROGRAM=GALV_FS.split('GSTEPS').join(String(GAL_STEPS)).split('STEPS').join(String(GAL_STEPS));
+/* Keep the original full-screen vertices, interpolation and fragment-coordinate
+   noise. A draw scissor only removes pixels outside the volume's enclosing
+   sphere. Three's state API accepts framebuffer pixels, unlike setScissor's
+   device-pixel-ratio-scaled default-canvas coordinates. */
+var volumeScissorContext=null;
+var volumeScissorOrigin=new THREE.Vector3(),volumeScissorRight=new THREE.Vector3(),
+  volumeScissorUp=new THREE.Vector3(),volumeScissorForward=new THREE.Vector3();
+function volumeScissorBounds(mesh,context,out){
+  var material=mesh.material,bounds=mesh.userData.volumeBounds,u=material && material.uniforms;
+  if(!bounds || !u || material.onBeforeCompile!==THREE.Material.prototype.onBeforeCompile ||
+    material.customProgramCacheKey!==THREE.Material.prototype.customProgramCacheKey || material.vertexShader!==VOL_VS ||
+    (material.precision || renderer.capabilities.precision)!=='highp' ||
+    material.fragmentShader!==(bounds.nebula?VOLUME_NEB_PROGRAM:VOLUME_GAL_PROGRAM))return false;
+  function gpuVector(to,from){return to.set(Math.fround(from.x),Math.fround(from.y),Math.fround(from.z));}
+  if(!u.uRo || !u.uRight || !u.uUp || !u.uFwd || !u.uTanF || !u.uAspect)return false;
+  var origin=gpuVector(volumeScissorOrigin,u.uRo.value),right=gpuVector(volumeScissorRight,u.uRight.value),
+    up=gpuVector(volumeScissorUp,u.uUp.value),forward=gpuVector(volumeScissorForward,u.uFwd.value);
+  if(!bounds.nebula){
+    if(!u.uM || !u.uM.value.isMatrix3)return false;
+    right.applyMatrix3(u.uM.value);up.applyMatrix3(u.uM.value);forward.applyMatrix3(u.uM.value);
+  }
+  var distance=origin.length(),error=Math.max(Math.abs(right.lengthSq()-1),Math.abs(up.lengthSq()-1),
+    Math.abs(forward.lengthSq()-1),Math.abs(right.dot(up)),Math.abs(right.dot(forward)),Math.abs(up.dot(forward)));
+  // A mutated non-orthonormal basis is outside the enclosing-sphere contract.
+  if(!Number.isFinite(distance) || !Number.isFinite(error) || error>0.0001)return false;
+  // Also enclose float32 multiply/normalization error at large origin values.
+  var radius=1+distance*(4*error+0.000002),x=-origin.dot(right),y=-origin.dot(up),z=-origin.dot(forward);
+  var tan=Math.fround(u.uTanF.value),aspect=Math.fround(u.uAspect.value);
+  if(!(tan>0 && aspect>0) || !Number.isFinite(tan*aspect) || distance<=radius || z<=radius*1.000001)return false;
+  var denom=z*z-radius*radius,spanX=radius*Math.sqrt(x*x+denom),spanY=radius*Math.sqrt(y*y+denom);
+  var loX=(x*z-spanX)/denom/(tan*aspect),hiX=(x*z+spanX)/denom/(tan*aspect),
+    loY=(y*z-spanY)/denom/tan,hiY=(y*z+spanY)/denom/tan;
+  if(!Number.isFinite(loX+hiX+loY+hiY))return false;
+  var v=context.viewport,base=context.scissor;
+  var left=Math.max(Math.floor(v.x),Math.floor(v.x+(Math.max(-1,loX)+1)*v.z*0.5)-1),
+    bottom=Math.max(Math.floor(v.y),Math.floor(v.y+(Math.max(-1,loY)+1)*v.w*0.5)-1),
+    rightEdge=Math.min(Math.ceil(v.x+v.z),Math.ceil(v.x+(Math.min(1,hiX)+1)*v.z*0.5)+1),
+    top=Math.min(Math.ceil(v.y+v.w),Math.ceil(v.y+(Math.min(1,hiY)+1)*v.w*0.5)+1);
+  if(context.scissorTest){left=Math.max(left,base.x);bottom=Math.max(bottom,base.y);rightEdge=Math.min(rightEdge,base.x+base.z);top=Math.min(top,base.y+base.w);}
+  out.set(Math.max(0,left),Math.max(0,bottom),Math.max(0,rightEdge-Math.max(0,left)),Math.max(0,top-Math.max(0,bottom)));
+  return true;
+}
+function restoreVolumeScissor(context){
+  if(!context || !context.owner)return;
+  context.renderer.state.scissor(context.scissor);context.renderer.state.setScissorTest(context.scissorTest);context.owner=null;
+}
+function volumeScissorBeforeRender(drawRenderer,drawScene){
+  var context=volumeScissorContext;
+  if(!context || context.renderer!==drawRenderer || drawScene!==volScene || this.onAfterRender!==volumeScissorAfterRender ||
+    drawRenderer.getRenderTarget()!==context.target || !volumeScissorBounds(this,context,context.rect))return;
+  context.owner=this;drawRenderer.state.scissor(context.rect);drawRenderer.state.setScissorTest(true);
+}
+function volumeScissorAfterRender(){
+  var context=volumeScissorContext;if(context && context.owner===this)restoreVolumeScissor(context);
+}
+function volumeOriginTolerance(mesh,origin,target){
+  var material=mesh.material,bounds=mesh.userData.volumeBounds,u=material.uniforms;
+  if(!bounds || !origin || !origin.isVector3 || material.vertexShader!==VOL_VS)return 0;
+  if(material.fragmentShader!==(bounds.nebula?VOLUME_NEB_PROGRAM:VOLUME_GAL_PROGRAM))return 0;
+  if(material.onBeforeCompile!==THREE.Material.prototype.onBeforeCompile || material.customProgramCacheKey!==THREE.Material.prototype.customProgramCacheKey)return 0;
+  var distance=origin.length();if(!Number.isFinite(distance))return 0;
+  // Close nebulae have much finer procedural structure and retain exact reuse.
+  if(bounds.nebula && (distance<1.2 || !u.uFine || u.uFine.value.lengthSq()>0))return 0;
+  var tolerance=VOLUME_ORIGIN_EPS;
+  // A galaxy occupies an oblate ellipsoid; use a conservative lower bound
+  // on distance to that surface, including the view-corner projection factor.
+  var nearest=bounds.nebula?distance-1:(Math.hypot(origin.x,origin.y*3.2,origin.z)-1)/3.2;
+  if(nearest>0){
+    var tan=VIEW.tanF.value,aspect=VIEW.aspect.value;
+    var angle=0.01*2*tan/(target.height*(1+tan*tan*(1+aspect*aspect)));
+    tolerance=Math.min(tolerance,nearest*angle/(1+angle));
+  }
+  return tolerance;
 }
 function snapshotVolumeState(target, viewCamera, out){
   out.length = 0;
@@ -2750,12 +2922,13 @@ function snapshotVolumeState(target, viewCamera, out){
     !appendVolumeValue(viewCamera.projectionMatrix, out, true) || !appendVolumeValue(viewCamera.matrixWorld, out, true) ||
     !appendVolumeValue(VIEW.right.value, out, true) || !appendVolumeValue(VIEW.up.value, out, true) || !appendVolumeValue(VIEW.fwd.value, out, true) ||
     !appendVolumeValue(volScene.background, out)) return false;
-  out.push(Math.fround(VIEW.tanF.value), Math.fround(VIEW.aspect.value));
+  if(!appendVolumeValue(VIEW.tanF.value,out,true) || !appendVolumeValue(VIEW.aspect.value,out,true))return false;
   for(var i=0;i<volScene.children.length;i++){
     var mesh = volScene.children[i]; if(!mesh.visible || !volScene.visible) continue;
     var material = mesh.material, geometry = mesh.geometry, bounds = mesh.userData.volumeBounds;
     if(!material || Array.isArray(material) || !geometry || !material.uniforms ||
-      mesh.onBeforeRender !== THREE.Object3D.prototype.onBeforeRender || mesh.onAfterRender !== THREE.Object3D.prototype.onAfterRender) return false;
+      !((mesh.onBeforeRender === THREE.Object3D.prototype.onBeforeRender && mesh.onAfterRender === THREE.Object3D.prototype.onAfterRender) ||
+        (mesh.onBeforeRender === volumeScissorBeforeRender && mesh.onAfterRender === volumeScissorAfterRender))) return false;
     out.push(mesh, mesh.renderOrder, mesh.layers.mask, mesh.frustumCulled, material, material.version,
       material.vertexShader, material.fragmentShader, geometry, geometry.index, geometry.index && geometry.index.version,
       geometry.drawRange.start, geometry.drawRange.count);
@@ -2772,24 +2945,44 @@ function snapshotVolumeState(target, viewCamera, out){
     for(var p=0;p<VOLUME_MATERIAL_STATE.length;p++) out.push(material[VOLUME_MATERIAL_STATE[p]]);
     var keys = Object.keys(material.uniforms); out.push(keys.length);
     for(var u=0;u<keys.length;u++){
-      out.push(keys[u]); if(!appendVolumeValue(material.uniforms[keys[u]].value, out, true)) return false;
+      var key=keys[u],value=material.uniforms[key].value;
+      out.push(key);
+      var tolerance=key==='uRo'?volumeOriginTolerance(mesh,value,target):0;
+      if(tolerance>0){
+        var ox=Math.fround(value.x),oy=Math.fround(value.y),oz=Math.fround(value.z);
+        if(!Number.isFinite(ox) || !Number.isFinite(oy) || !Number.isFinite(oz))return false;
+        out.push(VOLUME_ORIGIN_TAG,tolerance,ox,oy,oz);
+      }
+      else if(!appendVolumeValue(value,out,true))return false;
     }
   }
   return true;
 }
 function matchingVolumeState(a, b){
   if(a.length !== b.length) return false;
-  for(var i=0;i<a.length;i++) if(!Object.is(a[i], b[i])) return false;
+  for(var i=0;i<a.length;i++){
+    if(a[i]===VOLUME_ORIGIN_TAG){
+      if(b[i]!==VOLUME_ORIGIN_TAG)return false;
+      var limit=Math.min(a[i+1],b[i+1]),dx=a[i+2]-b[i+2],dy=a[i+3]-b[i+3],dz=a[i+4]-b[i+4];
+      if(!(dx*dx+dy*dy+dz*dz<=limit*limit))return false;
+      i+=4;
+    } else if(!Object.is(a[i],b[i]))return false;
+  }
   return true;
 }
 function renderVisibleVolumes(viewCamera, target){
-  hiddenVolumes.length = 0; var count = 0, i;
+  var previousScissorContext=volumeScissorContext,drawContext=null;
+  hiddenVolumes.length = 0; var count = 0, canScissor=true, i;
   for(i=0;volScene.visible && i<volScene.children.length;i++){
     var mesh = volScene.children[i]; if(!mesh.visible) continue;
     var bounds = mesh.userData.volumeBounds;
     if(bounds && !sphereIntersectsView(bounds.record.w, bounds.record.R*(bounds.nebula ? K('n') : 1))){
       mesh.visible = false; hiddenVolumes.push(mesh);
-    } else count++;
+    } else {
+      count++;
+      if(!((mesh.onBeforeRender===THREE.Object3D.prototype.onBeforeRender && mesh.onAfterRender===THREE.Object3D.prototype.onAfterRender) ||
+        (mesh.onBeforeRender===volumeScissorBeforeRender && mesh.onAfterRender===volumeScissorAfterRender)))canScissor=false;
+    }
   }
   try{
     /* Only the main volume target is reusable. Cube captures deliberately bypass
@@ -2801,6 +2994,17 @@ function renderVisibleVolumes(viewCamera, target){
     if(main) VOLUME_CACHE.valid = false;
     if(count){
       if(target){ renderer.setRenderTarget(target); renderer.setClearColor(0x000000, 0); renderer.clear(); }
+      var activeTarget=renderer.getRenderTarget();
+      // A custom scene hook/camera can change viewport state during render.
+      // Keep that generic path untouched; only known ordinary volume draws clip.
+      if(canScissor && !viewCamera.isArrayCamera && !viewCamera.viewport &&
+        volScene.onBeforeRender===THREE.Object3D.prototype.onBeforeRender && volScene.onAfterRender===THREE.Object3D.prototype.onAfterRender){
+        drawContext={renderer:renderer,target:activeTarget,owner:null,rect:new THREE.Vector4(),
+          viewport:renderer.getCurrentViewport(new THREE.Vector4()),scissor:new THREE.Vector4(),scissorTest:false};
+        if(activeTarget){drawContext.scissor.copy(activeTarget.scissor);drawContext.scissorTest=activeTarget.scissorTest;}
+        else{renderer.getScissor(drawContext.scissor).multiplyScalar(renderer.getPixelRatio()).floor();drawContext.scissorTest=renderer.getScissorTest();}
+      }
+      volumeScissorContext=drawContext;
       renderer.render(volScene, viewCamera);
       if(main) VOLUME_CACHE.renders++;
     }
@@ -2810,6 +3014,7 @@ function renderVisibleVolumes(viewCamera, target){
       VOLUME_CACHE.valid = true;
     }
   }finally{
+    restoreVolumeScissor(drawContext);volumeScissorContext=previousScissorContext;
     for(i=0;i<hiddenVolumes.length;i++) hiddenVolumes[i].visible = true;
     hiddenVolumes.length = 0;
   }
@@ -3159,8 +3364,13 @@ function updateExplorerDistance(){
   EXPLORER.distanceNode.textContent = fmtDist(distance);
   if(EXPLORER.lightNode) EXPLORER.lightNode.textContent = distance < 1e7 ? fmtLight(distance).replace(/^光要走 /, '') : '須依宇宙膨脹模型計算';
 }
+function prepareExplorerAtmosphere(m){
+  var air=m && m.solarBody && m.solarBody.atmosphere;
+  if(air && !air.userData.airLutReady && typeof airDepthLookup==='function')airDepthLookup(air.userData.airProfile,true);
+}
 function selectExplorerObject(m, showCard){
   m = explorerStableMark(m);
+  prepareExplorerAtmosphere(m);
   if(EXPLORER.mode !== 'free' && (!EXPLORER.selected || EXPLORER.selected.name !== m.name || !EXPLORER.selected.w.equals(m.w))) cancelExplorerTravel();
   EXPLORER.selected = m;
   var info = explorerInfo(m), card = $('#objectCard'), facts = $('#objectFacts');
@@ -3223,6 +3433,7 @@ function syncExplorerTravel(){
 }
 function cancelExplorerTravel(){
   if(typeof EXPLORER === 'undefined' || !EXPLORER) return;
+  if(EXPLORER.mode === 'free') return;
   EXPLORER.mode = 'free'; EXPLORER.elapsed = 0;
   syncExplorerTravel();
 }
@@ -3233,6 +3444,7 @@ function explorerResetInput(){
 }
 function beginExplorerTravel(afterTravel){
   var m = EXPLORER.selected; if(!m) return;
+  prepareExplorerAtmosphere(m);
   explorerResetInput();
   var radius = explorerSafeRadius(m);
   EXPLORER.direction.copy(P).sub(m.w);
@@ -3254,6 +3466,7 @@ function beginExplorerFollow(){
     if(EXPLORER.offset.lengthSq() < 1e-30) EXPLORER.offset.set(0.6,0.25,1);
     EXPLORER.offset.setLength(radius);
   }
+  EXPLORER.direction.copy(EXPLORER.offset).normalize();
   EXPLORER.mode = 'follow'; $('#tip').classList.add('gone'); syncExplorerTravel(); openExplorer(false); canvas.focus({preventScroll:true});
 }
 function beginExplorerOrbit(){
@@ -3266,6 +3479,7 @@ function beginExplorerOrbit(){
 }
 function bindExplorerLabels(){
   labels.forEach(function(item){
+    if(item.el._explorerMark) return;
     var name = item.el.firstChild && item.el.firstChild.nodeValue;
     var m = marks.find(function(candidate){ return candidate.w === item.w; }) || marks.find(function(candidate){ return candidate.name === name; });
     if(!m) return;
@@ -3273,6 +3487,8 @@ function bindExplorerLabels(){
     item.el.setAttribute('aria-label', '探索 ' + m.name); item.el.tabIndex = 0;
   });
   if(poolStar && poolStar.idx >= 0){
+    if(poolStar.el._explorerIndex === poolStar.idx) return;
+    poolStar.el._explorerIndex = poolStar.idx;
     poolStar.el._explorerMark = poolStar.mark; poolStar.el.setAttribute('data-explore', ''); poolStar.el.setAttribute('role', 'button');
     poolStar.el.setAttribute('aria-label', '探索 ' + poolStar.mark.name); poolStar.el.tabIndex = 0;
   }
@@ -3289,7 +3505,11 @@ function updateExplorer(dt){
     } else if(EXPLORER.mode === 'orbit'){
       EXPLORER.offset.applyAxisAngle(EXPLORER.axis, dt*0.085);
     }
-    P.copy(m.w).add(EXPLORER.offset); faceTo(m.w);
+    P.copy(m.w).add(EXPLORER.offset);
+    /* Offset is already observer-minus-target. Do not subtract large world
+       coordinates again: nearby moons/exoplanets otherwise make the view jitter. */
+    var aim=EXPLORER.mode==='orbit'?EXPLORER.offset:EXPLORER.direction,aimLength=aim.length();
+    if(aimLength>0){pitch=Math.asin(clamp(-aim.y/aimLength,-1,1));yaw=Math.atan2(aim.x,aim.z);}
   }
   EXPLORER.refresh += dt;
   if(EXPLORER.refresh >= 0.5){
@@ -3342,6 +3562,105 @@ EXPLORER.orbit = beginExplorerOrbit;
 EXPLORER.cancel = cancelExplorerTravel;
 bindExplorerLabels();
 
+/* Prepare the same full-quality assets before exposing the flight controls. */
+var BOOT={promise:null,ready:false,firstFrame:false,failed:false,completed:0,total:0,fallbacks:0};
+function bootVisible(){
+  if(!document.hidden)return Promise.resolve();
+  return new Promise(function(resolve){
+    function visible(){if(!document.hidden){document.removeEventListener('visibilitychange',visible);resolve();}}
+    document.addEventListener('visibilitychange',visible);
+  });
+}
+function bootYield(){return new Promise(function(resolve){setTimeout(resolve,0);}).then(bootVisible);}
+function bootProgress(stage,complete){
+  if(complete)BOOT.completed++;
+  $('#loadingStage').textContent=stage;
+  $('#loadingProgress').max=BOOT.total||1;$('#loadingProgress').value=BOOT.completed;
+  $('#loadingCount').textContent=BOOT.completed+' / '+BOOT.total;
+  if(BOOT.fallbacks)$('#loadingNote').textContent='部分素材暫用替代外觀，仍可正常探索。';
+}
+async function bootAtmosphere(profile){
+  for(var attempt=0;attempt<1500;attempt++){
+    await bootVisible();
+    if(airDepthLookup(profile,true))return;
+    await new Promise(function(resolve){setTimeout(resolve,20);});
+  }
+  // A stalled idle scheduler must not trap the visitor. The existing shader
+  // fallback remains active, and the queued table can still finish later.
+  BOOT.fallbacks++;
+}
+async function bootProgramsReady(){
+  var context=renderer.getContext(),parallel=context.getExtension('KHR_parallel_shader_compile');
+  for(var attempt=0;attempt<1500;attempt++){
+    await bootVisible();
+    if(context.isContextLost())throw new Error('Graphics context lost during loading');
+    var programs=renderer.info.programs||[],pending=false;
+    for(var i=0;i<programs.length;i++){
+      var program=programs[i].program;
+      if(parallel && !context.getProgramParameter(program,parallel.COMPLETION_STATUS_KHR)){pending=true;continue;}
+      if(!context.getProgramParameter(program,context.LINK_STATUS))throw new Error('Graphics program could not be prepared');
+    }
+    if(!pending)return;
+    await new Promise(function(resolve){setTimeout(resolve,20);});
+  }
+  throw new Error('Graphics preparation timed out');
+}
+function prepareUniverse(){
+  if(BOOT.promise)return BOOT.promise;
+  BOOT.promise=(async function(){
+    try{
+    var textures=STARTUP_TEXTURES.filter(function(task){return task.texture;}),profiles=Object.keys(AIRS);
+    var stages=[scene,volScene,topScene],postMaterials=[compMat,downMat,upMat,finMat,bhMat];
+    var controls=Array.from(document.body.children).filter(function(el){return el.id!=='loading' && el.id!=='fail' && el.tagName!=='SCRIPT';});
+    controls.forEach(function(el){el.inert=true;});
+    BOOT.total=STARTUP_TEXTURES.length+textures.length+profiles.length+3+stages.length+postMaterials.length+1;
+    bootProgress('準備星空');
+      profiles.forEach(function(name){airDepthLookup(AIRS[name]);});
+      await Promise.all(STARTUP_TEXTURES.map(function(task){return task.promise.then(function(done){
+        if(!done.ok)BOOT.fallbacks++;bootProgress('準備星空',true);
+      });}));
+      for(var i=0;i<textures.length;i++){
+        await bootYield();renderer.initTexture(textures[i].texture);bootProgress('準備星空',true);
+      }
+      for(i=0;i<profiles.length;i++){
+        bootProgress('準備天體');await bootAtmosphere(AIRS[profiles[i]]);bootProgress('準備天體',true);
+      }
+      var segments=[48,96,192];
+      for(i=0;i<segments.length;i++){
+        await bootYield();surfaceGeometry(segments[i]);bootProgress('準備天體',true);
+      }
+      for(i=0;i<stages.length;i++){
+        await bootYield();renderer.compile(stages[i],camera);await bootProgramsReady();bootProgress('即將啟程',true);
+      }
+      var savedPostMaterial=postQuad.material;
+      try{
+        for(i=0;i<postMaterials.length;i++){
+          await bootYield();postQuad.material=postMaterials[i];renderer.compile(postScene,postCam);
+          await bootProgramsReady();bootProgress('即將啟程',true);
+        }
+      }finally{postQuad.material=savedPostMaterial;}
+      await bootYield();resetFlightInput();last=performance.now();frameDeadline=0;frameTimingReset=true;
+      BOOT.firstFrame=true;
+      try{frame(last+1000/60);}finally{BOOT.firstFrame=false;}
+      if(renderer.getContext().isContextLost())throw new Error('Graphics context lost before entry');
+      bootProgress('即將啟程',true);
+      // Let the first real view reach a presentation frame while the loader is
+      // still covering it; do not block the main thread with a GPU fence/readback.
+      await new Promise(function(resolve){requestAnimationFrame(resolve);});await bootVisible();
+      if(renderer.getContext().isContextLost())throw new Error('Graphics context lost before presentation');
+      BOOT.ready=true;last=performance.now();frameDeadline=0;frameTimingReset=true;resetFlightInput();
+      controls.forEach(function(el){el.inert=false;});
+      $('#loading').hidden=true;document.body.classList.remove('booting');document.body.setAttribute('aria-busy','false');
+      return true;
+    }catch(error){
+      BOOT.failed=true;$('#loading').hidden=true;document.body.setAttribute('aria-busy','false');
+      fail('宇宙畫面未能完成載入。請重新整理頁面；若仍無法開啟，請換個瀏覽器再試。');
+      return false;
+    }
+  })();
+  return BOOT.promise;
+}
+
 
 // Source: 90-frame.js
 var v1 = new THREE.Vector3(), fwdV = new THREE.Vector3(), frameAUQuaternion = new THREE.Quaternion(), last = performance.now(), frames = 0, shownPlace = '', plain = false;
@@ -3375,7 +3694,8 @@ document.addEventListener('visibilitychange',function(){
 });
 var pick = [];
 function frame(now){
-  requestAnimationFrame(frame);
+  if(!BOOT.ready && !BOOT.firstFrame)return;
+  if(BOOT.ready)requestAnimationFrame(frame);
   if(document.hidden){last=now;frameDeadline=0;frameTimingReset=true;return;}
   /* A 120 Hz display need not submit this expensive scene 120 times a second.
      Keep the deadline phase, so other refresh rates do not round down to 30 Hz. */
@@ -3568,7 +3888,49 @@ function frame(now){
     }
   }
 }
-requestAnimationFrame(frame);
+prepareUniverse().then(function(ready){if(ready)requestAnimationFrame(frame);});
+}
+/* Confirm that the loader has actually painted where the browser exposes that
+   signal. The watchdog is only for browsers that never report it, not a delay. */
+function initializeAfterLoaderPaint(){
+  var observer=null,watchdog=null,startTask=null,started=false,painted=false;
+  function hasPaint(){
+    return typeof performance.getEntriesByType==='function' && performance.getEntriesByType('paint').some(function(entry){return entry.name==='first-contentful-paint';});
+  }
+  function scheduleStart(){
+    if(started || startTask!==null || document.hidden)return;
+    clearTimeout(watchdog);watchdog=null;
+    startTask=setTimeout(function(){
+      startTask=null;if(started || document.hidden)return;
+      started=true;clearTimeout(watchdog);if(observer)observer.disconnect();
+      document.removeEventListener('visibilitychange',visible);
+      try{initializeUniverse();}
+      catch(error){
+        document.getElementById('loading').hidden=true;document.body.setAttribute('aria-busy','false');
+        document.getElementById('failT').textContent='宇宙資料未能完成載入，請重新整理頁面再試。';
+        document.getElementById('fail').hidden=false;
+      }
+    },0);
+  }
+  function visible(){
+    if(document.hidden){clearTimeout(watchdog);watchdog=null;clearTimeout(startTask);startTask=null;return;}
+    if(painted || hasPaint()){painted=true;scheduleStart();}
+    else if(watchdog===null)watchdog=setTimeout(function(){watchdog=null;painted=true;scheduleStart();},500);
+  }
+  document.addEventListener('visibilitychange',visible);
+  painted=hasPaint();
+  var supportsPaint=typeof PerformanceObserver==='function' && PerformanceObserver.supportedEntryTypes && PerformanceObserver.supportedEntryTypes.indexOf('paint')>=0;
+  if(!painted && supportsPaint){
+    try{
+      observer=new PerformanceObserver(function(list){
+        if(list.getEntries().some(function(entry){return entry.name==='first-contentful-paint';})){painted=true;scheduleStart();}
+      });
+      observer.observe({type:'paint',buffered:true});
+    }catch(error){if(observer)observer.disconnect();observer=null;painted=true;}
+  } else if(!supportsPaint)painted=true;
+  visible();
+}
+requestAnimationFrame(function(){requestAnimationFrame(initializeAfterLoaderPaint);});
 })();
 
 </script>
