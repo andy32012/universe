@@ -95,6 +95,14 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--gold);outline-o
 #hdrBtn[hidden]{display:none}
 #hdr{position:fixed;inset:0;width:100%;height:100%;z-index:1;pointer-events:none}
 #scaleNote{margin:4px 0 0;font-size:11.5px;color:var(--ink-faint);text-shadow:0 1px 8px #000}
+#nepInfo{margin:6px 0 0;font-size:12.5px;font-variant-numeric:tabular-nums;text-shadow:0 1px 8px #000}
+#nepInfo small{display:block;margin-top:2px;font-size:11.5px;color:var(--ink-dim)}
+#nepInfo[hidden],#nepBar[hidden]{display:none}
+#nepBar{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;pointer-events:auto}
+#nepBar button{min-height:36px;padding:0 13px;border-radius:999px;font-size:12.5px;background:var(--panel);border:1px solid var(--line);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px)}
+#nepBar #ascendBtn{color:var(--gold);border-color:rgba(243,217,162,.4)}
+/* inside Neptune's atmosphere the readings of the descent take the place of the hint, and on phones of the distances too */
+body.nep #tip{display:none}
 /* the sources must stay readable on a phone, so the credit wraps between sources instead of running off the screen */
 #credit{position:fixed;left:50%;bottom:calc(var(--sb) + 4px);transform:translateX(-50%);z-index:4;margin:0;width:max-content;max-width:calc(100% - 32px);text-align:center;line-height:1.4;pointer-events:none;font-size:10px;color:var(--ink-faint);text-shadow:0 1px 4px #000}
 #credit span{display:inline-block;margin:0 .6em}
@@ -138,6 +146,7 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--gold);outline-o
 /* phones held upright: the hint floats above the flight buttons instead of beside them */
 @media (max-width:600px){
   :root{--tip-b:calc(var(--ctl-b) + 196px)}
+  body.nep .stats{display:none}
 }
 @media (max-width:360px){
   :root{--ctl-b:72px}
@@ -159,6 +168,8 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--gold);outline-o
   #fly{flex-direction:row;align-items:flex-end}
   #tip{max-width:calc(100% - 2*(var(--sr) + 22px + 104px + 12px + 66px + 16px))}
   #credit{font-size:9px}
+  body.nep .stats{display:none}
+  body.nep #nepBar{position:fixed;left:calc(var(--sl) + 146px);bottom:calc(var(--sb) + var(--ctl-b));margin:0;flex-wrap:nowrap}
 }
 </style>
 </head>
@@ -175,6 +186,8 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--gold);outline-o
   </dl>
   <p id="near"></p>
   <p id="scaleNote"></p>
+  <p id="nepInfo" hidden> <small></small></p>
+  <div id="nepBar" hidden><button type="button" id="visionBtn">視覺：自然</button><button type="button" id="ascendBtn">返回大氣外</button></div>
 </header>
 <div id="tools">
   <button type="button" id="goHome">回太陽系</button>
@@ -550,9 +563,9 @@ var HAS3D = !!(renderer.capabilities && renderer.capabilities.isWebGL2 && THREE.
    finer air and a more careful trace of light round black holes. 自動 starts at 高 where the device has the faster cloud path,
    and steps down (never back up past where it had to step down from) if frames get slow. */
 var QUALITY = [
-  {name:'標準', vol:[0.30, 0.85], neb:80,  gal:56,  bh:[3.0, 220, 0.5], sky:[256, 1], air:[12, 5], sph:[48, 32],   msaa:false},
-  {name:'高',   vol:[0.45, 1.00], neb:112, gal:80,  bh:[2.5, 280, 0.7], sky:[512, 2], air:[16, 6], sph:[96, 64],   msaa:true},
-  {name:'極致', vol:[0.60, 1.00], neb:160, gal:112, bh:[2.0, 360, 1.0], sky:[768, 3], air:[24, 8], sph:[160, 100], msaa:true}
+  {name:'標準', vol:[0.30, 0.85], neb:80,  gal:56,  bh:[3.0, 220, 0.5], sky:[256, 1], nep:[0.5, 40, 3], air:[12, 5], sph:[48, 32],   msaa:false},
+  {name:'高',   vol:[0.45, 1.00], neb:112, gal:80,  bh:[2.5, 280, 0.7], sky:[512, 2], nep:[0.75, 64, 4], air:[16, 6], sph:[96, 64],   msaa:true},
+  {name:'極致', vol:[0.60, 1.00], neb:160, gal:112, bh:[2.0, 360, 1.0], sky:[768, 3], nep:[1.0, 96, 5], air:[24, 8], sph:[160, 100], msaa:true}
 ];
 var qual = {mode:'auto', level:0, cap:QUALITY.length - 1};
 try{ var qSaved = localStorage.getItem('universe.quality'); if(qSaved === '0' || qSaved === '1' || qSaved === '2') qual.mode = +qSaved; }catch(e){}
@@ -959,6 +972,65 @@ function moonAt(days){
   r *= 4.26352e-5;                             /* Earth radii -> AU */
   return [r*c(lat)*c(lon), r*c(lat)*s(lon), r*s(lat)];
 }
+/* ---------- Neptune's atmosphere ----------
+   One model serves the whole descent: the planet seen from afar, the clouds you fly through, and the readings shown.
+   Heights are measured from the 1-bar level (radius 24,764 km); gravity 11.15 m/s^2; mean molecular weight 2.53 g/mol.
+   Temperature by pressure: Voyager 2 radio occultation (Lindal 1992) from the stratosphere down to about 2 bar, within a few kelvin;
+   below that a dry adiabat, extrapolated and not measured. Heights follow from hydrostatic balance. The cloud decks are where condensation
+   models and observations put them; the deeper they are, the less certain. Neptune has no surface to land on: the gas only grows denser
+   and hotter with depth. This first stage goes down to 10 bar; what lies deeper is left for the next. */
+var NEP = (function(){
+  var R = 24764, g = 11.15, mu = 2.53e-3, Rg = 8.314;
+  function lerpLog(P, P0, T0, P1, T1){ return T0 + (T1 - T0)*Math.log(P/P0)/Math.log(P1/P0); }
+  function temp(P){                                  /* P in bar */
+    if(P >= 1) return 72*Math.pow(P, 0.29);          /* a dry adiabat below the 1-bar level */
+    if(P >= 0.1) return lerpLog(P, 1, 72, 0.1, 52);  /* troposphere up to the tropopause */
+    if(P >= 3e-3) return lerpLog(P, 0.1, 52, 3e-3, 110);
+    return lerpLog(P, 3e-3, 110, 1e-5, 160);         /* stratosphere */
+  }
+  /* height against ln(pressure), stepped out from the 1-bar level both ways */
+  var lnP = [], zz = [], d = 0.002, l, z;
+  for(l = Math.log(1e-5), z = 0; l <= Math.log(1e3) + 1e-9; l += d){ lnP.push(l); zz.push(0); }
+  var i0 = Math.round(-Math.log(1e-5)/d);
+  for(var i=i0+1;i<lnP.length;i++) zz[i] = zz[i-1] - Rg*temp(Math.exp(lnP[i] - d/2))/(mu*g)/1000*d;
+  for(i=i0-1;i>=0;i--) zz[i] = zz[i+1] + Rg*temp(Math.exp(lnP[i] + d/2))/(mu*g)/1000*d;
+  function zOf(P){ var f = (Math.log(P) - lnP[0])/d, k = Math.max(0, Math.min(lnP.length - 2, Math.floor(f))); return zz[k] + (zz[k+1] - zz[k])*(f - k); }
+  function pOf(z){                                   /* pressure (bar) at height z (km) */
+    var lo = 0, hi = zz.length - 1; if(z >= zz[0]) return Math.exp(lnP[0]); if(z <= zz[hi]) return Math.exp(lnP[hi]);
+    while(hi - lo > 1){ var m = (lo + hi) >> 1; if(zz[m] > z) lo = m; else hi = m; }
+    return Math.exp(lnP[lo] + d*(z - zz[lo])/(zz[hi] - zz[lo]));
+  }
+  /* the cloud decks and hazes, top to bottom, with what they are, where that comes from, and how sure it is */
+  var LAYERS = [
+    {name:'平流層霧靄', top:3e-3, base:0.1, what:'碳氫化合物霧粒（甲烷被陽光分解後的產物）', src:'Voyager 2、哈伯與韋伯望遠鏡觀測', sure:'中'},
+    {name:'高空甲烷冰雲', top:0.2, base:0.5, what:'甲烷冰晶，呈東西向拉長的亮條', src:'Voyager 2 影像（雲在下層雲上投下的影子，高度差約 50 至 100 公里）', sure:'中'},
+    {name:'主甲烷雲層', top:1.2, base:1.6, what:'甲烷冰晶', src:'凝結模型與近紅外光譜，雲底約在 1.5 至 2 bar', sure:'中'},
+    {name:'硫化氫雲層', top:3, base:7, what:'硫化氫冰，可能混有硫氫化銨', src:'凝結模型與微波觀測推論', sure:'低'}
+  ];
+  var lay = {hazeTop:zOf(3e-3), hazeBase:zOf(0.1), hiTop:zOf(0.2), hiBase:zOf(0.5), deckTop:zOf(1.2), deckBase:zOf(1.6), h2sTop:zOf(3), h2sBase:zOf(7)};
+  var zTop = 130, zFloor = zOf(20), zLimit = zOf(10), zMin = zFloor - 20, zMax = zTop + 20, N = 512;
+  /* a table by height for the renderer: gas density (1 at 1 bar), temperature, log10 pressure, and the gas above, as km of 1-bar gas */
+  var data = new Float32Array(N*4);
+  for(i=N-1;i>=0;i--){
+    z = zMin + (zMax - zMin)*i/(N - 1); var P = pOf(z), T = temp(P), n = P*72/T;
+    data[i*4] = n; data[i*4+1] = T; data[i*4+2] = Math.log(P)/Math.LN10;
+    data[i*4+3] = i === N - 1 ? n*21.2 : data[(i+1)*4+3] + 0.5*(n + data[(i+1)*4])*(zMax - zMin)/(N - 1);
+  }
+  var tex = new THREE.DataTexture(data, N, 1, THREE.RGBAFormat, THREE.FloatType); tex.needsUpdate = true;
+  /* the light reaching a height from straight above: the gas (blue-weighted Rayleigh scattering and red methane absorption, averaged over colour)
+     and the typical cloud above it; used to set the camera's exposure */
+  function lightAt(z, mu){
+    var k = (z - zMin)/(zMax - zMin)*(N - 1), j = Math.max(0, Math.min(N - 2, Math.floor(k))), col = data[j*4+3] + (data[(j+1)*4+3] - data[j*4+3])*(k - j);
+    var cloud = 0.9*0.15*Math.max(0, lay.hiTop - Math.max(z, lay.hiBase)) + 0.45*0.75*Math.max(0, lay.deckTop - Math.max(z, lay.deckBase)) + 0.6*Math.max(0, lay.h2sTop - Math.max(z, lay.h2sBase));
+    var am = 1/(Math.max(mu, 0)*0.96 + 0.04);
+    return Math.exp(-0.035*col*am)*Math.exp(-0.5*cloud*am)*Math.max(mu + 0.15, 0)/1.15 + 0.02*Math.exp(-0.05*col);
+  }
+  function layerAt(P){ for(var k=0;k<LAYERS.length;k++){ if(P >= LAYERS[k].top && P <= LAYERS[k].base) return LAYERS[k]; } return null; }
+  return {R:R, temp:temp, zOf:zOf, pOf:pOf, LAYERS:LAYERS, lay:lay, zTop:zTop, zFloor:zFloor, zLimit:zLimit, zMin:zMin, zMax:zMax, tex:tex, lightAt:lightAt, layerAt:layerAt,
+    /* one turn in 16.11 hours (Voyager 2's radio period) */
+    spin:1/(16.11*3600), tau:{value:0}, ball:null, glow:null, map:null, w:null,
+    active:false, ui:false, ascend:false, probe:false, expo:1, mult:60, alt:1e9};
+})();
 (function(){
   var days = (Date.now() - Date.UTC(2000, 0, 1, 12))/86400000;
   /* the elements for the Earth give the centre the Earth and Moon circle together; the Earth sits 1/82.3 of the way toward the Moon from it, on the far side */
@@ -993,6 +1065,11 @@ function moonAt(days){
     if(p[0] === '地球' && maps){ maps.night = loadMap('night'); maps.clouds = loadMap('clouds'); }
     var ball = body(p[3], p[4], v, auRoot, null, toSun, -9, -8, -2.6, -2.0, 'p', maps);
     if(FACE) ball.rotation.z = FACE[2];        /* each planet leans by its real axial tilt */
+    if(p[0] === '海王星'){
+      /* Neptune turns on the clock of its weather (see NEP), so the far view and the clouds you fly into stay the same clouds */
+      ball.material.uniforms.uTime = NEP.tau; ball.material.uniforms.uSpin.value = NEP.spin;
+      NEP.ball = ball; NEP.glow = dots[dots.length - 1].m; NEP.map = maps.map; NEP.w = dots[dots.length - 1].w; NEP.Rau = p[4];
+    }
     airShell(p[0], p[4], v, toSun, -9, -8, -2.6, -2.0);
     if(p[0] === '土星'){
       /* Saturn keeps its rings */
@@ -1452,6 +1529,7 @@ function sizeTargets(){
   var w = Math.max(4, Math.round(window.innerWidth*PR)), h = Math.max(4, Math.round(window.innerHeight*PR));
   rtMain.setSize(w, h); rtComp.setSize(w, h); if(typeof rtBH !== 'undefined') rtBH.setSize(w, h); if(rtEm) rtEm.setSize(w, h);
   if(typeof rtBHlow !== 'undefined') rtBHlow.setSize(Math.max(4, Math.round(w*bhScale)), Math.max(4, Math.round(h*bhScale)));
+  if(typeof rtNep !== 'undefined' && rtNep){ var ns = QUALITY[qual.level].nep[0]; rtNep.setSize(Math.max(4, Math.round(w*ns)), Math.max(4, Math.round(h*ns))); compU.uNepPx.value.set(1/rtNep.width, 1/rtNep.height); }
   rtVol.setSize(Math.max(4, Math.round(w*volScale)), Math.max(4, Math.round(h*volScale)));
   if(rtOcc){ rtOcc.setSize(rtVol.width, rtVol.height); OCC.res.value.set(rtVol.width, rtVol.height); }
   for(var i=0;i<BL;i++){ var d = Math.pow(2, i + 1), ww = Math.max(2, Math.round(w/d)), hh = Math.max(2, Math.round(h/d)); rtDown[i].setSize(ww, hh); if(i < BL - 1) rtUp[i].setSize(ww, hh); }
@@ -1460,11 +1538,157 @@ var postScene = new THREE.Scene(), postCam = new THREE.Camera(), postQuad = new 
 postQuad.frustumCulled = false; postScene.add(postQuad);
 var POST_VS = 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }';
 function postMat(fs, uniforms){ return new THREE.ShaderMaterial({uniforms:uniforms, vertexShader:POST_VS, fragmentShader:fs, depthTest:false, depthWrite:false}); }
-var compU = {tMain:{value:null}, tVol:{value:null}, tEm:{value:null}, uEmOn:{value:0}, uVolK:VOLK};
-var compMat = postMat('uniform sampler2D tMain; uniform sampler2D tVol; uniform sampler2D tEm; uniform float uEmOn; uniform float uVolK; varying vec2 vUv;' +
+var compU = {tMain:{value:null}, tVol:{value:null}, tEm:{value:null}, uEmOn:{value:0}, uVolK:VOLK, tNep:{value:null}, uNepOn:{value:0}, uNepPx:{value:new THREE.Vector2(0.001, 0.001)}};
+var compMat = postMat('uniform sampler2D tMain; uniform sampler2D tVol; uniform sampler2D tEm; uniform float uEmOn; uniform float uVolK; uniform sampler2D tNep; uniform float uNepOn; uniform vec2 uNepPx; varying vec2 vUv;' +
   'void main(){ vec4 m = texture2D(tMain, vUv); vec4 v = texture2D(tVol, vUv)*uVolK;' +
   ' vec3 e = uEmOn > 0.5 ? texture2D(tEm, vUv).rgb : vec3(0.0);' +
-  ' gl_FragColor = vec4(m.rgb*(1.0 - v.a) + v.rgb + e, 1.0); }', compU);
+  ' vec3 c = m.rgb*(1.0 - v.a) + v.rgb + e;' +
+  /* Neptune's atmosphere, when you are close enough for it to be drawn as a volume, lies in front of everything else. It is softened over
+     a few of its pixels, which smooths out the fixed pattern its steps are staggered by */
+  ' if(uNepOn > 0.5){ vec4 n = texture2D(tNep, vUv)*0.4 + (texture2D(tNep, vUv + uNepPx) + texture2D(tNep, vUv - uNepPx)' +
+  '  + texture2D(tNep, vUv + vec2(uNepPx.x, -uNepPx.y)) + texture2D(tNep, vUv - vec2(uNepPx.x, -uNepPx.y)))*0.15; c = c*(1.0 - n.a) + n.rgb; }' +
+  ' gl_FragColor = vec4(c, 1.0); }', compU);
+
+/* ---------- Neptune as a volume ----------
+   Up close Neptune is drawn as the shell of gas and cloud it is, from 130 km above the 1-bar level down to the 20-bar level (below which no
+   sunlight is left). Each pixel's ray is followed from your eye through the shell, closely spaced near you; at each point the gas and the cloud
+   are looked up and lit:
+   - the gas scatters blue light more than red (Rayleigh scattering) and its methane absorbs red, which is what makes Neptune blue;
+   - the clouds come from the same map that colours Neptune from afar, so the bands, streaks and dark spots you see from space are where
+     the clouds you fly into are: bright parts of the map raise the high methane streaks, dark parts open holes in the main deck. Finer detail
+     is added the closer it is (one octave set per scale, each only once a pixel is small enough to show it);
+   - the zonal wind, measured from cloud tracking (Sromovsky et al. 1993, -400 m/s at the equator to +250 m/s at 70 degrees), carries the fine
+     clouds along their latitude, slower above the cloud tops, so layers slide past each other; the pattern is renewed every three hours of
+     weather time before it shears too thin;
+   - sunlight reaching each point is dimmed by the gas above it and by the clouds between it and the Sun (a short march toward the Sun),
+     and nothing reaches the night side;
+   - in the probe view the same rays show temperature, cloud, the levels of equal pressure and the wind instead of light. */
+var nepU = {uRight:VIEW.right, uUp:VIEW.up, uFwd:VIEW.fwd, uTanF:VIEW.tanF, uAspect:VIEW.aspect, uVol:volTex,
+  uRo:{value:new THREE.Vector3()}, uQ:{value:new THREE.Matrix3()}, uSun:{value:new THREE.Vector3(1, 0, 0)}, uR:{value:NEP.R}, uZtop:{value:NEP.zTop}, uZfloor:{value:NEP.zFloor},
+  tAtm:{value:NEP.tex}, uAtmZ:{value:new THREE.Vector2(NEP.zMin, NEP.zMax)}, tMap:{value:null}, uRot:{value:0}, uRotA:{value:0}, uMapMean:{value:0.315}, uTau:NEP.tau,
+  uSteps:{value:40}, uShSteps:{value:3}, uProbe:{value:0}, uPix:{value:0.001}, uSunI:{value:1.1}, uAlpha:{value:1},
+  uLay:{value:new THREE.Vector4(NEP.lay.hiBase, NEP.lay.hiTop, NEP.lay.deckBase, NEP.lay.deckTop)}, uLay2:{value:new THREE.Vector4(NEP.lay.h2sBase, NEP.lay.h2sTop, NEP.lay.hazeBase, NEP.lay.hazeTop)}};
+var NEP_FS = 'uniform vec3 uRight; uniform vec3 uUp; uniform vec3 uFwd; uniform float uTanF; uniform float uAspect; varying vec2 vNdc;\n' +
+  'uniform vec3 uRo; uniform mat3 uQ; uniform vec3 uSun; uniform float uR; uniform float uZtop; uniform float uZfloor; uniform sampler2D tAtm; uniform vec2 uAtmZ;' +
+  'uniform sampler2D tMap; uniform float uRot; uniform float uRotA; uniform float uMapMean; uniform float uTau; uniform float uSteps; uniform float uShSteps; uniform float uProbe;' +
+  'uniform float uPix; uniform float uSunI; uniform float uAlpha; uniform vec4 uLay; uniform vec4 uLay2;\n' + VOL_NOISE +
+  'const float PI = 3.14159265;' +
+  /* gas density (1 at 1 bar), temperature, log10 pressure, gas column above (km of 1-bar gas), by height */
+  'vec4 atm(float z){ return texture2D(tAtm, vec2(clamp((z - uAtmZ.x)/(uAtmZ.y - uAtmZ.x), 0.0, 1.0), 0.5)); }' +
+  'float bump(float z, float lo, float hi, float soft){ return smoothstep(lo - soft, lo + soft, z)*(1.0 - smoothstep(hi - soft, hi + soft, z)); }' +
+  /* eastward wind (m/s) by latitude, weaker above the cloud tops */
+  'float wind(float latd, float z){ float l2 = latd*latd; return (-398.0 + 0.188*l2 - 1.2e-5*l2*l2)*(1.0 - 0.35*smoothstep(-10.0, 40.0, z)); }' +
+  /* a point carried back against a turn of a (radians) about the spin axis, to where it was */
+  'vec3 rotY(vec3 p, float a){ float c = cos(a); float s = sin(a); return vec3(c*p.x - s*p.z, p.y, s*p.x + c*p.z); }' +
+  /* the noise repeats every 4 of its units, so its coordinates are folded back into one period first: positions here run to tens of
+     thousands of km, and a texture unit given coordinates that large loses the fraction that holds the fine detail */
+  'float G1(vec3 q){ return F1(fract(q*0.25)*4.0); } float G2(vec3 q){ return F2(fract(q*0.25)*4.0); }' +
+  /* three sets of octaves: thousands of km (stretched east-west, as Neptune\'s clouds are), tens of km (cloud masses), a few km down to under
+     one (the clumps you fly past); the finer sets only once a pixel is small enough to show them */
+  'vec3 noise3(vec3 p, float sd, float foot){' +
+  ' float n1 = G1(p*vec3(1.0, 3.0, 1.0)/2500.0 + sd);' +
+  ' float n2 = 0.47; if(foot < 15.0) n2 = mix(G2(p/30.0 + sd*1.7), 0.47, smoothstep(6.0, 15.0, foot));' +
+  ' float n3 = 0.47; if(foot < 1.5) n3 = mix(G1(p/3.0 + sd*2.3), 0.47, smoothstep(0.6, 1.5, foot));' +
+  ' return vec3(n1, n2, n3); }' +
+  /* the detail, carried by the wind; two copies a half-period apart are blended, each starting afresh, so it never shears too thin */
+  'vec3 detail(vec3 p, float latd, float z, float rr, float foot){' +
+  ' float u = wind(latd, z)*1e-3/(rr*max(cos(radians(latd)), 0.05));' +
+  ' float tt = uTau/10800.0; float k0 = fract(tt); float k1 = fract(tt + 0.5); float w0 = 1.0 - abs(2.0*k0 - 1.0);' +
+  ' vec3 na = noise3(rotY(p, u*k0*10800.0), floor(tt)*7.31, foot); vec3 nb = noise3(rotY(p, u*k1*10800.0), floor(tt + 0.5)*7.31 + 3.7, foot);' +
+  ' return mix(nb, na, w0); }' +
+  /* cloud extinction (per km) at a point; full: with the drifting detail, otherwise the large scale only (for shadows) */
+  'float cloudAt(vec3 p, float rr, float z, float foot, bool full){' +
+  ' float sl = clamp(p.y/rr, -1.0, 1.0); float latd = degrees(asin(sl));' +
+  ' vec2 uv = vec2(atan(-p.z, p.x)/(2.0*PI) + 0.5 - uRot, 0.5 - asin(sl)/PI);' +
+  /* the map, a few levels blurred: its large patterns, without the compression's 8-pixel blocks */
+  ' float m = dot(texture2D(tMap, uv, 2.5).rgb, vec3(0.2126, 0.7152, 0.0722))/uMapMean; float bright = max(m - 1.0, 0.0); float dark = max(1.0 - m, 0.0);' +
+  ' vec3 pr = rotY(p, uRotA);' +                                   /* into the frame that turns with the planet */
+  ' vec3 n = full ? detail(pr, latd, z, rr, foot) : vec3(G1(pr*vec3(1.0, 3.0, 1.0)/2500.0), 0.47, 0.47);' +
+  /* each layer: where it is (the map and the large scale) times clumps with clear air between them (the finer scales; from afar,
+     where those are not drawn, the clumps average out to the layer's mean cover). The noise is first scaled to unit spread. */
+  ' vec3 v = (n - 0.47)/0.09; float cl = 0.6*v.y + 0.8*v.z; float aa = clamp(foot/150.0, 0.0, 1.5);' +
+  ' float hc = smoothstep(1.0 - aa, 2.4 + aa, v.x + 0.35*v.y + 6.0*bright);' +                                  /* high methane streaks */
+  ' float hp = smoothstep(-0.1, 0.9, cl);' +
+  ' float hi = hc*hp*bump(z, uLay.x, uLay.y + 2.5*v.y + 1.2*v.z, 2.0);' +
+  ' float dc = 1.0 - smoothstep(0.30, 0.70, dark*1.6 - 0.08*v.x);' +                                  /* the main deck, open where the map is dark */
+  ' float dp = smoothstep(-0.9, 0.3, cl);' +
+  ' float top = uLay.w + 3.5*v.x + 2.5*v.y + 1.5*v.z;' +
+  ' float deck = dc*dp*bump(z, uLay.z, top, 0.8);' +
+  ' float sp = smoothstep(-1.0, 0.4, cl);' +                                                           /* the hydrogen sulphide deck */
+  ' float h2s = sp*sp*bump(z, uLay2.x, uLay2.y + 1.5*v.y, 3.0);' +
+  ' return hi*0.7 + deck*0.5 + h2s*0.6; }' +
+  /* sunlight arriving at a point; inside a cloud the first steps toward the Sun see the same clumps the eye does, so the tops of the
+     clumps are lit and their far sides fall into their own shadow */
+  'vec3 sunAt(vec3 p, float rr, float z, float foot, bool fine){' +
+  ' float b = dot(p, uSun); float h = length(p - uSun*b); float rf = uR + uZfloor;' +
+  ' float lit = b > 0.0 ? 1.0 : smoothstep(rf - 10.0, rf + 30.0, h);' +           /* the planet\'s own shadow */
+  ' if(lit < 0.001) return vec3(0.0);' +
+  ' float mu = b/rr; vec4 a = atm(z); float am = 1.0/(max(mu, 0.0)*0.96 + 0.04);' +
+  ' vec3 tg = exp(-(vec3(0.0047, 0.013, 0.0195) + vec3(0.09, 0.02, 0.0008)*0.8)*a.a*am);' +
+  ' float od = 0.0; float d = 0.6; float prev = 0.0;' +
+  ' for(int j=0;j<6;j++){ if(float(j) >= uShSteps) break; vec3 q = p + uSun*d; float rq = length(q); od += cloudAt(q, rq, rq - uR, max(d*0.5, foot), fine && j < 3)*(d - prev); prev = d; d *= 3.0; }' +
+  ' return vec3(1.0, 0.97, 0.92)*tg*exp(-od)*lit; }' +
+  'vec3 heat(float x){ x = clamp(x, 0.0, 1.0); return vec3(smoothstep(0.0, 0.45, x), smoothstep(0.3, 0.8, x), 0.3*(1.0 - smoothstep(0.1, 0.5, x)) + smoothstep(0.75, 1.0, x)); }' +
+  /* the probe view: temperature (dim in clear gas, bright in cloud), shells of equal pressure every quarter of a decade, and streaks carried
+     by the wind. These are the colours the gas tends to along a line of sight; they need no exposure */
+  'vec3 probeCol(vec4 a, float sc, vec3 p, float rr, float z){' +
+  ' vec3 c = heat((a.g - 45.0)/110.0)*mix(0.12, 0.85, clamp(sc*4.0, 0.0, 1.0));' +
+  ' float lp = fract(a.b*4.0); c += vec3(0.5, 0.85, 1.0)*(1.0 - smoothstep(0.015, 0.05, min(lp, 1.0 - lp)))*0.35;' +
+  ' float latd = degrees(asin(clamp(p.y/rr, -1.0, 1.0))); float w = wind(latd, z);' +
+  ' vec3 q = rotY(rotY(p, uRotA), w*1e-3*mod(uTau, 3600.0)/(rr*max(cos(radians(latd)), 0.05)));' +
+  ' float st = smoothstep(0.62, 0.78, G2(q*vec3(1.0, 10.0, 1.0)/400.0));' +
+  ' c += mix(vec3(0.3, 0.6, 1.0), vec3(1.0, 0.6, 0.2), smoothstep(-300.0, 250.0, w))*st*0.2;' +
+  ' return c; }' +
+  'void main(){' +
+  ' vec3 rw = normalize(uFwd + uRight*(vNdc.x*uAspect*uTanF) + uUp*(vNdc.y*uTanF)); vec3 rd = normalize(uQ*rw); vec3 ro = uRo;' +
+  ' float rTop = uR + uZtop; float rFl = uR + uZfloor;' +
+  ' float b = dot(ro, rd); float h = length(ro - rd*b); if(h >= rTop) discard;' +
+  ' float hw = sqrt((rTop - h)*(rTop + h)); float t0 = max(-b - hw, 0.0); float t1 = -b + hw; if(t1 <= 0.0) discard;' +
+  ' bool floorHit = false; if(h < rFl){ float hf = sqrt((rFl - h)*(rFl + h)); float tf = -b - hf; if(tf > 0.0){ t1 = min(t1, tf); floorHit = true; } }' +
+  ' bool inside = length(ro) < rTop; float L = t1 - t0;' +
+  /* from above the clouds the steps go where the clouds are: 15% across the clear upper air, 70% through the cloud layers down to just
+     below the main deck, and 15% for the depths below it (seen only through gaps) */
+  ' float tc = t0; float td = t1; float rc = uR + uLay.y + 12.0; float rd2 = uR + uLay.z - 3.0;' +
+  ' if(length(ro) > rc && h < rc){ tc = clamp(-b - sqrt((rc - h)*(rc + h)), t0, t1); if(h < rd2) td = clamp(-b - sqrt((rd2 - h)*(rd2 + h)), tc, t1); }' +
+  ' float dith = fract(52.9829189*fract(0.06711056*gl_FragCoord.x + 0.00583715*gl_FragCoord.y));' +
+  ' float cosT = dot(rd, uSun);' +
+  ' float phC = 0.8*0.64/pow(1.36 - 1.2*cosT, 1.5) + 0.2*0.9375/pow(1.0625 + 0.5*cosT, 1.5);' +   /* forward-scattering ice, with some backscatter */
+  ' float phR = 0.75*(1.0 + cosT*cosT);' +
+  ' vec3 col = vec3(0.0); vec3 T = vec3(1.0); float tPrev = t0;' +
+  ' for(int i=0;i<160;i++){ if(float(i) >= uSteps) break;' +
+  '  float f = (float(i) + dith)/uSteps; float tN;' +
+  '  if(tc > t0){ tN = f < 0.15 ? t0 + (tc - t0)*f/0.15 : (f < 0.85 ? tc + (td - tc)*(f - 0.15)/0.7 : td + (t1 - td)*(f - 0.85)/0.15); } else tN = t0 + L*(inside ? f*f : f);' +
+  '  float dt = tN - tPrev; float t = 0.5*(tN + tPrev); tPrev = tN;' +
+  '  vec3 p = ro + rd*t; float rr = length(p); float z = rr - uR; float foot = max(t*uPix, 0.05);' +
+  '  vec4 a = atm(z); float ch4 = mix(0.3, 1.0, smoothstep(40.0, 5.0, z));' +       /* methane is frozen out above the tropopause */
+  '  float sc = cloudAt(p, rr, z, foot, true) + 0.0015*bump(z, uLay2.z, uLay2.w, 8.0);' +
+  '  vec3 sR = vec3(0.0047, 0.013, 0.0195)*a.r; vec3 sA = vec3(0.09, 0.02, 0.0008)*a.r*ch4; vec3 st = vec3(sc) + sR + sA; vec3 S;' +
+  '  if(uProbe > 0.5){ st = vec3(sc + 0.02*a.r + 0.002); S = probeCol(a, sc, p, rr, z)*st; }' +
+  '  else { vec3 Ls = sunAt(p, rr, z, foot, sc > 0.01 && foot < 15.0); float mu = dot(p, uSun)/rr;' +
+  '   vec3 amb = vec3(0.05, 0.11, 0.24)*exp(-0.02*a.a)*clamp(mu + 0.3, 0.0, 1.0);' +   /* blue skylight from above, fading with depth */
+  '   S = uSunI*(Ls*(sc*0.92*phC + sR*phR) + Ls*sc*0.92*0.25) + amb*(sc*0.92 + sR); }' +
+  '  vec3 e = exp(-st*dt); col += T*S*(1.0 - e)/max(st, vec3(1e-6)); T *= e;' +
+  '  if(max(T.r, max(T.g, T.b)) < 0.01) break; }' +
+  ' if(floorHit){ vec3 fc = uProbe > 0.5 ? heat((atm(uZfloor).g - 45.0)/110.0)*0.3 : vec3(0.0, 0.004, 0.012); col += T*fc; T = vec3(0.0); }' +
+  ' gl_FragColor = vec4(col*uAlpha, (1.0 - (T.r + T.g + T.b)/3.0)*uAlpha); }';
+var nepMat = null, rtNep = null;
+/* The camera adjusts its exposure to Neptune as you go in, from the picture itself: the average brightness (a log mean over a grid of samples)
+   of the parts covered by Neptune sets a target, followed slowly, over a second or so. It is measured on the graphics card and kept there,
+   in a single pixel passed from frame to frame, so nothing has to wait for it. With little of Neptune in view it eases back to normal. It
+   lets the camera see about 40 times better in the dark, no more, so the depths stay dark. */
+var expU = {tSrc:{value:null}, tPrev:{value:null}, uDt:{value:0.016}, uOn:{value:0}}, rtExp = HDR ? [mkTarget(false), mkTarget(false)] : null, expI = 0;
+var expMat = postMat('uniform sampler2D tSrc; uniform sampler2D tPrev; uniform float uDt; uniform float uOn; varying vec2 vUv;' +
+  'void main(){ float s = 0.0; float w = 0.0;' +
+  ' for(int i=0;i<7;i++){ for(int j=0;j<7;j++){ vec4 c = texture2D(tSrc, (vec2(float(i), float(j)) + 0.5)/7.0);' +
+  '  if(c.a > 0.5){ s += log(max(dot(c.rgb/c.a, vec3(0.2126, 0.7152, 0.0722)), 1e-5)); w += 1.0; } } }' +
+  ' float target = uOn > 0.5 && w > 8.0 ? clamp(0.22/exp(s/w), 0.5, 40.0) : 1.0;' +
+  ' float prev = texture2D(tPrev, vec2(0.5)).r; if(!(prev > 0.0)) prev = 1.0;' +
+  ' gl_FragColor = vec4(exp(mix(log(prev), log(target), 1.0 - exp(-uDt/1.2))), 0.0, 0.0, 1.0); }', expU);
+if(rtExp){ rtExp.forEach(function(t){ t.setSize(1, 1); renderer.setRenderTarget(t); renderer.setClearColor(0x000000, 0); renderer.clear(); }); renderer.setRenderTarget(null); }
+if(HAS3D){
+  nepMat = new THREE.ShaderMaterial({uniforms:nepU, defines:{VOL3D:''}, vertexShader:VOL_VS, fragmentShader:NEP_FS, depthTest:false, depthWrite:false, blending:THREE.NoBlending});
+  rtNep = mkTarget(false);
+}
 var downU = {tSrc:{value:null}, uPx:{value:new THREE.Vector2()}, uThr:{value:0}};
 var downMat = postMat('uniform sampler2D tSrc; uniform vec2 uPx; uniform float uThr; varying vec2 vUv;' +
   'void main(){ vec3 c = texture2D(tSrc, vUv + uPx*vec2(1.0,1.0)).rgb + texture2D(tSrc, vUv + uPx*vec2(-1.0,1.0)).rgb + texture2D(tSrc, vUv + uPx*vec2(1.0,-1.0)).rgb + texture2D(tSrc, vUv + uPx*vec2(-1.0,-1.0)).rgb;' +
@@ -1473,10 +1697,10 @@ var upU = {tA:{value:null}, tB:{value:null}, uPx:{value:new THREE.Vector2()}};
 var upMat = postMat('uniform sampler2D tA; uniform sampler2D tB; uniform vec2 uPx; varying vec2 vUv;' +
   'void main(){ vec3 b = texture2D(tB, vUv + uPx*vec2(0.5,0.5)).rgb + texture2D(tB, vUv + uPx*vec2(-0.5,0.5)).rgb + texture2D(tB, vUv + uPx*vec2(0.5,-0.5)).rgb + texture2D(tB, vUv + uPx*vec2(-0.5,-0.5)).rgb;' +
   ' gl_FragColor = vec4(texture2D(tA, vUv).rgb + b*0.25, 1.0); }', upU);
-var finU = {tScene:{value:null}, tBloom:{value:null}, uAspect:{value:1}, uTime:TIME, uRes:{value:new THREE.Vector2()}, uExpo:{value:1.3}, uHdr:{value:0}};
-var finMat = postMat(('uniform sampler2D tScene; uniform sampler2D tBloom; uniform float uAspect; uniform float uTime; uniform vec2 uRes; uniform float uExpo; uniform float uHdr; varying vec2 vUv;' +
+var finU = {tExp:{value:null}, uExpOn:{value:0}, tScene:{value:null}, tBloom:{value:null}, uAspect:{value:1}, uTime:TIME, uRes:{value:new THREE.Vector2()}, uExpo:{value:1.3}, uHdr:{value:0}};
+var finMat = postMat(('uniform sampler2D tExp; uniform float uExpOn; uniform sampler2D tScene; uniform sampler2D tBloom; uniform float uAspect; uniform float uTime; uniform vec2 uRes; uniform float uExpo; uniform float uHdr; varying vec2 vUv;' +
   'float hh(vec2 p){ return fract(sin(dot(p, vec2(12.9898,78.233)))*43758.5453); }' +
-  'void main(){ vec3 raw = (texture2D(tScene, vUv).rgb + texture2D(tBloom, vUv).rgb*BLOOM)*uExpo;' +
+  'void main(){ vec3 raw = (texture2D(tScene, vUv).rgb + texture2D(tBloom, vUv).rgb*BLOOM)*uExpo*(uExpOn > 0.5 ? texture2D(tExp, vec2(0.5)).r : 1.0);' +
   ' vec3 c = 1.0 - exp(-raw);' +                                 /* highlights roll off gently instead of clipping */
   ' c = mix(c, c*c*(3.0 - 2.0*c), 0.18);' +                      /* a little contrast */
   ' vec2 q = (vUv - 0.5)*vec2(uAspect, 1.0); float vg = 1.0 - 0.30*smoothstep(0.35, 1.05, length(q)); c *= vg;' +
@@ -1678,7 +1902,7 @@ function skyUpdate(){
   if(!SKY.fresh) SKY.at.copy(P);
   viewKeep[0].copy(VIEW.right.value); viewKeep[1].copy(VIEW.up.value); viewKeep[2].copy(VIEW.fwd.value); viewKeep[3] = VIEW.tanF.value; viewKeep[4] = VIEW.aspect.value;
   VIEW.tanF.value = 1; VIEW.aspect.value = 1;                     /* each face is a square, 90 degrees across */
-  var keepUse = PROBE.use.value, keepOcc = OCC.on.value; PROBE.use.value = 0; OCC.on.value = 0; compU.uEmOn.value = 0;
+  var keepUse = PROBE.use.value, keepOcc = OCC.on.value; PROBE.use.value = 0; OCC.on.value = 0; compU.uEmOn.value = 0; compU.uNepOn.value = 0;
   for(var k=0, n=SKY.fresh ? Math.min(q.sky[1], SKY.dirty) : 6; k<n; k++){
     var cam = SKY.cam.children[SKY.next], e = cam.matrixWorld.elements;
     VIEW.right.value.set(e[0], e[1], e[2]); VIEW.up.value.set(e[4], e[5], e[6]); VIEW.fwd.value.set(-e[8], -e[9], -e[10]);
@@ -1741,6 +1965,13 @@ function drawFrame(){
     PROBE.mode.value = 0;
     PROBE.use.value = 1; OCC.on.value = 1;
   }
+  nepPrepare();
+  if(NEP.active){ renderer.setRenderTarget(rtNep); renderer.setClearColor(0x000000, 0); renderer.clear(); postQuad.material = nepMat; renderer.render(postScene, postCam); }
+  if(rtExp){
+    expU.tSrc.value = NEP.active ? rtNep.texture : null; expU.uOn.value = NEP.active && NEP.ui && !NEP.probe ? 1 : 0; expU.uDt.value = lastDt;
+    expU.tPrev.value = rtExp[expI].texture; expI = 1 - expI; pass(expMat, rtExp[expI]); finU.tExp.value = rtExp[expI].texture;
+  }
+  compU.tNep.value = NEP.active ? rtNep.texture : null; compU.uNepOn.value = NEP.active ? 1 : 0;
   renderer.setRenderTarget(rtMain); renderer.setClearColor(0x030408, 1); renderer.clear(); renderer.render(scene, camera);
   renderer.setRenderTarget(rtVol); renderer.setClearColor(0x000000, 0); renderer.clear(); renderer.render(volScene, camera);
   if(PROBES){
@@ -1898,7 +2129,14 @@ function applyScale(){
   $('#scaleBtn').textContent = big ? '比例：放大' : '比例：真實';
   $('#scaleNote').textContent = big ? '行星放大 40 倍、恆星 2 萬倍、星雲 3 倍。距離不變。' : '大小和距離都是真的。太空看起來很空，因為它真的很空。';
 }
-$('#scaleBtn').addEventListener('click', function(){ big = !big; applyScale(); });
+$('#scaleBtn').addEventListener('click', function(){
+  /* near Neptune, keep your place relative to it: the same height in its own terms, not buried or flung out */
+  var near = NEP.w && P.distanceTo(NEP.w) < 6*NEP.Rau*AU_LY*K('p'), k0 = K('p');
+  big = !big; applyScale();
+  if(near){ nepRel.copy(P).sub(NEP.w).multiplyScalar(K('p')/k0); P.copy(NEP.w).add(nepRel); }
+});
+$('#visionBtn').addEventListener('click', function(){ NEP.probe = !NEP.probe; nepU.uProbe.value = NEP.probe ? 1 : 0; this.textContent = NEP.probe ? '視覺：探測' : '視覺：自然'; });
+$('#ascendBtn').addEventListener('click', function(){ NEP.ascend = true; homing = false; });
 var BRIGHT = [['標準', 1.0, 1.2], ['高', 1.3, 1.55], ['最高', 1.7, 2.0]], brightI = 1;
 function applyBright(){ $('#brightBtn').textContent = '亮度：' + BRIGHT[brightI][0]; finU.uExpo.value = BRIGHT[brightI][1]; STARGAIN.value = BRIGHT[brightI][2]; }
 $('#brightBtn').addEventListener('click', function(){ brightI = (brightI + 1) % BRIGHT.length; applyBright(); });
@@ -1909,6 +2147,7 @@ function applyQuality(){
   NEB_STEPS.value = HAS3D ? q.neb : Math.round(q.neb*0.55); GAL_STEPS.value = HAS3D ? q.gal : Math.round(q.gal*0.57);
   AIRQ.i.value = q.air[0]; AIRQ.j.value = q.air[1];
   bhU.uBhStep.value = q.bh[0]; bhU.uBhMax.value = q.bh[1]; bhScale = Math.max(bhScale, q.bh[2]);
+  nepU.uSteps.value = q.nep[1]; nepU.uShSteps.value = q.nep[2];
   volScale = clamp(volScale, q.vol[0], q.vol[1]);
   if(sphGeo.parameters.widthSegments !== q.sph[0]){
     var old = sphGeo, i; sphGeo = new THREE.SphereGeometry(1, q.sph[0], q.sph[1]);
@@ -1981,8 +2220,84 @@ window.addEventListener('resize', function(){
   sizeTargets();
 });
 
-var EL = {tele:$('#teleBtn'), place:$('#place'), dHome:$('#dHome'), dLight:$('#dLight'), dEdge:$('#dEdge'), dPct:$('#dPct'), near:$('#near')};
+var EL = {nep:$('#nepInfo'), nepSub:$('#nepInfo small'), tele:$('#teleBtn'), place:$('#place'), dHome:$('#dHome'), dLight:$('#dLight'), dEdge:$('#dEdge'), dPct:$('#dPct'), near:$('#near')};
 var bhNote = '', dragQ = new THREE.Quaternion();
+/* ---------- flying into Neptune ----------
+   Positions stay in the universe's light-years; near Neptune they are also worked out in its own frame (turning with it, in km, from its centre),
+   which keeps the clouds steady and gives the readings. The enlarged view only changes how big Neptune is drawn: heights, pressures and
+   temperatures always come from the physical model. */
+var lastDt = 0.016, KM_LY = 1/9.4607e12, nepQ = new THREE.Quaternion(), nepQi = new THREE.Quaternion(), nepRel = new THREE.Vector3(), nepAx = new THREE.Vector3(), nepM4 = new THREE.Matrix4();
+function nepFrame(){
+  nepQ.copy(auRoot.quaternion).multiply(NEP.ball.quaternion); nepQi.copy(nepQ).invert();
+  nepAx.set(0, 1, 0).applyQuaternion(nepQ);
+}
+function nepFlight(dt){
+  if(!NEP.w) return;
+  nepFrame();
+  var k = K('p'), Rly = NEP.Rau*AU_LY*k;
+  nepRel.copy(P).sub(NEP.w);
+  var dist = nepRel.length(), alt = dist/Rly*NEP.R - NEP.R;                     /* km above the 1-bar level, physical */
+  /* weather time: 60 times faster than life from space, slowing to life speed among the clouds; Neptune turns on this clock */
+  NEP.mult = clamp(alt/50, 1, 60);
+  NEP.tau.value += NEP.mult*dt;
+  /* close in, you turn with the planet, as a craft matching its spin would; then only the winds move the clouds past you */
+  var frac = 1 - sstep(3*Rly, 6*Rly, dist);
+  if(frac > 0){
+    dragQ.setFromAxisAngle(nepAx, 2*Math.PI*NEP.spin*NEP.mult*dt*frac);
+    nepRel.applyQuaternion(dragQ); P.copy(NEP.w).add(nepRel);
+    fwdV.applyQuaternion(dragQ); pitch = Math.asin(clamp(fwdV.y, -1, 1)); yaw = Math.atan2(-fwdV.x, -fwdV.z);
+  }
+  /* this stage goes down to the 10-bar level */
+  if(alt < NEP.zLimit){ alt = NEP.zLimit; nepRel.setLength((NEP.R + alt)/NEP.R*Rly); P.copy(NEP.w).add(nepRel); }
+  /* the way back out: up along the vertical, quickly while there is room and gently at the end, to 4,000 km */
+  if(NEP.ascend){
+    if(alt >= 3990) NEP.ascend = false;
+    else { alt = Math.min(alt + Math.min((alt + 80)*1.6, (4000 - alt)*2 + 20)*dt, 4000); nepRel.setLength((NEP.R + alt)/NEP.R*Rly); P.copy(NEP.w).add(nepRel); }
+  }
+  NEP.alt = alt;
+  /* the panel for the descent shows inside 4,000 km and goes at 5,000 km, so it does not flicker at the boundary */
+  if(!NEP.ui && alt < 4000) setNepUi(true); else if(NEP.ui && alt > 5000) setNepUi(false);
+  /* the camera's exposure follows the light where you are, slowly, as an eye or a camera adjusts */
+  lastDt = dt; finU.uExpOn.value = rtExp && !NEP.probe ? 1 : 0;
+  var target = 1;
+  if(!rtExp && alt < 3000 && !NEP.probe){ var mu = nepRel.clone().normalize().dot(NEP.w.clone().negate().normalize()); target = clamp(0.3/Math.max(NEP.lightAt(alt, mu), 1e-4), 1, 40); }
+  NEP.expo += (target - NEP.expo)*(1 - Math.exp(-dt/1.2));
+  finU.uExpo.value = BRIGHT[brightI][1]*(NEP.probe ? 1 : NEP.expo);
+}
+/* the readings, from the model, at your height */
+function nepHud(){
+  var z = NEP.alt, P = NEP.pOf(z), T = NEP.temp(P), lay = NEP.layerAt(P);
+  var zs = (z >= 0 ? '+' : '−') + Math.abs(z).toFixed(Math.abs(z) < 100 ? 1 : 0).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  var ps = z > NEP.zOf(1e-5) ? '低於 0.00001' : (P < 0.01 ? P.toExponential(1) : (P < 10 ? P.toFixed(2) : P.toFixed(0)));
+  EL.place.textContent = z < NEP.zTop ? '海王星大氣' : '海王星'; shownPlace = '';
+  var line2 = (lay ? lay.name + '（' + lay.what + '）' : (z > NEP.lay.hazeTop ? '高層大氣' : '雲層之間的氣體')) + '｜天氣時間 ×' + Math.round(NEP.mult);
+  if(NEP.probe) line2 = '溫度：' + (P <= 2 ? 'Voyager 2 量測，誤差約幾 K' : '由 2 bar 以下的絕熱線外推，未經量測（模型推演）') + (lay ? '｜' + lay.name + '：' + lay.src + '，可信度' + lay.sure : '');
+  if(z <= NEP.zLimit + 0.5) line2 = '已到這一階段的最深處（10 bar）。更深處留待下一階段的模型推演';
+  EL.nep.firstChild.nodeValue = '高度 ' + zs + ' 公里（以 1 bar 為零點）｜' + ps + ' bar｜' + Math.round(T) + ' K';
+  EL.nepSub.textContent = line2;
+}
+function setNepUi(on){
+  NEP.ui = on; document.body.classList.toggle('nep', on); $('#nepBar').hidden = !on; $('#nepInfo').hidden = !on; $('#near').hidden = on; $('#scaleNote').hidden = on;
+  if(!on){ NEP.probe = false; nepU.uProbe.value = 0; $('#visionBtn').textContent = '視覺：自然'; }
+}
+/* whether Neptune is drawn as a volume: from 28 pixels in radius, back to the plain ball below 20. The volume fades in over the ball as
+   Neptune grows from 28 to 64 pixels, so the change of drawing is never seen as a jump */
+function nepPrepare(){
+  if(!NEP.w || !nepMat){ NEP.active = false; return; }
+  var k = K('p'), Rly = NEP.Rau*AU_LY*k, dist = nepRel.copy(P).sub(NEP.w).length();
+  var px = Rly/Math.max(dist, Rly*1.0001)/VIEW.tanF.value*(rtMain.height/2);
+  if(!NEP.active && px > 28) NEP.active = true; else if(NEP.active && px < 20) NEP.active = false;
+  if(!NEP.active) return;
+  nepFrame();
+  nepU.uRo.value.copy(nepRel).applyQuaternion(nepQi).multiplyScalar(NEP.R/Rly);
+  nepU.uQ.value.setFromMatrix4(nepM4.makeRotationFromQuaternion(nepQi));
+  nepU.uSun.value.copy(NEP.w).negate().normalize().applyQuaternion(nepQi);
+  var turns = NEP.tau.value*NEP.spin; nepU.uRot.value = turns - Math.floor(turns); nepU.uRotA.value = 2*Math.PI*nepU.uRot.value;
+  nepU.tMap.value = NEP.map; nepU.uPix.value = 2*VIEW.tanF.value/rtNep.height;
+  nepU.uAlpha.value = sstep(28, 64, px);
+  /* the ball and its point of light give way to the volume */
+  NEP.ball.visible = nepU.uAlpha.value < 1; NEP.glow.visible = false;
+}
 var v1 = new THREE.Vector3(), fwdV = new THREE.Vector3(), last = performance.now(), frames = 0, shownPlace = '', ftA = 0, ftN = 0, plain = false;
 var pick = [];
 function frame(now){
@@ -2007,11 +2322,14 @@ function frame(now){
     if(bi !== poolStar.idx) setPoolStar(bi);
     if(bi >= 0){ var dh = Math.max(Math.sqrt(bd2), poolStar.mark.r0*K('s')); if(dh < nd){ nd = dh; near = poolStar.mark; } }
   }
+  /* near Neptune the speed follows your height above its cloud tops, down to a crawl inside them */
+  if(NEP.w && NEP.alt < 2e5) nd = Math.min(nd, (Math.max(NEP.alt - 35, 0) + 1.5)*K('p')*KM_LY);
   var S = nd;
   /* the edge of the observable universe is a landmark too: you slow down as you reach it, and cannot go far beyond */
   var gap = Math.abs(EDGE - P.length()), atEdge = gap < nd;
   var Sm = Math.min(nd, Math.max(gap, EDGE*0.004));
   var th = thrust + (keys.w ? 1 : 0) - (keys.s ? 1 : 0);
+  if(th !== 0){ NEP.ascend = false; }
   if(th !== 0 && !homing){
     held = Math.min(held + dt, 6);
     P.addScaledVector(fwdV, th*Sm*(0.75 + 0.2*held)*dt);
@@ -2052,6 +2370,7 @@ function frame(now){
       if(rB <= rStop*1.001) bhNote += '。再靠近就回不來了';
     }
   }
+  nepFlight(dt);
   var D = Math.max(P.length(), 1e-8), L = Math.log10(D);
   /* never let the drawing scale shrink below what is on screen nearby */
   var s = 1/S; viewS = S;
@@ -2201,6 +2520,7 @@ function frame(now){
       EL.near.textContent = '最近的地標：' + near.name + (real > near.r0*K(near.cls)*1.02 ? '，還有 ' + fmtDist(real) : '，就在眼前');
     }
     if(bhNote) EL.near.textContent = bhNote;
+    if(NEP.ui) nepHud();
   }
 }
 requestAnimationFrame(frame);
