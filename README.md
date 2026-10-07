@@ -13,7 +13,7 @@
 - 恆星位置、亮度、顏色：[HYG Database](https://github.com/astronexus/HYG-Database)，CC BY-SA 4.0。本專案內嵌的是其中 16,166 顆恆星的子集，並轉換為銀河座標；這份內嵌資料同樣以 CC BY-SA 4.0 授權。
 - 太陽、行星、月球、土星環的表面貼圖：[Solar System Scope](https://www.solarsystemscope.com/textures/)，CC BY 4.0。貼圖經過重新壓縮與縮放。
 - 繪圖函式庫：[three.js](https://github.com/mrdoob/three.js) r128，MIT。
-- 黑洞光線追蹤的做法參考 [oseiskar/black-hole](https://github.com/oseiskar/black-hole)（MIT）。
+- 黑洞光線追蹤的做法參考 [oseiskar/black-hole](https://github.com/oseiskar/black-hole)（MIT），改寫成克爾（自轉）黑洞：Kerr–Schild 座標下的哈密頓光線方程；最內穩定軌道、吸積盤的轉速與紅移依 Bardeen, Press & Teukolsky (1972)。
 - 大氣散射的算法參考 [wwwtyro/glsl-atmosphere](https://github.com/wwwtyro/glsl-atmosphere)（公有領域）。
 - 行星與冥王星的軌道根數：E. M. Standish（JPL），[Keplerian Elements for Approximate Positions of the Major Planets](https://ssd.jpl.nasa.gov/planets/approx_pos.html)，適用 1800–2050 年。
 - 月球位置的算法參考 Paul Schlyter，[How to compute planetary positions](https://stjarnhimlen.se/comp/ppcomp.html)。
@@ -23,6 +23,9 @@
 - 太陽系：八大行星和冥王星真實的橢圓軌道（包含傾角），以及打開頁面當下的位置；跟完整星曆比對，2000–2050 年間誤差在 0.2° 以內。
 - 月球：當下的位置和月相，誤差在 0.1° 以內。
 - 各天體的實際尺寸。
+- 黑洞：12 個真實的黑洞，位置、質量都是真的（天鵝座 X-1、天鵝座 V404、GRS 1915+105、A0620-00、蓋亞 BH1、蓋亞 BH3、人馬座 A*、M31*、半人馬座 A*、M87*、NGC 4889*、TON 618）。光線是在會自轉的克爾黑洞時空裡一步一步追蹤的：黑影的大小和自轉造成的 D 字形、吸積盤後方被彎到上下的光、朝你轉來那一側較亮較藍、光爬出重力井時的紅移、噴流朝你那一邊特別亮，都是算出來的，不是畫上去的。靠近時，背後整片星空會被彎成光環；自轉會拖著空間轉，把你一起帶著繞圈（參考系拖曳），畫面也會顯示你的時間比遠方慢多少。
+  - 時間經過調整：伴星繞黑洞的速度是實際的 3,600 倍（一秒等於一小時），吸積盤則放慢到看得出它在轉。
+  - 自轉快慢和轉軸方向，有量測值的用量測值，沒有的是合理的假設。
 - 16,166 顆恆星的三維位置與亮度。
 - 有名字的星雲、星系、星系團、黑洞的方向與距離（部分座標為近似值）。
 
