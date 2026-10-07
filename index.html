@@ -873,31 +873,69 @@ var GLOW_FS = 'uniform vec3 uTint; uniform float uAlpha; varying vec2 vUv;' +
   'void main(){ vec2 c = vUv*2.0 - 1.0; float d = length(c); float g = 0.035/(d*d + 0.03) - 0.034;' +
   ' float a = atan(c.y, c.x); float rays = (0.5 + 0.5*cos(a*4.0))*(0.5 + 0.5*cos(a*4.0)); rays = pow(rays, 12.0)*exp(-d*3.0)*0.5;' +
   ' gl_FragColor = vec4(uTint*(max(g, 0.0)*2.5 + rays*1.3*(1.0 - smoothstep(0.6, 1.0, d)))*uAlpha, 1.0); }';
-/* A resolved star has a real sphere beneath this separate, illustrative corona.
-   View-space rays keep its inner edge aligned with the sphere even off centre. */
+/* The corona is a source-centred radial field, not a camera-facing starburst.
+   Project its spherical bounds so camera turns cannot rotate or clip its rays. */
 var STAR_GLOW_VS = `
-varying vec2 vUv; varying vec3 vRay; varying vec3 vCenter;
+uniform float uResolved; uniform float uRadius;
+varying vec3 vRay; varying vec3 vCenter;
 void main(){
-  vUv=uv; vec4 mv=modelViewMatrix*vec4(position,1.0);
+  vec4 mv=modelViewMatrix*vec4(position,1.0);
+  vec4 center=modelViewMatrix*vec4(0.0,0.0,0.0,1.0);
   float extent=max(length(modelViewMatrix[0].xyz),1.0e-25);
-  vRay=mv.xyz/extent; vCenter=(modelViewMatrix*vec4(0.0,0.0,0.0,1.0)).xyz/extent;
+  vRay=mv.xyz/extent; vCenter=center.xyz/extent;
   gl_Position=projectionMatrix*mv;
+  if(uResolved>0.0){
+    float z=-vCenter.z, radius=6.0*uRadius;
+    vec2 focal=vec2(projectionMatrix[0][0],projectionMatrix[1][1]);
+    vec2 offset=vec2(projectionMatrix[2][0],projectionMatrix[2][1]);
+    vec2 lo=vec2(-1.0), hi=vec2(1.0);
+    if(z+radius<=0.0){gl_Position=vec4(2.0,2.0,2.0,1.0);return;}
+    if(z>radius*(1.0+1.0e-5)){
+      float denom=z*z-radius*radius;
+      vec2 span=radius*sqrt(max(vCenter.xy*vCenter.xy+vec2(denom),vec2(0.0)));
+      lo=(vCenter.xy*z-span)/denom*focal-offset;
+      hi=(vCenter.xy*z+span)/denom*focal-offset;
+      // During the point-to-sphere blend, also cover the original point glow.
+      if(uResolved<1.0){
+        lo=min(lo,(vCenter.xy-vec2(1.0))/z*focal-offset);
+        hi=max(hi,(vCenter.xy+vec2(1.0))/z*focal-offset);
+      }
+      lo=clamp(lo,vec2(-1.0),vec2(1.0)); hi=clamp(hi,vec2(-1.0),vec2(1.0));
+    }
+    vec2 ndc=mix(lo,hi,uv);
+    vRay=vec3((ndc+offset)/focal,-1.0);
+    vec4 clip=projectionMatrix*center;
+    float depth=clip.w>0.0?clamp(clip.z/clip.w,-1.0,1.0):1.0;
+    gl_Position=vec4(ndc,depth,1.0);
+  }
 }`;
 var STAR_GLOW_FS = `
 uniform vec3 uTint; uniform float uAlpha; uniform float uResolved; uniform float uRadius; uniform float uDisplayGain; uniform float uSeed;
-varying vec2 vUv; varying vec3 vRay; varying vec3 vCenter;
+varying vec3 vRay; varying vec3 vCenter;
 void main(){
-  vec2 p=vUv*2.0-1.0; float d=length(p); if(d>=1.0)discard;
-  float point=max(0.0,0.035/(d*d+0.03)-0.034)*2.5;
+  vec3 rd=vRay/max(length(vRay),1.0e-8);
+  // Reconstruct the original point coordinates even on a conservatively enlarged quad.
+  vec2 p=vRay.xy*(vCenter.z/min(vRay.z,-1.0e-8))-vCenter.xy;
+  float d=length(p), point=vCenter.z<0.0 && d<1.0?max(0.0,0.035/(d*d+0.03)-0.034)*2.5:0.0;
   vec3 light=uTint*point*(1.0-uResolved);
   if(uResolved>0.0){
-    float rho=length(cross(vCenter,vRay/max(length(vRay),1.0e-8)))/max(uRadius,1.0e-8);
-    float h=max(rho-1.0,0.0), angle=d>1.0e-8?atan(p.y,p.x):0.0;
-    float streamer=pow(0.5+0.5*sin(angle*7.0+0.85*sin(angle*3.0+uSeed)),14.0);
-    float fine=pow(0.5+0.5*cos(angle*19.0+1.1*sin(angle*5.0-uSeed)),26.0);
+    float along=dot(vCenter,rd);
+    float rho=length(rd*max(along,0.0)-vCenter)/max(uRadius,1.0e-8);
+    float h=max(rho-1.0,0.0);
+    vec3 axis=vCenter/max(length(vCenter),1.0e-8);
+    // A tangent-plane radial direction stays fixed along a projected ray from
+    // the stellar centre. Row multiplication undoes the camera rotation in GLSL 1.
+    vec3 radial=rd-axis*dot(rd,axis);
+    float radialLength=length(radial);
+    vec3 direction=(radial/max(radialLength,1.0e-8))*mat3(viewMatrix);
+    float rayMask=smoothstep(0.0,1.0e-5,radialLength)*smoothstep(0.0,0.001,dot(rd,axis));
+    // Continuous 3D direction fields avoid a polar/atan seam and camera-locked spikes.
+    float wave=dot(direction,vec3(8.1,11.7,5.4))+1.5*sin(dot(direction,vec3(-3.8,2.1,4.7))+uSeed);
+    float streamer=pow(0.5+0.5*sin(wave+uSeed),14.0);
+    float fine=pow(0.5+0.5*sin(dot(direction,vec3(23.7,-19.3,17.1))+sin(wave)+uSeed*1.7),26.0);
     float halo=0.16*exp(-h*3.2)+0.015*exp(-h*0.85);
-    float rays=(0.30*streamer+0.10*fine)*(1.0-exp(-h*5.0))*exp(-h*0.85);
-    float rim=smoothstep(0.98,1.015,rho), edge=1.0-smoothstep(0.72,1.0,d);
+    float rays=(0.30*streamer+0.10*fine)*(1.0-exp(-h*5.0))*exp(-h*0.85)*rayMask;
+    float rim=smoothstep(0.98,1.015,rho), edge=1.0-smoothstep(4.5,6.0,rho);
     light+=mix(uTint,vec3(1.0,0.94,0.86),0.15)*(halo+rays)*rim*edge*uResolved*uDisplayGain;
   }
   gl_FragColor=vec4(light*uAlpha,1.0);
