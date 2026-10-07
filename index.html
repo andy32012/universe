@@ -550,9 +550,9 @@ var HAS3D = !!(renderer.capabilities && renderer.capabilities.isWebGL2 && THREE.
    finer air and a more careful trace of light round black holes. 自動 starts at 高 where the device has the faster cloud path,
    and steps down (never back up past where it had to step down from) if frames get slow. */
 var QUALITY = [
-  {name:'標準', vol:[0.30, 0.85], neb:80,  gal:56,  bh:[1.5, 260], sky:[256, 1], air:[12, 5], sph:[48, 32],   msaa:false},
-  {name:'高',   vol:[0.45, 1.00], neb:112, gal:80,  bh:[1.0, 400], sky:[512, 2], air:[16, 6], sph:[96, 64],   msaa:true},
-  {name:'極致', vol:[0.60, 1.00], neb:160, gal:112, bh:[0.6, 650], sky:[768, 3], air:[24, 8], sph:[160, 100], msaa:true}
+  {name:'標準', vol:[0.30, 0.85], neb:80,  gal:56,  bh:[3.0, 220, 0.5], sky:[256, 1], air:[12, 5], sph:[48, 32],   msaa:false},
+  {name:'高',   vol:[0.45, 1.00], neb:112, gal:80,  bh:[2.5, 280, 0.7], sky:[512, 2], air:[16, 6], sph:[96, 64],   msaa:true},
+  {name:'極致', vol:[0.60, 1.00], neb:160, gal:112, bh:[2.0, 360, 1.0], sky:[768, 3], air:[24, 8], sph:[160, 100], msaa:true}
 ];
 var qual = {mode:'auto', level:0, cap:QUALITY.length - 1};
 try{ var qSaved = localStorage.getItem('universe.quality'); if(qSaved === '0' || qSaved === '1' || qSaved === '2') qual.mode = +qSaved; }catch(e){}
@@ -851,8 +851,11 @@ function dot(pos, parent, tint, R, k, star, a, b, c, d, cls){
 }
 /* Black holes, drawn by following light through the curved, turning space around them (see the tracer further down).
    o: mass (suns); spin (0 to 1); how far the spin axis leans from our line of sight and which way it leans (incl, pa, degrees);
-   disc: how bright the gas swirling in is (0 for a quiet hole that is eating nothing); jet: the twin jets along the spin axis;
-   temp: the disc's colour (kelvin); lo, hi: the label's range; glow, ga: the point of light that stands for it from afar, and when it shows. */
+   flow: what is falling in. 'thin' is a thin, dense disc glowing like a hot body, the way a hole feeding fast is (o.lam: how fast, as a
+   fraction of the most it can take, the Eddington rate). 'thick' is the thin, hot, puffed-up gas round a hole that is barely feeding,
+   glowing by its electrons spiralling in magnetic fields; light passes through it. Without flow nothing shines round the hole.
+   disc: how strongly it is shown; rout: how far out it reaches (GM/c^2); jet: the twin jets along the spin axis;
+   lo, hi: the label's range; glow, ga: the point of light that stands for it from afar, and when it shows. */
 var holes = [], MSUN_LY = 1.4766/9.4607e12;    /* GM/c^2 for one Sun (1.48 km), in light-years: the unit the tracer works in */
 /* the innermost stable orbit, inside which the gas plunges in; closer for a faster spin (Bardeen, Press and Teukolsky 1972) */
 function isco(a){ var z1 = 1 + Math.cbrt(1 - a*a)*(Math.cbrt(1 + a) + Math.cbrt(1 - a)), z2 = Math.sqrt(3*a*a + z1*z1); return 3 + z2 - Math.sqrt((3 - z1)*(3 + z1 + 2*z2)); }
@@ -862,7 +865,13 @@ function blackHole(name, sub, pos, o){
   var tilt = rad(o.incl || 0), turn = rad(o.pa || 0);
   var ax = home.clone().multiplyScalar(Math.cos(tilt)).addScaledVector(north, Math.sin(tilt)*Math.cos(turn)).addScaledVector(east, Math.sin(tilt)*Math.sin(turn)).normalize();
   var e1 = new THREE.Vector3().crossVectors(ax, Math.abs(ax.y) < 0.9 ? new THREE.Vector3(0, 1, 0) : new THREE.Vector3(1, 0, 0)).normalize(), e2 = new THREE.Vector3().crossVectors(ax, e1);
-  var h = {name:name, w:pos.clone(), M:M, rs:5.2*M, a:o.spin, ax:ax, e1:e1, e2:e2, rin:isco(o.spin), disc:o.disc || 0, jet:o.jet || 0, temp:o.temp || 6000, seed:holes.length*3.7 + 1.0};
+  var h = {name:name, w:pos.clone(), M:M, rs:5.2*M, a:o.spin, ax:ax, e1:e1, e2:e2, rin:isco(o.spin), seed:holes.length*3.7 + 1.0,
+    flow:o.flow || '', disc:o.flow ? (o.disc || 1) : 0, jet:o.jet || 0, rout:o.rout || 24, thick:o.thick || 0.6,
+    /* the inner disc's temperature for a thin disc: hotter for a smaller hole or a faster feed (about 10 million kelvin for ten suns at the Eddington rate) */
+    tin:o.flow === 'thin' ? 2e7*Math.pow(o.lam || 0.1, 0.25)*Math.pow(o.mass/10, -0.25) : 0,
+    /* how fast things near it are shown changing: a hole's own clock runs at GM/c^3, from a tenth of a millisecond to days;
+       that range is far too wide to show as it is, so it is squeezed: small holes are shown faster, the giants slower */
+    clk:clamp(5*Math.pow(o.mass/1e6, -0.12), 1.5, 20)};
   holes.push(h);
   mark(name, label(name, sub, pos, o.lo, o.hi, false), 3*M, 's');
   if(o.glow) h.glow = dot(pos, lyRoot, o.glow, 5.2*M, o.glowK || 0.006, false, o.ga[0], o.ga[1], o.ga[2], o.ga[3], 's');
@@ -1165,20 +1174,20 @@ var STARS = [
   }
   var MW = [1.6, 2.4, 5.0, 5.6];
   var cyg = blackHole('天鵝座 X-1', '第一個被確認的黑洞，21 個太陽重，自轉極快', gal(71.34, 3.07, 7200),
-    {mass:21.2, spin:0.95, incl:27, pa:20, disc:1, jet:0.35, temp:9000, lo:2.9, hi:5.1, glow:[1.0,0.6,0.25], ga:MW});
+    {mass:21.2, spin:0.95, incl:27, pa:20, flow:'thin', lam:0.02, rout:20, disc:1, jet:0.35, lo:2.9, hi:5.1, glow:[1.0,0.6,0.25], ga:MW});
   companion(cyg, 3.2e-6, 22*RSUN_LY, [0.7,0.82,1.0], 5.6, 1.6, 2.4, 5.0, 5.6);
   var bh1 = blackHole('蓋亞 BH1', '離我們最近的黑洞，安靜得幾乎看不見', gal(22.63, 18.05, 1560), {mass:9.6, spin:0.2, incl:60, pa:120, lo:2.2, hi:4.4});
   companion(bh1, 2.2e-5, RSUN_LY, [1.0,0.93,0.78], 185.6, 1.2, 2.0, 4.4, 5.0);
   var bh3 = blackHole('蓋亞 BH3', '銀河系裡最重的恆星級黑洞，33 個太陽重', gal(51.67, -3.49, 1926), {mass:32.7, spin:0.3, incl:70, pa:300, lo:2.3, hi:4.5});
   companion(bh3, 2.56e-4, 4.9*RSUN_LY, [1.0,0.85,0.65], 4237, 1.2, 2.0, 4.4, 5.0);
   var v404 = blackHole('天鵝座 V404', '2015 年猛烈爆發過的黑洞，9 個太陽重', gal(73.12, -2.09, 7800),
-    {mass:9.0, spin:0.6, incl:67, pa:200, disc:0.8, jet:0.3, temp:8000, lo:2.9, hi:5.1, glow:[1.0,0.62,0.3], ga:MW});
+    {mass:9.0, spin:0.6, incl:67, pa:200, flow:'thin', lam:0.1, rout:30, disc:0.9, jet:0.3, lo:2.9, hi:5.1, glow:[1.0,0.62,0.3], ga:MW});
   companion(v404, 2.31e-6, 6*RSUN_LY, [1.0,0.80,0.58], 6.47, 1.6, 2.4, 5.0, 5.6);
   var grs = blackHole('GRS 1915+105', '自轉近乎極限的黑洞，噴流接近光速', gal(45.37, -0.22, 28000),
-    {mass:12.4, spin:0.98, incl:66, pa:150, disc:1, jet:1, temp:9500, lo:3.2, hi:5.3, glow:[1.0,0.7,0.4], ga:[2.0, 2.8, 5.2, 5.8]});
+    {mass:12.4, spin:0.98, incl:66, pa:150, flow:'thin', lam:1, rout:40, disc:1, jet:1, lo:3.2, hi:5.3, glow:[1.0,0.7,0.4], ga:[2.0, 2.8, 5.2, 5.8]});
   companion(grs, 7.6e-6, 21*RSUN_LY, [1.0,0.72,0.48], 33.85, 2.0, 2.8, 5.2, 5.8);
   var a0620 = blackHole('A0620-00', '離我們很近的黑洞，伴星不到 8 小時就繞一圈', gal(209.96, -6.54, 3500),
-    {mass:6.6, spin:0.12, incl:51, pa:80, disc:0.3, temp:7000, lo:2.6, hi:4.8, glow:[1.0,0.62,0.3], ga:[1.4, 2.2, 4.8, 5.4]});
+    {mass:6.6, spin:0.12, incl:51, pa:80, flow:'thick', rout:30, thick:0.7, disc:0.5, lo:2.6, hi:4.8, glow:[1.0,0.62,0.3], ga:[1.4, 2.2, 4.8, 5.4]});
   companion(a0620, 2.78e-7, 0.7*RSUN_LY, [1.0,0.70,0.45], 0.323, 1.4, 2.2, 4.8, 5.4);
 })();
 
@@ -1234,7 +1243,7 @@ var GC = gal(0, 0, 26700);   /* the galactic centre, 26,700 light-years away */
   galaxyVol(GC, RD, new THREE.Vector3(0,1,0), {mw:true, arms:4, b:B, r0:16500/RD, seed:1.3, core:[1.0,0.80,0.55], arm:[0.60,0.74,1.0]}, -9, -8, 6.9, 7.7);
   label('太陽系', '你的家', new THREE.Vector3(), 3.2, 6.0, false, true);
   blackHole('人馬座 A*', '銀河中心的黑洞，四百萬個太陽重', GC,
-    {mass:4.3e6, spin:0.9, incl:30, pa:60, disc:0.35, temp:5500, lo:3.7, hi:6.0, glow:[1.0,0.62,0.28], glowK:0.009, ga:[2.6, 3.4, 6.2, 6.9]});
+    {mass:4.3e6, spin:0.9, incl:30, pa:60, flow:'thick', rout:25, thick:0.8, disc:0.7, lo:3.7, hi:6.0, glow:[1.0,0.62,0.28], glowK:0.009, ga:[2.6, 3.4, 6.2, 6.9]});
   function armPos(r, off){ var th = Math.PI + off; return new THREE.Vector3(GC.x + r*Math.cos(th), 0, GC.z - r*Math.sin(th)); }
   label('人馬臂', '', armPos(21800, 0.10), 3.9, 5.6, false);
   label('英仙臂', '', armPos(33200, -0.10), 3.9, 5.6, false);
@@ -1265,7 +1274,7 @@ var M31 = gal(121.2, -21.6, 2.54e6), M33 = gal(133.6, -31.3, 2.73e6), LMC = gal(
   mark('仙女座星系', label('仙女座星系', '254 萬光年', M31, 5.5, 7.6, false), 15000);
   mark('三角座星系', label('三角座星系', '273 萬光年', M33, 5.7, 7.5, false), 6000);
   blackHole('M31*', '仙女座星系中心的黑洞，1.4 億個太陽重', M31,
-    {mass:1.4e8, spin:0.6, incl:77, pa:38, disc:0.2, temp:5000, lo:4.5, hi:5.0, glow:[1.0,0.66,0.35], glowK:0.008, ga:[4.6, 5.4, 7.6, 8.2]});
+    {mass:1.4e8, spin:0.6, incl:77, pa:38, flow:'thick', rout:20, thick:0.8, disc:0.5, lo:4.5, hi:5.0, glow:[1.0,0.66,0.35], glowK:0.008, ga:[4.6, 5.4, 7.6, 8.2]});
 })();
 
 /* ---------- 5. our supercluster: Virgo and Laniakea (real cluster positions) ---------- */
@@ -1307,9 +1316,9 @@ setTimeout(function(){
   label('本星系群', '你的家', O, 7.1, 9.0, false, true);
   /* M87*, the first black hole ever photographed, sits at the heart of the Virgo Cluster */
   blackHole('M87*', '第一個被拍到的黑洞，65 億個太陽重，噴流長達五千光年', P['室女座星系團'],
-    {mass:6.5e9, spin:0.9, incl:17, pa:288, disc:0.8, jet:1, temp:4800, lo:6.3, hi:8.6, glow:[1.0,0.66,0.32], glowK:0.012, ga:[5.6, 6.4, 8.8, 9.4]});
+    {mass:6.5e9, spin:0.9, incl:17, pa:288, flow:'thick', rout:30, thick:0.6, disc:1, jet:1, lo:6.3, hi:8.6, glow:[1.0,0.66,0.32], glowK:0.012, ga:[5.6, 6.4, 8.8, 9.4]});
   blackHole('半人馬座 A*', '最近的活躍星系核，噴流噴出星系之外', gal(309.52, 19.42, 1.24e7),
-    {mass:5.5e7, spin:0.7, incl:50, pa:55, disc:0.6, jet:1, temp:5500, lo:5.6, hi:6.5, glow:[1.0,0.7,0.4], glowK:0.01, ga:[5.0, 5.8, 8.2, 8.8]});
+    {mass:5.5e7, spin:0.7, incl:50, pa:55, flow:'thick', rout:25, thick:0.5, disc:0.8, jet:1, lo:5.6, hi:6.5, glow:[1.0,0.7,0.4], glowK:0.01, ga:[5.0, 5.8, 8.2, 8.8]});
   blackHole('NGC 4889*', '最重的黑洞之一，210 億個太陽重，已經沉睡', gal(57.19, 87.89, 3.08e8), {mass:2.1e10, spin:0.5, incl:40, pa:10, lo:7.0, hi:7.8});
 }, 60);
 
@@ -1320,7 +1329,7 @@ setTimeout(function(){
   label('武仙–北冕座長城', '約 150 億光年', gal(60, 45, 1.5e10), 9.8, 11.1, false);
   /* TON 618, a quasar powered by one of the heaviest black holes known */
   blackHole('TON 618', '最重的黑洞之一，660 億個太陽重，亮度是銀河系的上百倍', gal(172, 83, 1.82e10),
-    {mass:6.6e10, spin:0.9, incl:10, pa:40, disc:1, jet:0.6, temp:7500, lo:9.0, hi:11.2, glow:[1.0,0.8,0.5], glowK:0.016, ga:[8.6, 9.3, 12.5, 13]});
+    {mass:6.6e10, spin:0.9, incl:10, pa:40, flow:'thin', lam:1, rout:45, disc:1, jet:0.6, lo:9.0, hi:11.2, glow:[1.0,0.8,0.5], glowK:0.016, ga:[8.6, 9.3, 12.5, 13]});
   label('家在這裡', '', new THREE.Vector3(), 9.1, 11.1, false, true);
   /* the edge itself: the cosmic microwave background, the oldest light there is */
   var m = new THREE.ShaderMaterial({
@@ -1442,6 +1451,7 @@ for(var bi=0;bi<BL;bi++){ rtDown.push(mkTarget(false)); if(bi < BL - 1) rtUp.pus
 function sizeTargets(){
   var w = Math.max(4, Math.round(window.innerWidth*PR)), h = Math.max(4, Math.round(window.innerHeight*PR));
   rtMain.setSize(w, h); rtComp.setSize(w, h); if(typeof rtBH !== 'undefined') rtBH.setSize(w, h); if(rtEm) rtEm.setSize(w, h);
+  if(typeof rtBHlow !== 'undefined') rtBHlow.setSize(Math.max(4, Math.round(w*bhScale)), Math.max(4, Math.round(h*bhScale)));
   rtVol.setSize(Math.max(4, Math.round(w*volScale)), Math.max(4, Math.round(h*volScale)));
   if(rtOcc){ rtOcc.setSize(rtVol.width, rtVol.height); OCC.res.value.set(rtVol.width, rtVol.height); }
   for(var i=0;i<BL;i++){ var d = Math.pow(2, i + 1), ww = Math.max(2, Math.round(w/d)), hh = Math.max(2, Math.round(h/d)); rtDown[i].setSize(ww, hh); if(i < BL - 1) rtUp[i].setSize(ww, hh); }
@@ -1477,27 +1487,55 @@ var finMat = postMat(('uniform sampler2D tScene; uniform sampler2D tBloom; unifo
   ' float boost = clamp((over - OVER0)/OVER1, 0.0, 1.0)*vg;' +
   ' gl_FragColor = vec4(c, uHdr > 0.5 ? boost : 1.0); }').split('BLOOM').join(HDR ? '0.55' : '0.65').split('OVER0').join(HDR ? '1.2' : '0.9').split('OVER1').join(HDR ? '5.0' : '1.4'), finU);
 /* ---------- black holes ----------
-   The black hole that looks biggest from where you are is drawn by following light backwards from your eye through the curved space around it.
+   The black hole that matters most on screen is drawn by following light backwards from your eye through the curved space around it.
    It spins, so space near it is dragged round with it (the Kerr solution of Einstein's equations). Light is followed in Kerr-Schild coordinates,
-   in units of GM/c^2, with its equations of motion written in Hamilton's form and stepped with the midpoint rule; the gradient is worked out exactly.
-   Following light backwards in time around a hole spinning one way is the same as following it forwards around one spinning the other way,
-   which is why the spin enters the equations as -a. Checked against the known shadow: 5.196 across for a hole that does not spin, and the
-   lopsided D shape, from -2.1 to +7.0, for one spinning at 0.998.
-   A ray ends by falling in (black), by escaping (it then shows the sky in the direction it leaves: the sharp picture on screen where that covers it,
-   otherwise a picture of the whole sky taken around you), or by fading behind the glowing gas it passes. The disc's gas orbits as fast as it
-   really would, so one side comes toward you (brighter, bluer) while all of its light loses energy climbing out; the twin jets along the
-   spin axis move at 95% of the speed of light and shine far brighter on the side coming toward you. Motion near the hole is shown with
-   BH_CLK units of GM/c^3 passing each second. */
-var BH_CLK = 5;
+   in units of GM/c^2, with its equations of motion written in Hamilton's form; the gradient is worked out exactly, and each ray is stepped
+   with the classic fourth-order Runge-Kutta rule, the step growing with distance and shrinking near the horizon. Following light backwards
+   in time around a hole spinning one way is the same as following it forwards around one spinning the other way, which is why the spin
+   enters the equations as -a. Checked against a far finer solution: the shadow's edge is within 0.0001 GM/c^2 for a hole that does not spin
+   (5.196 across) and for the lopsided D shape of one spinning at 0.998 (-2.1 to +7.0).
+   Every ray ends in one of four ways: it falls in (black); it escapes (it then shows the sky in the direction it leaves: the sharp picture on
+   screen where that covers it, otherwise a picture of the whole sky taken around you); it is stopped by gas thick enough to hide what lies
+   behind; or it runs out of steps while circling close to the hole, and is then judged by where it is heading.
+   What shines round the hole is set by the hole: a thin, dense disc glows like a hot body (its colour and brightness are those of a black body
+   at the local temperature, from a table worked out from Planck's law and the eye's colour response; a black body seen through a shift of
+   its light's energy by a factor g is a black body at g times the temperature, so the shift is applied there and nowhere else); the thin, hot
+   gas round a hole that is barely feeding glows with a power-law spectrum and lets light through. Either way the gas orbits as fast as it
+   really would, so one side comes toward you (brighter, bluer) while all of its light loses energy climbing out; the twin jets along the spin
+   axis move at 95% of the speed of light and shine far brighter on the side coming toward you.
+   Near the hole, each hole's clock runs at its own pace (see blackHole). */
+/* colour of a black body by temperature: rows of linear RGB with luminance 1, and the luminance itself (log10, relative to 6500 K), for 10^3 to 10^8 K */
+var BB = (function(){
+  function lobe(l, m, s1, s2){ var t = (l - m)/(l < m ? s1 : s2); return Math.exp(-0.5*t*t); }
+  /* the CIE 1931 colour matching functions, as fitted by Wyman, Sloan and Shirley (2013) */
+  function cmf(l){ return [1.056*lobe(l, 599.8, 37.9, 31.0) + 0.362*lobe(l, 442.0, 16.0, 26.7) - 0.065*lobe(l, 501.1, 20.4, 26.2),
+    0.821*lobe(l, 568.8, 46.9, 40.5) + 0.286*lobe(l, 530.9, 16.3, 31.1), 1.217*lobe(l, 437.0, 11.8, 36.0) + 0.681*lobe(l, 459.0, 26.0, 13.8)]; }
+  function xyz(spec){ var X = 0, Y = 0, Z = 0; for(var l=380;l<=780;l+=2){ var q = spec(l), c = cmf(l); X += q*c[0]; Y += q*c[1]; Z += q*c[2]; } return [X, Y, Z]; }
+  function rgb(X, Y, Z){ return [3.2406*X - 1.5372*Y - 0.4986*Z, -0.9689*X + 1.8758*Y + 0.0415*Z, 0.0557*X - 0.2040*Y + 1.0570*Z].map(function(v){ return Math.max(v, 0); }); }
+  function planck(T){ return function(l){ return Math.pow(l, -5)/(Math.exp(1.4388e7/(l*T)) - 1); }; }
+  var N = 256, data = new Float32Array(N*4), y65 = xyz(planck(6500))[1];
+  function lum(T){ return xyz(planck(T))[1]/y65; }
+  for(var i=0;i<N;i++){
+    var T = Math.pow(10, 3 + 5*i/(N - 1)), q = xyz(planck(T)), c = rgb(q[0]/q[1], 1, q[2]/q[1]);
+    data[i*4] = c[0]; data[i*4+1] = c[1]; data[i*4+2] = c[2]; data[i*4+3] = Math.log(q[1]/y65)/Math.LN10;
+  }
+  var tex = new THREE.DataTexture(data, N, 1, THREE.RGBAFormat, THREE.FloatType); tex.needsUpdate = true;
+  /* synchrotron light, a power law I ~ nu^-0.7 */
+  var s = xyz(function(l){ return Math.pow(l, 0.7 - 2); }), pl = rgb(s[0]/s[1], 1, s[2]/s[1]);
+  return {tex:tex, lum:lum, pl:new THREE.Vector3(pl[0], pl[1], pl[2])};
+})();
 var bhU = {tScene:{value:null}, tSky:{value:null}, uHasSky:{value:0}, uRo:{value:new THREE.Vector3()},
   uE1:{value:new THREE.Vector3(1, 0, 0)}, uE2:{value:new THREE.Vector3(0, 1, 0)}, uAx:{value:new THREE.Vector3(0, 0, 1)},
   uRight:VIEW.right, uUp:VIEW.up, uFwd:VIEW.fwd, uTanF:VIEW.tanF, uAspect:VIEW.aspect, uTime:TIME,
-  uA:{value:0}, uRin:{value:6}, uDisc:{value:1}, uJet:{value:0}, uTemp:{value:6000}, uSeed:{value:1}, uBhStep:{value:1}, uBhMax:{value:400}};
-var bhMat = postMat('uniform sampler2D tScene; uniform samplerCube tSky; uniform float uHasSky; uniform vec3 uRo; uniform vec3 uE1; uniform vec3 uE2; uniform vec3 uAx;' +
+  uA:{value:0}, uRin:{value:6}, uRout:{value:24}, uThick:{value:0.6}, uFlow:{value:0}, uDisc:{value:1}, uJet:{value:0}, uTin:{value:1e7},
+  uExpo:{value:1}, uPL:{value:BB.pl}, uClk:{value:5}, uSeed:{value:1}, uBhStep:{value:3}, uBhMax:{value:220},
+  tBB:{value:BB.tex}, tLow:{value:null}, uLowRes:{value:new THREE.Vector2(1, 1)}, uLowPass:{value:0}, uDirMode:{value:0}};
+var BH_FS = 'uniform sampler2D tScene; uniform samplerCube tSky; uniform float uHasSky; uniform vec3 uRo; uniform vec3 uE1; uniform vec3 uE2; uniform vec3 uAx;' +
   'uniform vec3 uRight; uniform vec3 uUp; uniform vec3 uFwd; uniform float uTanF; uniform float uAspect; uniform float uTime;' +
-  'uniform float uA; uniform float uRin; uniform float uDisc; uniform float uJet; uniform float uTemp; uniform float uSeed; uniform float uBhStep; uniform float uBhMax;' +
-  'varying vec2 vUv;' + NOISE_GL +
-  'const float RB = 80.0; const float CLK = ' + BH_CLK.toFixed(1) + ';' +
+  'uniform float uA; uniform float uRin; uniform float uRout; uniform float uThick; uniform float uFlow; uniform float uDisc; uniform float uJet; uniform float uTin;' +
+  'uniform float uExpo; uniform vec3 uPL; uniform float uClk; uniform float uSeed; uniform float uBhStep; uniform float uBhMax;' +
+  'uniform sampler2D tBB; uniform sampler2D tLow; uniform vec2 uLowRes; uniform float uLowPass; uniform float uDirMode; varying vec2 vUv;' + NOISE_GL +
+  'const float RB = 80.0;' +
   /* what lies in a direction (world axes) */
   'vec3 sky(vec3 d){ vec3 c = uHasSky > 0.5 ? textureCube(tSky, d).rgb : vec3(0.0); float z = dot(d, uFwd);' +
   ' if(z > 0.0){ vec2 q = vec2(dot(d, uRight)/(z*uTanF*uAspect), dot(d, uUp)/(z*uTanF)); float m = max(abs(q.x), abs(q.y));' +
@@ -1505,11 +1543,10 @@ var bhMat = postMat('uniform sampler2D tScene; uniform samplerCube tSky; uniform
   '  if(w > 0.0) c = mix(c, texture2D(tScene, clamp(q, -1.0, 1.0)*0.5 + 0.5).rgb, w); }' +
   ' return c; }' +
   'vec3 world(vec3 d){ return d.x*uE1 + d.y*uE2 + d.z*uAx; }' +
-  /* the colour of something glowing at a temperature in kelvin */
-  'vec3 bb(float T){ float t = T/100.0;' +
-  ' float r = t <= 66.0 ? 1.0 : clamp(1.2929*pow(t - 60.0, -0.1332), 0.0, 1.0);' +
-  ' float g = t <= 66.0 ? clamp(0.3901*log(t) - 0.6318, 0.0, 1.0) : clamp(1.1298*pow(t - 60.0, -0.0755), 0.0, 1.0);' +
-  ' float b = t >= 66.0 ? 1.0 : (t <= 19.0 ? 0.0 : clamp(0.5432*log(t - 10.0) - 1.1963, 0.0, 1.0)); return vec3(r, g, b); }' +
+  /* a black body at temperature T: its colour times its brightness, relative to one at 6500 K */
+  'vec3 bbCol(float T){ float u = clamp((log(T)/2.302585 - 3.0)/5.0, 0.0, 1.0)*255.0; float i0 = floor(u);' +
+  ' vec4 a = texture2D(tBB, vec2((i0 + 0.5)/256.0, 0.5)); vec4 b = texture2D(tBB, vec2((min(i0 + 1.0, 255.0) + 0.5)/256.0, 0.5)); vec4 q = mix(a, b, u - i0);' +
+  ' return q.rgb*pow(10.0, q.a); }' +
   'float rKS(vec3 x, float a){ float w = dot(x, x) - a*a; return sqrt(0.5*(w + sqrt(w*w + 4.0*a*a*x.z*x.z))); }' +
   /* how a ray's position and momentum change along it */
   'void rhs(vec3 x, vec3 p, out vec3 dx, out vec3 dp, out float r){ float a = -uA;' +
@@ -1518,61 +1555,95 @@ var bhMat = postMat('uniform sampler2D tScene; uniform samplerCube tSky; uniform
   ' vec3 l = vec3((r*x.x + a*x.y)/S, (r*x.y - a*x.x)/S, x.z/r); float L = 1.0 + dot(l, p);' +
   ' vec3 dlp = (dot(x.xy, p.xy)*dr + vec3(r*p.x - a*p.y, a*p.x + r*p.y, 0.0))/S - dot(l.xy, p.xy)*2.0*r*dr/S + p.z*(vec3(0.0, 0.0, 1.0/r) - x.z*dr/r2);' +
   ' dx = p - f*L*l; dp = 0.5*(df*L*L + 2.0*f*L*dlp); }' +
-  /* the disc's pattern as seen in the gas's own turning: smooth round the disc, fine across it, so that each ring turning at its own speed
-     draws it out into thin streaks; it is renewed every few seconds before it winds up too tightly */
-  'float flow(float ang, float ov, float lr, float sa, float sr){ float tt = uTime/8.0; float k0 = fract(tt); float k1 = fract(tt + 0.5); float w0 = 1.0 - abs(2.0*k0 - 1.0);' +
-  ' float a0 = ang - ov*k0*8.0; float a1 = ang - ov*k1*8.0;' +
+  /* the gas's pattern as seen in its own turning: smooth round the hole, fine across it, so that each ring turning at its own speed
+     draws it out into thin streaks; it is renewed before it winds up too tightly, sooner for a hole whose clock runs faster */
+  'float flow(float ang, float ov, float lr, float sa, float sr){ float tt = uTime*uClk/40.0; float k0 = fract(tt); float k1 = fract(tt + 0.5); float w0 = 1.0 - abs(2.0*k0 - 1.0);' +
+  ' float per = 40.0/uClk; float a0 = ang - ov*k0*per; float a1 = ang - ov*k1*per;' +
   ' float n0 = fb(vec3(cos(a0)*sa, sin(a0)*sa, lr*sr + floor(tt)*5.3 + uSeed)); float n1 = fb(vec3(cos(a1)*sa, sin(a1)*sa, lr*sr + floor(tt + 0.5)*5.3 + 2.7 + uSeed));' +
   ' return mix(n1, n0, w0); }' +
-  'void main(){ vec2 ndc = vUv*2.0 - 1.0;' +
-  ' vec3 rw = normalize(uFwd + uRight*(ndc.x*uAspect*uTanF) + uUp*(ndc.y*uTanF));' +
+  /* bright clumps riding round at the speed of their own orbit */
+  'float spots(float rc, float ang){ float hs = 0.0; for(int k=0;k<3;k++){ float rk = uRin*(1.3 + 0.75*float(k)); float sk = ang - uClk/(pow(rk, 1.5) + uA)*uTime - uSeed*float(k + 1)*1.7;' +
+  '  hs += exp(-pow((rc - rk)/(0.16*rk), 2.0))*exp(-pow(atan(sin(sk), cos(sk))/0.25, 2.0)); } return hs; }' +
+  /* the energy shift of light from gas circling at radius r (Bardeen, Press and Teukolsky 1972), om times the speed of a circular orbit;
+     qphi is the ray's angular momentum about the spin axis */
+  'float shiftAt(float r, float om, float qphi){ float sr = sqrt(r); float r15 = r*sr; float Om = om/(r15 + uA);' +
+  ' float ut = (r15 + uA)/(sqrt(r15)*sqrt(max(r15 - 3.0*sr + 2.0*uA, 1e-3))); return 1.0/(ut*(1.0 + Om*qphi)); }' +
+  /* follow one ray; returns the colour, and in alpha 1 if it fell in; dirOut is the direction it leaves in (world axes), if it does */
+  'vec4 traceRay(vec3 rw, out vec3 dirOut){ dirOut = vec3(0.0);' +
   ' vec3 d = vec3(dot(rw, uE1), dot(rw, uE2), dot(rw, uAx)); vec3 x = uRo;' +
-  ' float tm = -dot(x, d); vec3 perp = x + d*tm; float b = length(perp); float ro2 = dot(x, x);' +
-  ' if(b > RB || (tm < 0.0 && ro2 > RB*RB)){' +                  /* passes far from the hole: only the slight bending of starlight, 4GM/(c^2 b) */
-  '  vec3 d0 = d; if(tm > 0.0) d0 = normalize(d - perp/b*(4.0/b)); gl_FragColor = vec4(sky(world(d0)), 1.0); return; }' +
-  ' if(ro2 > RB*RB) x = perp - d*sqrt(RB*RB - b*b);' +
+  ' float tm = -dot(x, d); vec3 perp = x + d*tm; float bb = length(perp); if(dot(x, x) > RB*RB) x = perp - d*sqrt(max(RB*RB - bb*bb, 0.0));' +
   /* start with the momentum along the line of sight, scaled so that it is a ray of light */
   ' float a = -uA; float r0 = rKS(x, a); float S0 = r0*r0 + a*a; float f0 = 2.0*r0*r0*r0/(r0*r0*r0*r0 + a*a*x.z*x.z);' +
   ' vec3 l0 = vec3((r0*x.x + a*x.y)/S0, (r0*x.y - a*x.x)/S0, x.z/r0); float ld = dot(l0, d);' +
   ' float qa = max(1.0 - f0*ld*ld, 0.05); float qb = -2.0*f0*ld; float qc = -(1.0 + f0);' +
   ' vec3 p = d*(-qb + sqrt(max(qb*qb - 4.0*qa*qc, 0.0)))/(2.0*qa);' +
-  ' float qphi = x.x*p.y - x.y*p.x;' +                            /* angular momentum about the spin axis: kept along the whole ray */
+  ' float qphi = x.x*p.y - x.y*p.x;' +                            /* kept along the whole ray */
   ' float rh = 1.0 + sqrt(max(1.0 - uA*uA, 0.0));' +             /* the horizon */
-  ' vec3 col = vec3(0.0); float T = 1.0; float fell = 0.0; vec3 v = d;' +
-  ' for(int i=0;i<700;i++){ if(float(i) >= uBhMax) break;' +
-  '  vec3 v1; vec3 f1; float r; rhs(x, p, v1, f1, r);' +
-  '  if(r < rh*1.02){ fell = 1.0; break; }' +
-  '  float dt = uBhStep*clamp(0.06*r, 0.02, 4.0);' +
-  '  vec3 v2; vec3 f2; float rm; rhs(x + v1*(0.5*dt), p + f1*(0.5*dt), v2, f2, rm);' +
-  '  vec3 xn = x + v2*dt; p += f2*dt; v = v2;' +
-  '  if(uDisc > 0.0 && x.z*xn.z < 0.0){' +                       /* crossed the plane of the disc */
+  ' vec3 col = vec3(0.0); float T = 1.0; float state = 0.0; vec3 v = d;' +   /* state: 0 not yet known, 1 fell in, 2 escaped, 3 hidden by gas */
+  ' for(int i=0;i<400;i++){ if(float(i) >= uBhMax) break;' +
+  '  vec3 k1v; vec3 k1f; float r; rhs(x, p, k1v, k1f, r);' +
+  '  if(r < rh*1.01){ state = 1.0; break; }' +
+  '  float dt = min(uBhStep*clamp(0.06*r, 0.02, 4.0), 0.25*(r - rh) + 0.01);' +
+  '  vec3 k2v; vec3 k2f; vec3 k3v; vec3 k3f; vec3 k4v; vec3 k4f; float rr;' +
+  '  rhs(x + k1v*(0.5*dt), p + k1f*(0.5*dt), k2v, k2f, rr);' +
+  '  rhs(x + k2v*(0.5*dt), p + k2f*(0.5*dt), k3v, k3f, rr);' +
+  '  rhs(x + k3v*dt, p + k3f*dt, k4v, k4f, rr);' +
+  '  v = (k1v + 2.0*(k2v + k3v) + k4v)/6.0; vec3 xn = x + v*dt; p += (k1f + 2.0*(k2f + k3f) + k4f)*(dt/6.0);' +
+  '  if(uFlow > 0.5 && uFlow < 1.5 && x.z*xn.z < 0.0){' +        /* a thin disc: crossed its plane */
   '   vec3 xc = mix(x, xn, x.z/(x.z - xn.z)); float rc = sqrt(max(dot(xc.xy, xc.xy) - uA*uA, 0.0));' +
-  '   if(rc > uRin && rc < 30.0){' +
-  '    float sr = sqrt(rc); float r15 = rc*sr; float Om = 1.0/(r15 + uA);' +
-  '    float ut = (r15 + uA)/(sqrt(r15)*sqrt(max(r15 - 3.0*sr + 2.0*uA, 1e-4)));' +
-  '    float g = 1.0/(ut*(1.0 + Om*qphi));' +                      /* the shift in the light's energy, from the gas's motion and from climbing out */
-  '    float ang = atan(xc.y, xc.x); float lr = log(rc); float ov = Om*CLK;' +
-  '    float n = flow(ang, ov, lr, 1.6, 5.0); float fine = flow(ang, ov, lr, 3.0, 26.0);' +
-  /* bright clumps riding round at the speed of their own orbit */
-  '    float hs = 0.0; for(int k=0;k<3;k++){ float rk = uRin*(1.3 + 0.75*float(k)); float sk = ang - CLK/(pow(rk, 1.5) + uA)*uTime - uSeed*float(k + 1)*1.7;' +
-  '     hs += exp(-pow((rc - rk)/(0.16*rk), 2.0))*exp(-pow(atan(sin(sk), cos(sk))/0.25, 2.0)); }' +
-  '    float xr = uRin/rc; float prof = pow(xr, 0.75)*pow(max(1.0 - sqrt(xr), 0.0), 0.25)/0.488;' + /* hottest just outside the innermost orbit */
-  '    float streak = smoothstep(0.25, 0.75, fine);' +
-  '    float dens = (0.35 + 1.4*n*n)*(0.35 + 0.9*streak)*smoothstep(uRin, uRin*1.06, rc)*(1.0 - smoothstep(9.0, 24.0, rc)) + hs*1.4;' +
-  '    float al = clamp(dens*1.1, 0.0, 0.97)*clamp(uDisc*1.6, 0.2, 1.0);' +
-  '    vec3 c = pow(bb(uTemp*prof*g), vec3(1.4))*pow(g, 3.0)*pow(prof, 2.6)*(0.5 + 1.0*n + 0.6*streak + 2.5*hs);' +
-  '    col += T*c*uDisc*al*3.0; T *= 1.0 - al; } }' +
+  '   if(rc > uRin && rc < uRout){' +
+  '    float g = shiftAt(rc, 1.0, qphi); float ang = atan(xc.y, xc.x); float lr = log(rc); float ov = uClk/(rc*sqrt(rc) + uA);' +
+  '    float n = flow(ang, ov, lr, 1.6, 5.0); float streak = smoothstep(0.25, 0.75, flow(ang, ov, lr, 3.0, 26.0)); float hs = spots(rc, ang);' +
+  '    float xr = uRin/rc; float prof = pow(xr, 0.75)*pow(max(1.0 - sqrt(xr), 0.0), 0.25)/0.488;' +   /* hottest just outside the innermost orbit */
+  '    float dens = (0.35 + 1.4*n*n)*(0.35 + 0.9*streak)*smoothstep(uRin, uRin*1.06, rc)*(1.0 - smoothstep(uRout*0.4, uRout, rc)) + hs*1.4;' +
+  '    float al = clamp(dens*1.1, 0.0, 0.97);' +
+  '    col += T*bbCol(uTin*prof*g)*uExpo*(0.55 + 0.9*n + 0.5*streak + 2.5*hs)*uDisc*al; T *= 1.0 - al; } }' +
+  '  if(uFlow > 1.5){' +                                           /* thin hot gas round a hole that is barely feeding: light passes through it */
+  '   vec3 xm = 0.5*(x + xn); float rc = length(xm.xy); float rs = length(xm); float H = uThick*max(rc, 1.0);' +
+  '   float j = exp(-0.5*xm.z*xm.z/(H*H))*pow(max(rs, rh), -2.5)*smoothstep(rh*1.05, rh*1.7, rs)*(1.0 - smoothstep(uRout*0.4, uRout, rs));' +
+  '   if(j > 1e-5){ float rq = max(rc, uRin); float g = shiftAt(rq, 0.8, qphi); float ang = atan(xm.y, xm.x);' +
+  '    float n = flow(ang, 0.8*uClk/(rq*sqrt(rq) + uA), log(rq), 1.6, 5.0); float hs = spots(rc, ang)*exp(-0.5*xm.z*xm.z/(0.09*H*H));' +
+  '    col += T*uPL*pow(g, 3.7)*j*(0.3 + 1.4*n*n + 3.0*hs)*uExpo*uDisc*dt; } }' +
   '  if(uJet > 0.0){' +                                            /* the jets: knots of gas flung out along the spin axis */
   '   float zz = abs(xn.z); float rho = length(xn.xy); float wj = 0.5 + 0.09*zz; float core = exp(-rho*rho/(wj*wj));' +
   '   if(core > 0.01 && zz > 1.5){' +
   '    float along = smoothstep(1.5, 5.0, zz)*(1.0 - smoothstep(RB*0.5, RB*0.97, zz));' +
-  '    float knots = 0.35 + 1.1*fb(vec3(rho*0.8, zz*0.18 - uTime*1.6, uSeed + sign(xn.z)*7.0));' +
-  '    float cth = dot(vec3(0.0, 0.0, sign(xn.z)), -normalize(v2)); float del = min(1.0/(3.2*(1.0 - 0.95*cth)), 3.5);' +
-  '    col += T*vec3(0.62, 0.74, 1.0)*core*along*knots/(1.0 + 0.05*zz)*del*del*del*uJet*dt*0.035; } }' +
-  '  x = xn; if(T < 0.01) break;' +
-  '  if(dot(x, x) > RB*RB && dot(x, v2) > 0.0) break; }' +
-  ' if(fell < 0.5) col += T*sky(world(normalize(v)));' +
-  ' gl_FragColor = vec4(col, 1.0); }', bhU);
+  '    float knots = 0.35 + 1.1*fb(vec3(rho*0.8, zz*0.18 - uTime*uClk*0.32, uSeed + sign(xn.z)*7.0));' +
+  '    float cth = dot(vec3(0.0, 0.0, sign(xn.z)), -normalize(v)); float del = min(1.0/(3.2*(1.0 - 0.95*cth)), 3.5);' +
+  '    col += T*uPL*core*along*knots/(1.0 + 0.05*zz)*del*del*del*uJet*dt*0.035; } }' +
+  '  x = xn; if(T < 0.01){ state = 3.0; break; }' +
+  '  if(dot(x, x) > RB*RB && dot(x, v) > 0.0){ state = 2.0; break; } }' +
+  /* out of steps: still circling close in; it falls in if it is heading inwards, otherwise it is on its way out */
+  ' if(state < 0.5) state = (dot(x, v) < 0.0 && dot(x, x) < 16.0) ? 1.0 : 2.0;' +
+  ' if(state > 1.5 && state < 2.5){ dirOut = world(normalize(v)); col += T*sky(dirOut); }' +
+  ' return vec4(col, state < 1.5 ? 1.0 : 0.0); }' +
+  'void main(){ vec2 ndc = vUv*2.0 - 1.0;' +
+  ' vec3 rw = normalize(uFwd + uRight*(ndc.x*uAspect*uTanF) + uUp*(ndc.y*uTanF));' +
+  ' vec3 d = vec3(dot(rw, uE1), dot(rw, uE2), dot(rw, uAx));' +
+  ' float tm = -dot(uRo, d); vec3 perp = uRo + d*tm; float b = length(perp);' +
+  ' if(b > RB || (tm < 0.0 && dot(uRo, uRo) > RB*RB)){' +          /* passes far from the hole: only the slight bending of starlight, 4GM/(c^2 b) */
+  '  vec3 d0 = d; if(tm > 0.0) d0 = normalize(d - perp/b*(4.0/b)); d0 = world(d0);' +
+  '  gl_FragColor = uLowPass > 0.5 && uDirMode > 0.5 ? vec4(d0, 0.0) : vec4(sky(d0), 0.0); return; }' +
+  '\n#ifdef UPSAMPLE\n' +
+  /* from the coarser trace. Where its four nearest rays agree on falling in or not: with nothing glowing round the hole they hold the
+     directions the rays leave in, so the directions are blended and the sky is looked up here, keeping every star sharp, unless the four
+     part ways (as across an Einstein ring); otherwise they hold colours, which are blended. Along the shadow's edge, this pixel is traced itself. */
+  ' vec2 tp = vUv*uLowRes - 0.5; vec2 fr = fract(tp); vec2 bs = (floor(tp) + 0.5)/uLowRes; vec2 px = 1.0/uLowRes;' +
+  ' vec4 s00 = texture2D(tLow, bs); vec4 s10 = texture2D(tLow, bs + vec2(px.x, 0.0)); vec4 s01 = texture2D(tLow, bs + vec2(0.0, px.y)); vec4 s11 = texture2D(tLow, bs + px);' +
+  ' float lo = min(min(s00.a, s10.a), min(s01.a, s11.a)); float hi = max(max(s00.a, s10.a), max(s01.a, s11.a));' +
+  ' if(hi - lo < 0.5){' +
+  '  vec3 m = mix(mix(s00.rgb, s10.rgb, fr.x), mix(s01.rgb, s11.rgb, fr.x), fr.y);' +
+  '  if(uDirMode < 0.5){ gl_FragColor = vec4(m, 1.0); return; }' +
+  '  if(lo > 0.5){ gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0); return; }' +
+  '  if(min(dot(s00.rgb, s11.rgb), dot(s10.rgb, s01.rgb)) > 0.9995){ gl_FragColor = vec4(sky(normalize(m)), 1.0); return; } }\n' +
+  '#endif\n' +
+  ' vec3 dw; vec4 res = traceRay(rw, dw);' +
+  ' gl_FragColor = uLowPass > 0.5 && uDirMode > 0.5 ? vec4(dw, res.a) : res; }';
+var bhMat = postMat(BH_FS, bhU), bhUpMat = postMat(BH_FS, bhU);
+bhUpMat.defines = {UPSAMPLE:''};
+/* the trace can run at a coarser resolution when frames get slow (never below the quality setting's floor); the far, gently bent part of
+   the picture and the shadow's edge are still done at full resolution */
+var bhScale = 1, rtBHlow = mkTarget(false);
 var rtBH = mkTarget(false);
 sizeTargets();
 function pass(mat, target, face){ postQuad.material = mat; renderer.setRenderTarget(target, face || 0); renderer.render(postScene, postCam); }
@@ -1584,8 +1655,9 @@ function orientBoards(q){
   for(var i=0;i<boards.length;i++) boards[i].m.quaternion.copy(boards[i].au ? qBoard : q);
 }
 /* A picture of the whole sky around you, on the six faces of a cube, for the light a black hole bends round from behind and beside you.
-   It is only kept up while you are near one; a few faces are redrawn each frame, the number set by the quality setting. */
-var SKY = {cam:null, rt:null, face:null, faceVol:null, n:0, next:0, fresh:false};
+   It is kept while you stay put. Once you have moved far enough for the nearest things in it to shift by about a texel, it is redrawn a few
+   faces a frame (the number set by the quality setting); and one face every two seconds, for what moves on its own. */
+var SKY = {cam:null, rt:null, face:null, faceVol:null, n:0, next:0, fresh:false, dirty:6, at:new THREE.Vector3(), t:0};
 var viewKeep = [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3(), 0, 0];
 function skyUpdate(){
   var q = QUALITY[qual.level], size = q.sky[0], i;
@@ -1599,10 +1671,15 @@ function skyUpdate(){
     SKY.cam.updateMatrixWorld(true);
     SKY.n = size; SKY.fresh = false; bhU.tSky.value = SKY.rt.texture;
   }
+  if(!SKY.fresh) SKY.dirty = 6;
+  else if(P.distanceTo(SKY.at) > viewS*1.5/size){ SKY.dirty = 6; SKY.at.copy(P); }
+  else if(TIME.value - SKY.t > 2){ SKY.dirty = Math.max(SKY.dirty, 1); SKY.t = TIME.value; }
+  if(SKY.dirty <= 0) return;
+  if(!SKY.fresh) SKY.at.copy(P);
   viewKeep[0].copy(VIEW.right.value); viewKeep[1].copy(VIEW.up.value); viewKeep[2].copy(VIEW.fwd.value); viewKeep[3] = VIEW.tanF.value; viewKeep[4] = VIEW.aspect.value;
   VIEW.tanF.value = 1; VIEW.aspect.value = 1;                     /* each face is a square, 90 degrees across */
   var keepUse = PROBE.use.value, keepOcc = OCC.on.value; PROBE.use.value = 0; OCC.on.value = 0; compU.uEmOn.value = 0;
-  for(var k=0, n=SKY.fresh ? q.sky[1] : 6; k<n; k++){
+  for(var k=0, n=SKY.fresh ? Math.min(q.sky[1], SKY.dirty) : 6; k<n; k++){
     var cam = SKY.cam.children[SKY.next], e = cam.matrixWorld.elements;
     VIEW.right.value.set(e[0], e[1], e[2]); VIEW.up.value.set(e[4], e[5], e[6]); VIEW.fwd.value.set(-e[8], -e[9], -e[10]);
     orientBoards(cam.quaternion);
@@ -1615,28 +1692,35 @@ function skyUpdate(){
   VIEW.right.value.copy(viewKeep[0]); VIEW.up.value.copy(viewKeep[1]); VIEW.fwd.value.copy(viewKeep[2]); VIEW.tanF.value = viewKeep[3]; VIEW.aspect.value = viewKeep[4];
   orientBoards(camera.quaternion);
   PROBE.use.value = keepUse; OCC.on.value = keepOcc;
-  SKY.fresh = true;
+  SKY.dirty -= SKY.fresh ? Math.min(q.sky[1], SKY.dirty) : 6; SKY.fresh = true;
 }
-var bhRel = new THREE.Vector3();
+var bhRel = new THREE.Vector3(), bhUsed = false, viewS = 1;
 function drawFrame(){
   var w = rtMain.width, h = rtMain.height, i;
-  /* the black hole that looks biggest from here, counting its disc and jets, if any is big enough on screen to matter */
-  var bestA = 0.003, bestH = null;
+  /* the black hole that looks biggest from here, counting its disc and jets, if any is big enough on screen to matter
+     and its strongly bent region (80 GM/c^2 round it) reaches into the view */
+  var bestA = 0.003, bestH = null, halfDiag = Math.atan(VIEW.tanF.value*Math.sqrt(1 + VIEW.aspect.value*VIEW.aspect.value));
   for(i=0;i<holes.length;i++){
-    var H = holes[i], reach = H.jet ? 12 : (H.disc ? 4 : 1.2);
-    var app = H.rs*reach*K('s')/Math.max(H.w.distanceTo(P), 1e-30)/(2*VIEW.tanF.value);
-    if(app > bestA){ bestA = app; bestH = H; }
+    var H = holes[i], reach = H.jet ? 12 : (H.disc ? 4 : 1.2), dist = Math.max(H.w.distanceTo(P), 1e-30), Rb = 80*H.M*K('s');
+    var app = H.rs*reach*K('s')/dist/(2*VIEW.tanF.value);
+    if(app <= bestA) continue;
+    if(dist > Rb){ bhRel.copy(H.w).sub(P).divideScalar(dist); if(Math.acos(clamp(bhRel.dot(VIEW.fwd.value), -1, 1)) > halfDiag + Math.asin(Rb/dist)) continue; }
+    bestA = app; bestH = H;
   }
+  bhUsed = bhUsed || !!bestH;
   /* the traced hole's own point of light would otherwise be bent into a ring of its own */
   if(bestH && bestH.glow) bestH.glow.visible = false;
   if(bestH){
     var Ms = bestH.M*K('s');
     bhRel.copy(P).sub(bestH.w).divideScalar(Ms);
-    if(bhRel.length() < 320) skyUpdate(); else SKY.fresh = false;     /* from farther out the bending all falls within the screen */
+    skyUpdate();
     bhU.uHasSky.value = SKY.fresh ? 1 : 0;
     bhU.uRo.value.set(bhRel.dot(bestH.e1), bhRel.dot(bestH.e2), bhRel.dot(bestH.ax));
     bhU.uE1.value.copy(bestH.e1); bhU.uE2.value.copy(bestH.e2); bhU.uAx.value.copy(bestH.ax);
-    bhU.uA.value = bestH.a; bhU.uRin.value = bestH.rin; bhU.uDisc.value = bestH.disc; bhU.uJet.value = bestH.jet; bhU.uTemp.value = bestH.temp; bhU.uSeed.value = bestH.seed;
+    bhU.uA.value = bestH.a; bhU.uRin.value = bestH.rin; bhU.uRout.value = bestH.rout; bhU.uThick.value = bestH.thick; bhU.uDisc.value = bestH.disc; bhU.uJet.value = bestH.jet;
+    bhU.uFlow.value = bestH.flow === 'thin' ? 1 : (bestH.flow === 'thick' ? 2 : 0); bhU.uTin.value = bestH.tin; bhU.uClk.value = bestH.clk; bhU.uSeed.value = bestH.seed;
+    /* exposure: a thin disc's hottest ring is shown at a set brightness whatever its true temperature, as a camera would adjust */
+    bhU.uExpo.value = bestH.flow === 'thin' ? 1.0/BB.lum(bestH.tin) : 9;
   } else SKY.fresh = false;
   /* where any cloud is in view: the bodies' depths (to stop the clouds' rays) and the light reaching each shining thing through them */
   var anyVol = false;
@@ -1669,7 +1753,17 @@ function drawFrame(){
   compU.tMain.value = rtMain.texture; compU.tVol.value = rtVol.texture; compU.tEm.value = rtEm ? rtEm.texture : null; compU.uEmOn.value = PROBES ? 1 : 0;
   pass(compMat, rtComp);
   var scene0 = rtComp;
-  if(bestH){ bhU.tScene.value = rtComp.texture; pass(bhMat, rtBH); scene0 = rtBH; }
+  if(bestH){
+    bhU.tScene.value = rtComp.texture;
+    if(bhScale < 0.999){
+      /* directions need the finer number format; without it, colours are carried instead */
+      bhU.uDirMode.value = HDR && !bestH.flow && !bestH.jet ? 1 : 0;
+      bhU.uLowPass.value = 1; pass(bhMat, rtBHlow); bhU.uLowPass.value = 0;
+      bhU.tLow.value = rtBHlow.texture; bhU.uLowRes.value.set(rtBHlow.width, rtBHlow.height); pass(bhUpMat, rtBH);
+    }
+    else pass(bhMat, rtBH);
+    scene0 = rtBH;
+  }
   var src = scene0;
   for(i=0;i<BL;i++){ downU.tSrc.value = src.texture; downU.uPx.value.set(1/src.width, 1/src.height); downU.uThr.value = i === 0 ? (HDR ? 0.85 : 0.62) : 0; pass(downMat, rtDown[i]); src = rtDown[i]; }
   var low = rtDown[BL - 1];
@@ -1814,7 +1908,7 @@ function applyQuality(){
   var q = QUALITY[qual.level];
   NEB_STEPS.value = HAS3D ? q.neb : Math.round(q.neb*0.55); GAL_STEPS.value = HAS3D ? q.gal : Math.round(q.gal*0.57);
   AIRQ.i.value = q.air[0]; AIRQ.j.value = q.air[1];
-  bhU.uBhStep.value = q.bh[0]; bhU.uBhMax.value = q.bh[1];
+  bhU.uBhStep.value = q.bh[0]; bhU.uBhMax.value = q.bh[1]; bhScale = Math.max(bhScale, q.bh[2]);
   volScale = clamp(volScale, q.vol[0], q.vol[1]);
   if(sphGeo.parameters.widthSegments !== q.sph[0]){
     var old = sphGeo, i; sphGeo = new THREE.SphereGeometry(1, q.sph[0], q.sph[1]);
@@ -1945,7 +2039,7 @@ function frame(now){
       P.copy(hN.w).addScaledVector(bhRel, Ms);
     }
     var ct = zc/rB, s2 = Math.max(1 - ct*ct, 0), Sig = rB*rB + ha*ha*ct*ct, Del = rB*rB - 2*rB + ha*ha, Aa = (rB*rB + ha*ha)*(rB*rB + ha*ha) - ha*ha*Del*s2;
-    var om = 2*ha*rB/Aa, lapse = Math.sqrt(Math.max(Del*Sig/Aa, 0)), turn = om*BH_CLK*dt;
+    var om = 2*ha*rB/Aa, lapse = Math.sqrt(Math.max(Del*Sig/Aa, 0)), turn = om*hN.clk*dt;
     if(turn > 1e-9){
       dragQ.setFromAxisAngle(hN.ax, turn);
       bhRel.applyQuaternion(dragQ); P.copy(hN.w).addScaledVector(bhRel, Ms);
@@ -1954,13 +2048,13 @@ function frame(now){
     if(hR < 60){
       bhNote = hN.name + '：這裡的時間只有遠方的 ' + (lapse >= 0.1 ? Math.round(lapse*100) : (lapse*100).toFixed(1)) + '% 快';
       if(2*rB > Sig) bhNote += '，已在能層裡，任何東西都只能跟著黑洞轉';
-      else if(om*BH_CLK > 0.01) bhNote += '，空間被它的自轉拖著走';
+      else if(om*hN.clk > 0.01) bhNote += '，空間被它的自轉拖著走';
       if(rB <= rStop*1.001) bhNote += '。再靠近就回不來了';
     }
   }
   var D = Math.max(P.length(), 1e-8), L = Math.log10(D);
   /* never let the drawing scale shrink below what is on screen nearby */
-  var s = 1/S;
+  var s = 1/S; viewS = S;
   camera.rotation.set(pitch, yaw, 0); camera.position.set(0, 0, 0); camera.updateMatrixWorld();
   lyRoot.position.set(-P.x*s, -P.y*s, -P.z*s); lyRoot.scale.setScalar(s);
   auRoot.position.copy(lyRoot.position); auRoot.scale.setScalar(AU_LY*s);
@@ -2074,16 +2168,19 @@ function frame(now){
   /* keep the motion smooth: the clouds are the costly part, so their resolution follows the frame time */
   ftA += dt; ftN++;
   if(ftN >= 30){
-    var ft = ftA/ftN, old = volScale, Q = QUALITY[qual.level]; ftA = 0; ftN = 0;
-    if(ft > 0.030) volScale = Math.max(Q.vol[0], volScale - 0.08); else if(ft < 0.0185) volScale = Math.min(Q.vol[1], volScale + 0.05);
+    var ft = ftA/ftN, old = volScale, oldB = bhScale, Q = QUALITY[qual.level]; ftA = 0; ftN = 0;
+    /* near a black hole its trace is the costly part, so its resolution gives way first and comes back first */
+    if(bhUsed){ if(ft > 0.030) bhScale = Math.max(Q.bh[2], bhScale - 0.1); else if(ft < 0.0185) bhScale = Math.min(1, bhScale + 0.05); }
+    bhUsed = false;
+    if(bhScale === oldB){ if(ft > 0.030) volScale = Math.max(Q.vol[0], volScale - 0.08); else if(ft < 0.0185) volScale = Math.min(Q.vol[1], volScale + 0.05); }
     /* on 自動, step the whole quality level once the cloud resolution has no room left; a level it had to leave is not tried again.
        The first seconds after starting or changing level are left alone: shaders and textures are still settling then. */
     if(qual.mode === 'auto' && now - qual.since > 3000){
       qual.calm = ft < 0.0185 && old >= Q.vol[1] ? (qual.calm || 0) + 1 : 0;
-      if(ft > 0.030 && old <= Q.vol[0] && qual.level > 0){ qual.level--; qual.cap = qual.level; applyQuality(); }
+      if(ft > 0.030 && old <= Q.vol[0] && oldB <= Q.bh[2] && qual.level > 0){ qual.level--; qual.cap = qual.level; applyQuality(); }
       else if(qual.calm >= 6 && qual.level < qual.cap){ qual.level++; qual.calm = 0; applyQuality(); }
     }
-    if(volScale !== old) sizeTargets();
+    if(volScale !== old || bhScale !== oldB) sizeTargets();
   }
   if(frames % 4 === 0){
     EL.tele.textContent = '望遠鏡：' + teleText(tele);
