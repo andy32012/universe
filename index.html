@@ -621,9 +621,19 @@ void main(){
   vec3 mcol=uHasMap>0.5 ? mapAt(uMap,p,spin).rgb : uTint;
   if(uType>8.5){
     float ndv=max(dot(normalize(vNv),normalize(vV)),0.0);
-    float grain=fb(surfacePoint(p)*34.0+uTime*0.08);
+    // Illustrative photospheric granulation, filtered at the projected pixel
+    // footprint. It remains attached to the star, without unresolved shimmer.
+    vec3 q=surfacePoint(p)*34.0+uTime*0.08;
+    float footprint=length(fwidth(p))*34.0, grain=0.0;
+    if(footprint<1.0) grain+=(n3(q)-0.5)*0.5*(1.0-smoothstep(0.35,1.0,footprint));
+    if(footprint<0.493) grain+=(n3(q*2.03+7.1)-0.5)*0.25*(1.0-smoothstep(0.35,1.0,footprint*2.03));
+    if(footprint<0.244) grain+=(n3(q*4.1+3.3)-0.5)*0.125*(1.0-smoothstep(0.35,1.0,footprint*4.1));
+    if(footprint<0.122) grain+=(n3(q*8.2+1.7)-0.5)*0.0625*(1.0-smoothstep(0.35,1.0,footprint*8.2));
     vec3 col=uHasMap>0.5 ? mcol*vec3(1.0,0.96,0.9) : uTint;
-    gl_FragColor=vec4(col*(0.43+0.86*pow(ndv,0.55))*(0.82+0.34*grain)*3.0*uAlpha,1.0); return;
+    // Linear limb darkening is a display approximation, not a fitted stellar
+    // atmosphere. Every visible point emits; there is no reflected-light night
+    // side. Local HDR gain keeps the physical spherical limb distinguishable.
+    gl_FragColor=vec4(col*(0.35+0.65*ndv)*(1.0+0.55*grain)*2.5*uDisplayGain*uAlpha,1.0); return;
   }
   // Derivative surface gradient stays correct under the camera-relative world scale.
   if(uTerrain>0.5 && uDetail>0.001){
@@ -863,6 +873,35 @@ var GLOW_FS = 'uniform vec3 uTint; uniform float uAlpha; varying vec2 vUv;' +
   'void main(){ vec2 c = vUv*2.0 - 1.0; float d = length(c); float g = 0.035/(d*d + 0.03) - 0.034;' +
   ' float a = atan(c.y, c.x); float rays = (0.5 + 0.5*cos(a*4.0))*(0.5 + 0.5*cos(a*4.0)); rays = pow(rays, 12.0)*exp(-d*3.0)*0.5;' +
   ' gl_FragColor = vec4(uTint*(max(g, 0.0)*2.5 + rays*1.3*(1.0 - smoothstep(0.6, 1.0, d)))*uAlpha, 1.0); }';
+/* A resolved star has a real sphere beneath this separate, illustrative corona.
+   View-space rays keep its inner edge aligned with the sphere even off centre. */
+var STAR_GLOW_VS = `
+varying vec2 vUv; varying vec3 vRay; varying vec3 vCenter;
+void main(){
+  vUv=uv; vec4 mv=modelViewMatrix*vec4(position,1.0);
+  float extent=max(length(modelViewMatrix[0].xyz),1.0e-25);
+  vRay=mv.xyz/extent; vCenter=(modelViewMatrix*vec4(0.0,0.0,0.0,1.0)).xyz/extent;
+  gl_Position=projectionMatrix*mv;
+}`;
+var STAR_GLOW_FS = `
+uniform vec3 uTint; uniform float uAlpha; uniform float uResolved; uniform float uRadius; uniform float uDisplayGain; uniform float uSeed;
+varying vec2 vUv; varying vec3 vRay; varying vec3 vCenter;
+void main(){
+  vec2 p=vUv*2.0-1.0; float d=length(p); if(d>=1.0)discard;
+  float point=max(0.0,0.035/(d*d+0.03)-0.034)*2.5;
+  vec3 light=uTint*point*(1.0-uResolved);
+  if(uResolved>0.0){
+    float rho=length(cross(vCenter,vRay/max(length(vRay),1.0e-8)))/max(uRadius,1.0e-8);
+    float h=max(rho-1.0,0.0), angle=d>1.0e-8?atan(p.y,p.x):0.0;
+    float streamer=pow(0.5+0.5*sin(angle*7.0+0.85*sin(angle*3.0+uSeed)),14.0);
+    float fine=pow(0.5+0.5*cos(angle*19.0+1.1*sin(angle*5.0-uSeed)),26.0);
+    float halo=0.16*exp(-h*3.2)+0.015*exp(-h*0.85);
+    float rays=(0.30*streamer+0.10*fine)*(1.0-exp(-h*5.0))*exp(-h*0.85);
+    float rim=smoothstep(0.98,1.015,rho), edge=1.0-smoothstep(0.72,1.0,d);
+    light+=mix(uTint,vec3(1.0,0.94,0.86),0.15)*(halo+rays)*rim*edge*uResolved*uDisplayGain;
+  }
+  gl_FragColor=vec4(light*uAlpha,1.0);
+}`;
 var NEB_FS = 'uniform vec3 uTint; uniform float uAlpha; uniform float uSeed; uniform float uRing; varying vec2 vUv;' + NOISE_GL +
   'void main(){ vec2 p = vUv*2.0 - 1.0; float r = length(p); if(r > 1.0) discard;' +
   'float n = fb(vec3(p*2.2, uSeed)); float n2 = fb(vec3(p*5.0 + n*2.0, uSeed + 3.0));' +
@@ -1411,6 +1450,18 @@ function updateExposure(dt){
     if(eb.atmosphere && eb.atmosphere.material.uniforms.uDisplayGain)eb.atmosphere.material.uniforms.uDisplayGain.value=displayGain;
     if(eb.ring && eb.ring.material.uniforms.uDisplayGain)eb.ring.material.uniforms.uDisplayGain.value=displayGain;
   }
+  // Local stellar display compression preserves both the limb and self-emission.
+  // It does not change physical radii or the light reaching any other body.
+  var starExposure=Math.max(finU.uExpo.value,0.0001);
+  var starGain=clamp(Math.pow(starExposure,0.15),0.85,1.25)/starExposure;
+  for(var si=0;si<surfaceMeshes.length;si++){
+    var su=surfaceMeshes[si].material.uniforms;
+    if(su.uType.value>8.5)su.uDisplayGain.value=starGain;
+  }
+  for(var gi=0;gi<dots.length;gi++){
+    var gu=dots[gi].m.material.uniforms;
+    if(gu.uResolved)gu.uDisplayGain.value=starGain;
+  }
 }
 
 /* a flat picture that always turns to face you */
@@ -1427,7 +1478,13 @@ var dots = [];
 /* Every body is drawn at its true size, which from any distance is far too small to see.
    So each one also carries a point of light that always covers a few pixels; for stars it merges into the corona up close, for planets it fades away. */
 function dot(pos, parent, tint, R, k, star, a, b, c, d, cls){
-  var m = board(GLOW_FS, {uTint:{value:new THREE.Vector3().fromArray(tint)}}, R*7, pos, parent, a, b, c, d);
+  var stellar=star && R>0, uniforms={uTint:{value:new THREE.Vector3().fromArray(tint)}};
+  if(stellar){
+    uniforms.uResolved={value:0};uniforms.uRadius={value:1/7};uniforms.uDisplayGain={value:1};
+    uniforms.uSeed={value:(dots.length+1)*2.39996323};
+  }
+  var m = board(stellar?STAR_GLOW_FS:GLOW_FS, uniforms, R*7, pos, parent, a, b, c, d);
+  if(stellar)m.material.vertexShader=STAR_GLOW_VS;
   var unit = parent === auRoot ? AU_LY : 1, w = pos.clone();
   if(parent === auRoot) w.applyQuaternion(auRoot.quaternion).multiplyScalar(AU_LY);
   dots.push({m:m, w:w, R:R*unit, k:k, star:star, unit:unit, cls:cls});
@@ -2277,6 +2334,10 @@ function invalidateVolumeCache(){ VOLUME_CACHE.valid = false; }
 canvas.addEventListener('webglcontextlost', invalidateVolumeCache);
 canvas.addEventListener('webglcontextrestored', invalidateVolumeCache);
 var rtMain = mkTarget(true), rtVol = mkTarget(false), rtComp = mkTarget(false), rtDown = [], rtUp = [], BL = 5, volScale = 1.0;
+// Reuse the main pass depth attachment to keep nearby opaque bodies in front
+// of the accumulated distant gas. No extra scene draw or full-size colour target.
+var mainDepthSupported=renderer.capabilities.isWebGL2 || !!gl.getExtension('WEBGL_depth_texture');
+if(mainDepthSupported)rtMain.depthTexture=new THREE.DepthTexture(4,4,THREE.UnsignedShortType);
 for(var bi=0;bi<BL;bi++){ rtDown.push(mkTarget(false)); if(bi < BL - 1) rtUp.push(mkTarget(false)); }
 function resizeTarget(target, w, h){
   if(target.width === w && target.height === h) return false;
@@ -2307,13 +2368,14 @@ var postScene = new THREE.Scene(), postCam = new THREE.Camera(), postQuad = new 
 postQuad.frustumCulled = false; postScene.add(postQuad);
 var POST_VS = 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }';
 function postMat(fs, uniforms){ return new THREE.ShaderMaterial({uniforms:uniforms, vertexShader:POST_VS, fragmentShader:fs, depthTest:false, depthWrite:false}); }
-var compU = {tMain:{value:null}, tVol:{value:null}, uLens:{value:new THREE.Vector3(0.5, 0.5, 0)}, uAspect:{value:1}};
-var compMat = postMat('uniform sampler2D tMain; uniform sampler2D tVol; uniform vec3 uLens; uniform float uAspect; varying vec2 vUv;' +
+var compU = {tMain:{value:null}, tVol:{value:null}, tDepth:{value:rtMain.depthTexture||WHITE}, uHasDepth:{value:mainDepthSupported?1:0}, uLens:{value:new THREE.Vector3(0.5, 0.5, 0)}, uAspect:{value:1}};
+var compMat = postMat('uniform sampler2D tMain; uniform sampler2D tVol; uniform sampler2D tDepth; uniform float uHasDepth; uniform vec3 uLens; uniform float uAspect; varying vec2 vUv;' +
   'void main(){ vec2 uv = vUv;' +
   /* a black hole bends the light passing it: everything behind is pushed outward into arcs and a ring */
   ' if(uLens.z > 0.0){ vec2 d = (uv - uLens.xy)*vec2(uAspect, 1.0); float r2 = dot(d, d); float wgt = smoothstep(uLens.z*1.05, uLens.z*2.0, sqrt(r2));' +
   '  uv -= d/vec2(uAspect, 1.0)*(uLens.z*uLens.z*2.6/(r2 + 1e-6))*wgt; }' +
   ' vec4 m = texture2D(tMain, uv); vec4 v = texture2D(tVol, uv);' +
+  ' if(uHasDepth>0.5 && texture2D(tDepth,uv).r<1.0) v=vec4(0.0);' +
   ' gl_FragColor = vec4(m.rgb*(1.0 - v.a) + v.rgb, 1.0); }', compU);
 var downU = {tSrc:{value:null}, uPx:{value:new THREE.Vector2()}, uThr:{value:0}};
 var downMat = postMat('uniform sampler2D tSrc; uniform vec2 uPx; uniform float uThr; varying vec2 vUv;' +
@@ -2420,7 +2482,7 @@ function captureSkyFaces(first, count, tile){
     neb:NEB_SAMPLES.value, gal:GAL_SAMPLES.value, occlusion:VOLUME_OCCLUSION.value,
     tele:HYG.u ? HYG.u.uTele.value : 1,
     scissor:bhSky.write.scissor.clone(), scissorTest:bhSky.write.scissorTest};
-  var pointUniforms = [], boardState = [], fineState = [], dotState = [], i;
+  var pointUniforms = [], boardState = [], fineState = [], dotState = [], glowState = [], i;
   var auInverse = auRoot.quaternion.clone().invert();
   try{
     /* These angular maps represent the distant sky, not telescope magnification.
@@ -2437,8 +2499,17 @@ function captureSkyFaces(first, count, tile){
     }
     for(i=0;i<boards.length;i++) boardState.push(boards[i].m.quaternion.clone());
     for(i=0;i<dots.length;i++){
-      var D = dots[i], far = D.w.distanceTo(P)*D.k, radius = D.R*K(D.cls);
-      dotState.push(D.m.scale.clone()); D.m.scale.setScalar((D.star ? Math.max(radius*7, far) : far)/D.unit);
+      var D = dots[i], distance = D.w.distanceTo(P), far = distance*D.k, radius = D.R*K(D.cls);
+      var glowRadius = D.star ? Math.max(radius*7, far) : far, glowU = D.m.material.uniforms;
+      dotState.push(D.m.scale.clone()); D.m.scale.setScalar(glowRadius/D.unit);
+      if(glowU.uResolved && glowU.uRadius){
+        glowState.push([glowU.uResolved, glowU.uResolved.value, glowU.uRadius, glowU.uRadius.value]);
+        /* The cube is a 90-degree, unzoomed view. Match the physical limb to
+           this temporary billboard scale, then restore the telescope state. */
+        var starPixels = radius*bhSky.size/(2*Math.max(distance, radius, 1.0e-30));
+        glowU.uResolved.value = sstep(1.5, 6.0, starPixels);
+        glowU.uRadius.value = radius/Math.max(glowRadius, 1.0e-30);
+      }
     }
     for(i=0;i<nebs.length;i++){
       var nu = nebs[i].m.material.uniforms;
@@ -2473,6 +2544,9 @@ function captureSkyFaces(first, count, tile){
     if(HYG.u) HYG.u.uTele.value = state.tele;
     NEB_SAMPLES.value = state.neb; GAL_SAMPLES.value = state.gal; VOLUME_OCCLUSION.value = state.occlusion;
     for(i=0;i<pointUniforms.length;i++) pointUniforms[i][0].value = pointUniforms[i][1];
+    for(i=0;i<glowState.length;i++){
+      glowState[i][0].value = glowState[i][1]; glowState[i][2].value = glowState[i][3];
+    }
     for(i=0;i<boardState.length;i++) boards[i].m.quaternion.copy(boardState[i]);
     for(i=0;i<dotState.length;i++) dots[i].m.scale.copy(dotState[i]);
     for(i=0;i<fineState.length;i++) nebs[i].m.material.uniforms.uFine.value.copy(fineState[i]);
@@ -3332,8 +3406,16 @@ function frame(now){
   var qAU = frameAUQuaternion.copy(auRoot.quaternion).invert().multiply(camera.quaternion);
   for(i=0;i<boards.length;i++){ boards[i].m.quaternion.copy(boards[i].au ? qAU : camera.quaternion); }
   for(i=0;i<dots.length;i++){
-    var T = dots[i], far = T.w.distanceTo(P)*T.k/tele, TR = T.R*K(T.cls);          /* far: the size that covers a few pixels at this distance */
-    if(T.star){ T.m.scale.setScalar(Math.max(TR*7, far)/T.unit); }
+    var T = dots[i], distanceToDot=T.w.distanceTo(P), far = distanceToDot*T.k/tele, TR = T.R*K(T.cls);          /* far: the size that covers a few pixels at this distance */
+    if(T.star){
+      var glowRadius=Math.max(TR*7,far);T.m.scale.setScalar(glowRadius/T.unit);
+      var glowU=T.m.material.uniforms;
+      if(glowU.uResolved){
+        var starPixels=TR*rtMain.height/(2*VIEW.tanF.value*Math.max(distanceToDot,TR,1.0e-30));
+        glowU.uResolved.value=sstep(1.5,6.0,starPixels);
+        glowU.uRadius.value=TR/Math.max(glowRadius,1.0e-30);
+      }
+    }
     else { T.m.scale.setScalar(far/T.unit); T.m.material.uniforms.uAlpha.dim = sstep(TR*1.2, TR*4, far); }
   }
   var cm = camera.matrixWorld.elements;
