@@ -132,63 +132,147 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--gold);outline-o
   #hud{padding-left:28px}
   #stick{left:32px;bottom:32px} #fly{right:32px;bottom:32px}
 }
-/* The explorer is a non-modal drawer: the sky and flight controls stay usable. */
-#exploreBtn{position:fixed;right:16px;top:calc(env(safe-area-inset-top,0px) + 256px);z-index:8;min-height:42px;padding:0 15px;border:1px solid rgba(243,217,162,.45);border-radius:999px;background:rgba(26,24,28,.88);color:var(--gold);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);font-size:13px}
-#exploreBtn span{font-size:20px;vertical-align:-1px;margin-left:5px}
-#exploreBtn[aria-expanded="true"]{background:rgba(243,217,162,.17)}
-#explorer{position:fixed;top:calc(env(safe-area-inset-top,0px) + 20px);right:148px;width:358px;max-height:calc(100dvh - env(safe-area-inset-top,0px) - env(safe-area-inset-bottom,0px) - 44px);z-index:9;display:flex;flex-direction:column;border:1px solid rgba(243,217,162,.22);border-radius:22px;background:linear-gradient(150deg,rgba(25,29,40,.96),rgba(8,11,20,.96));box-shadow:0 24px 90px rgba(0,0,0,.5);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);overflow:hidden;user-select:text;-webkit-user-select:text}
+/* Quiet flight view; observing settings and scientific context live in the drawer. */
+#hud{left:24px;right:auto;top:calc(env(safe-area-inset-top,0px) + 24px);width:calc(100% - 270px);max-width:420px;padding:0}
+#hud .k{display:none}
+#place{font-size:30px;line-height:1.15;letter-spacing:.08em;margin:0;font-weight:500}
+#hud .stats{display:block;margin:9px 0 0}
+#hud .stats>div{display:flex;align-items:baseline;gap:8px}
+#hud .stats dt{font-size:10px;letter-spacing:.03em;color:var(--ink-faint)}
+#hud .stats dd{margin:0;font-size:12px;font-weight:400;line-height:1.4;color:var(--ink-dim)}
+#goHome,#exploreBtn{position:fixed;top:calc(env(safe-area-inset-top,0px) + 24px);z-index:8;min-height:44px;border-radius:999px;backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);font-size:12px;letter-spacing:.04em}
+#goHome{right:calc(env(safe-area-inset-right,0px) + 122px);width:82px;padding:0 10px;color:var(--ink-dim);background:rgba(12,16,24,.45);border:1px solid rgba(238,240,246,.12)}
+#exploreBtn{right:calc(env(safe-area-inset-right,0px) + 24px);width:88px;padding:0 12px;border:1px solid rgba(243,217,162,.38);background:rgba(25,25,31,.62);color:var(--gold)}
+#exploreBtn span{font-size:19px;vertical-align:-1px;margin-left:5px}
+#exploreBtn[aria-expanded="true"]{background:rgba(243,217,162,.16)}
+#goHome:hover,#exploreBtn:hover{border-color:rgba(243,217,162,.55)}
+#teleBtn{top:auto;left:50%;right:auto;bottom:calc(env(safe-area-inset-bottom,0px) + 44px);transform:translateX(-50%);min-height:40px;padding:0 16px;font-size:11px;background:rgba(10,14,22,.45);border-color:rgba(238,240,246,.13);color:var(--ink-dim)}
+#sourceBtn{position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom,0px) + 3px);transform:translateX(-50%);z-index:6;min-width:76px;min-height:36px;padding:0 10px;font-size:9px;letter-spacing:.1em;color:var(--ink-faint)}
+#sourceBtn:hover{color:var(--gold)}
+#stick{width:112px;height:112px;left:calc(env(safe-area-inset-left,0px) + 24px);bottom:calc(env(safe-area-inset-bottom,0px) + 28px);background:rgba(12,16,24,.25);border-color:rgba(238,240,246,.16);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)}
+#stick::before{inset:14px;border-color:rgba(238,240,246,.1)}
+#stick i{display:none}
+#knob{width:40px;height:40px;margin:-20px 0 0 -20px;background:rgba(238,240,246,.6)}
+#fly{right:calc(env(safe-area-inset-right,0px) + 24px);bottom:calc(env(safe-area-inset-bottom,0px) + 28px);gap:10px}
+#fly button{background:rgba(12,16,24,.32);border-color:rgba(238,240,246,.16);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)}
+#fwd{width:88px;height:88px;font-size:14px;font-weight:500;border-color:rgba(243,217,162,.35)!important}
+#back{width:52px;height:52px;font-size:11px;color:var(--ink-faint)}
+#cross{width:14px;height:14px;margin:-7px 0 0 -7px;opacity:.25}
+#cross::before{left:6px;top:2px;width:1px;height:10px}
+#cross::after{left:2px;top:6px;width:10px;height:1px}
+#tip{bottom:calc(env(safe-area-inset-bottom,0px) + 190px);padding:0;border:0;background:none;font-size:10.5px;letter-spacing:.08em;color:var(--ink-faint)}
+.lab{font-size:10.5px;letter-spacing:.03em;color:rgba(238,240,246,.72)}
+.lab small{display:none}
+#labels .lab[data-explore]{pointer-events:auto;cursor:pointer;min-height:28px;display:flex;align-items:center;border-radius:5px}
+#labels .lab[data-explore].off{display:none}
+#labels .lab[data-explore]:hover{color:var(--gold);background:rgba(8,11,20,.65)}
+
+#explorer{position:fixed;top:calc(env(safe-area-inset-top,0px) + 84px);right:calc(env(safe-area-inset-right,0px) + 24px);width:360px;max-height:calc(100dvh - env(safe-area-inset-top,0px) - env(safe-area-inset-bottom,0px) - 284px);z-index:9;display:flex;flex-direction:column;border:1px solid rgba(243,217,162,.19);border-radius:20px;background:rgba(13,18,28,.96);box-shadow:0 24px 80px rgba(0,0,0,.45);backdrop-filter:blur(22px);-webkit-backdrop-filter:blur(22px);overflow:hidden;user-select:text;-webkit-user-select:text}
 #explorer[hidden],#explorerTravel[hidden],#objectCard[hidden],#objectRelease[hidden],#destinationEmpty[hidden],#objectSource[hidden]{display:none}
-.explorer-heading{padding:23px 22px 18px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;border-bottom:1px solid var(--line)}
+.explorer-heading{padding:21px 20px 17px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;border-bottom:1px solid var(--line)}
 .explorer-eyebrow{color:var(--gold);font-size:9px;letter-spacing:.2em;line-height:1.5;margin:0}
-#explorerTitle{font-family:var(--serif);font-size:25px;letter-spacing:.05em;margin:6px 0 0;line-height:1.3}
-#explorerClose{font-size:28px;line-height:36px;width:40px;height:40px;align-self:flex-start;border:1px solid var(--line);border-radius:50%;color:var(--ink-dim)}
-.explorer-scroll{padding:18px 22px 23px;overflow-y:auto;overscroll-behavior:contain;min-height:0;scrollbar-width:thin;scrollbar-color:rgba(243,217,162,.3) transparent}
-.explorer-search-label{display:block;font-size:12px;color:var(--ink-dim);margin-bottom:8px}
-#destinationSearch{display:block;width:100%;min-height:44px;padding:10px 12px;border-radius:10px;border:1px solid rgba(243,217,162,.27);background:rgba(0,0,0,.24);font:inherit;font-size:14px;color:var(--ink);-webkit-user-select:text;user-select:text}
+#explorerTitle{font-family:var(--serif);font-size:25px;font-weight:500;letter-spacing:.08em;margin:6px 0 0;line-height:1.3}
+#explorerClose{font-size:28px;line-height:40px;width:44px;height:44px;border:1px solid var(--line);border-radius:50%;color:var(--ink-dim);flex-shrink:0}
+.explorer-scroll{padding:18px 20px 20px;overflow-y:auto;overscroll-behavior:contain;min-height:0;scrollbar-width:thin;scrollbar-color:rgba(243,217,162,.25) transparent}
+.explorer-search-label{display:block;font-size:11px;color:var(--ink-dim);margin-bottom:8px}
+#destinationSearch{display:block;width:100%;min-height:44px;padding:10px 12px;border-radius:10px;border:1px solid rgba(243,217,162,.24);background:rgba(0,0,0,.17);font:inherit;font-size:14px;color:var(--ink);-webkit-user-select:text;user-select:text}
 #destinationSearch::placeholder{color:var(--ink-faint)}
 .explorer-list-heading{display:flex;justify-content:space-between;gap:12px;margin:17px 0 7px;font-size:10px;letter-spacing:.05em;color:var(--ink-faint)}
-#destinationList{list-style:none;padding:0;margin:0;max-height:178px;overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin}
+#destinationList{list-style:none;padding:0;margin:0;max-height:164px;overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin}
 #destinationList li{margin:0;padding:0}
-.destination-option{display:flex;align-items:center;justify-content:space-between;gap:10px;text-align:left;width:100%;min-height:42px;padding:10px 9px;border-radius:8px;font-size:13px}
-.destination-option:hover,.destination-option:focus-visible{background:rgba(243,217,162,.08)}
-.destination-option[aria-pressed="true"]{background:rgba(243,217,162,.12);color:var(--gold)}
+.destination-option{display:flex;align-items:center;justify-content:space-between;gap:10px;text-align:left;width:100%;min-height:44px;padding:10px 9px;border-radius:8px;font-size:13px}
+.destination-option:hover,.destination-option:focus-visible{background:rgba(243,217,162,.07)}
+.destination-option[aria-pressed="true"]{background:rgba(243,217,162,.11);color:var(--gold)}
 .destination-option small{max-width:45%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--ink-faint);font-size:10px}
-#objectCard{margin-top:18px;border-top:1px solid rgba(243,217,162,.23);padding-top:20px}
-.object-heading h3{font-family:var(--serif);font-size:26px;letter-spacing:.03em;margin:5px 0 12px;line-height:1.3}
+#objectCard{margin-top:18px;border-top:1px solid rgba(243,217,162,.2);padding-top:20px}
+.object-heading h3{font-family:var(--serif);font-size:26px;font-weight:500;letter-spacing:.04em;margin:5px 0 12px;line-height:1.3}
 #objectDescription{font-size:12px;color:var(--ink-dim);line-height:1.8;margin:0 0 15px}
 #objectFacts{margin:0;border-top:1px solid var(--line)}
 #objectFacts .fact-row{display:flex;justify-content:space-between;gap:15px;padding:9px 0;border-bottom:1px solid var(--line);font-size:11px;line-height:1.6}
 #objectFacts dt{color:var(--ink-faint);flex-shrink:0}
 #objectFacts dd{text-align:right;margin:0;overflow-wrap:anywhere;font-variant-numeric:tabular-nums}
 .explorer-muted{color:var(--ink-faint);font-size:10px;line-height:1.7;margin:11px 0 0}
-.object-note{margin:12px 0;padding:10px 12px;border-left:2px solid rgba(243,217,162,.4);background:rgba(243,217,162,.035);color:var(--ink-dim);font-size:11px;line-height:1.7}
+.object-note{margin:12px 0;padding:10px 12px;border-left:2px solid rgba(243,217,162,.32);background:rgba(243,217,162,.025);color:var(--ink-dim);font-size:11px;line-height:1.7}
 .object-actions{display:grid;grid-template-columns:1.25fr .8fr 1.1fr;gap:7px;margin:17px 0 0}
-.object-actions button,#objectRelease{min-height:42px;border:1px solid var(--line);border-radius:9px;font-size:11px;white-space:nowrap}
+.object-actions button,#objectRelease{min-height:44px;border:1px solid var(--line);border-radius:9px;font-size:11px;white-space:nowrap}
 .object-actions .primary{background:var(--gold);border-color:var(--gold);color:#1a1b21;font-weight:600}
-#objectRelease{width:100%;margin-top:8px;color:var(--gold);background:rgba(243,217,162,.045)}
+#objectRelease{width:100%;margin-top:8px;color:var(--gold);background:rgba(243,217,162,.04)}
 #objectSource{display:inline-block;margin-top:8px;font-size:10px;line-height:1.6;color:var(--gold);text-underline-offset:3px;overflow-wrap:anywhere}
-.explorer-quality{display:grid;grid-template-columns:1fr auto;align-items:center;gap:10px;margin-top:23px;padding-top:18px;border-top:1px solid var(--line)}
+.explorer-detail{margin-top:19px;border-top:1px solid var(--line)}
+.explorer-detail+.explorer-detail{margin-top:0}
+.explorer-detail summary{display:flex;justify-content:space-between;align-items:center;gap:12px;min-height:48px;font-size:12px;color:var(--ink-dim);cursor:pointer;list-style:none}
+.explorer-detail summary::-webkit-details-marker{display:none}
+.explorer-detail summary::after{content:'+';color:var(--ink-faint);font-size:18px;font-weight:300}
+.explorer-detail[open] summary::after{content:'−'}
+.explorer-detail-body{padding:4px 0 18px}
+#explorerLookControls{display:flex;flex-wrap:wrap;gap:8px}
+#explorer #brightBtn,#explorer #hdrBtn{position:static;top:auto;right:auto;bottom:auto;left:auto;transform:none;flex:1;min-height:44px;padding:0 12px;border:1px solid var(--line);border-radius:9px;background:rgba(238,240,246,.035);font-size:12px;color:var(--ink-dim)}
+#explorer #hdrBtn[hidden]{display:none}
+.explorer-quality{display:grid;grid-template-columns:1fr auto;align-items:center;gap:12px;margin-top:14px}
 .explorer-quality label{font-size:12px;color:var(--ink-dim)}
-#qualitySelect{max-width:180px;padding:8px 9px;min-height:38px;border:1px solid var(--line);border-radius:8px;background:#151923;color:var(--ink);font:inherit;font-size:12px}
-.explorer-quality p{grid-column:1/-1;margin:0;color:var(--ink-faint);font-size:10px;line-height:1.7}
-#labels .lab[data-explore]{pointer-events:auto;cursor:pointer;min-height:28px;display:flex;align-items:center;border-radius:5px}
-#labels .lab[data-explore].off{display:none}
-#labels .lab[data-explore]:hover{color:var(--gold);background:rgba(8,11,20,.65)}
-#explorerTravel{position:fixed;bottom:calc(env(safe-area-inset-bottom,0px) + 192px);left:50%;transform:translateX(-50%);z-index:7;display:flex;align-items:center;gap:10px;max-width:calc(100% - 32px);border:1px solid rgba(243,217,162,.28);border-radius:999px;padding:7px 8px 7px 15px;background:rgba(10,13,22,.88);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);font-size:11px}
-.travel-dot{width:5px;height:5px;border-radius:50%;background:var(--gold);box-shadow:0 0 10px rgba(243,217,162,.45);flex-shrink:0}
+#qualitySelect{max-width:172px;padding:10px;min-height:44px;border:1px solid var(--line);border-radius:9px;background:#151b27;color:var(--ink);font:inherit;font-size:12px}
+#explorerScale{margin-top:17px}
+#explorer #scaleBtn{position:static;top:auto;right:auto;min-height:25px;padding:0 8px;width:auto;border-radius:5px;border-color:rgba(243,217,162,.19);background:rgba(243,217,162,.04);font-size:9px;letter-spacing:.06em;color:var(--gold)}
+#explorer #scaleNote,.explorer-control-guide{margin:8px 0 0;font-size:10px;color:var(--ink-faint);line-height:1.8;text-shadow:none}
+#explorerPositionFacts{margin:0}
+#explorerPositionFacts dt{font-size:10px;color:var(--ink-faint);line-height:1.5}
+#explorerPositionFacts dd{font-size:12px;line-height:1.7;margin:4px 0 14px;font-variant-numeric:tabular-nums}
+#explorerPositionFacts small{display:block;font-size:10px;color:var(--ink-dim)}
+#explorer #near{font-size:11px;line-height:1.7;margin:0;color:var(--ink-dim);text-shadow:none}
+#explorer #credit{position:static;left:auto;bottom:auto;transform:none;max-width:none;margin:0;color:var(--ink-dim);font-size:10px;line-height:1.9;white-space:normal;pointer-events:auto;text-shadow:none}
+#explorerAttribution>a{display:inline-block;min-height:32px;margin-top:8px;line-height:32px;color:var(--gold);font-size:10px;text-underline-offset:3px}
+
+#explorerTravel{position:fixed;bottom:calc(env(safe-area-inset-bottom,0px) + 196px);left:50%;transform:translateX(-50%);z-index:7;display:flex;align-items:center;gap:10px;max-width:calc(100% - 32px);min-height:40px;border:1px solid rgba(243,217,162,.2);border-radius:999px;padding:5px 8px 5px 14px;background:rgba(10,13,22,.82);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);font-size:11px}
+.travel-dot{width:4px;height:4px;border-radius:50%;background:var(--gold);flex-shrink:0}
 #explorerTravelText{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--gold)}
-#explorerStop{border-left:1px solid var(--line);padding:6px 9px 6px 12px;white-space:nowrap;color:var(--ink-dim);font-size:10px;flex-shrink:0}
+#explorerStop{border-left:1px solid var(--line);padding:7px 8px 7px 11px;white-space:nowrap;color:var(--ink-dim);font-size:10px;flex-shrink:0}
 @media(max-width:650px){
-  #explorer{left:16px;right:16px;top:calc(env(safe-area-inset-top,0px) + 310px);width:auto;max-height:calc(100dvh - env(safe-area-inset-top,0px) - env(safe-area-inset-bottom,0px) - 526px);border-radius:17px}
-  .explorer-heading{padding:14px 17px 11px}
-  #explorerTitle{font-size:21px;margin-top:3px}
-  .explorer-scroll{padding:14px 17px 20px}
-  #explorerClose{width:34px;height:34px;line-height:30px;font-size:25px}
-  #explorerTravel{bottom:calc(env(safe-area-inset-bottom,0px) + 168px)}
+  #hud{left:16px;top:calc(env(safe-area-inset-top,0px) + 19px);width:calc(100% - 200px)}
+  #place{font-size:24px;letter-spacing:.06em}
+  #hud .stats{margin-top:7px}
+  #hud .stats>div{gap:6px}
+  #hud .stats dt{font-size:9px}
+  #hud .stats dd{font-size:11px}
+  #goHome,#exploreBtn{top:calc(env(safe-area-inset-top,0px) + 16px);font-size:11px}
+  #goHome{right:calc(env(safe-area-inset-right,0px) + 104px);width:64px;padding:0 8px}
+  #exploreBtn{right:calc(env(safe-area-inset-right,0px) + 16px);width:80px}
+  #stick{width:92px;height:92px;left:calc(env(safe-area-inset-left,0px) + 18px);bottom:calc(env(safe-area-inset-bottom,0px) + 24px)}
+  #knob{width:34px;height:34px;margin:-17px 0 0 -17px}
+  #fly{right:calc(env(safe-area-inset-right,0px) + 18px);bottom:calc(env(safe-area-inset-bottom,0px) + 24px);gap:8px}
+  #fwd{width:80px;height:80px;font-size:13px}
+  #back{width:48px;height:48px}
+  #teleBtn{bottom:calc(env(safe-area-inset-bottom,0px) + 38px);padding:0 12px;font-size:10px}
+  #sourceBtn{min-height:30px;bottom:calc(env(safe-area-inset-bottom,0px) + 2px)}
+  #tip{bottom:calc(env(safe-area-inset-bottom,0px) + 170px);font-size:10px}
+  #explorer{left:12px;right:12px;top:calc(env(safe-area-inset-top,0px) + 76px);bottom:calc(env(safe-area-inset-bottom,0px) + 12px);width:auto;max-height:none;border-radius:17px}
+  .explorer-heading{padding:16px 17px 14px}
+  #explorerTitle{font-size:23px}
+  .explorer-scroll{padding:16px 17px 20px}
+  .explorer-open #stick,.explorer-open #fly,.explorer-open #teleBtn,.explorer-open #sourceBtn{visibility:hidden}
+  #explorerTravel{bottom:calc(env(safe-area-inset-bottom,0px) + 178px)}
 }
-@media(max-height:620px) and (min-width:651px){#explorer{top:12px;max-height:calc(100dvh - 24px);right:144px;width:320px}.explorer-heading{padding:14px 18px}#explorerTitle{font-size:21px}.explorer-scroll{padding:14px 18px}}
-/* Short phone viewports need a readable sheet; closing it restores the flight pads. */
-@media(max-height:690px) and (max-width:650px){#explorer{top:calc(env(safe-area-inset-top,0px) + 12px);bottom:calc(env(safe-area-inset-bottom,0px) + 12px);left:12px;right:12px;max-height:none}.explorer-heading{padding:14px 17px}#explorerTitle{font-size:21px}.explorer-scroll{padding:14px 17px}.explorer-open #stick,.explorer-open #fly{opacity:0;pointer-events:none}}
+@media(max-height:440px){
+  #hud{left:14px;top:calc(env(safe-area-inset-top,0px) + 12px);width:calc(100% - 230px)}
+  #place{font-size:22px}
+  #hud .stats{margin-top:5px}
+  #hud .stats dt{font-size:9px}
+  #hud .stats dd{font-size:10px}
+  #goHome,#exploreBtn{top:calc(env(safe-area-inset-top,0px) + 10px);min-height:40px}
+  #stick{width:80px;height:80px;left:calc(env(safe-area-inset-left,0px) + 16px);bottom:calc(env(safe-area-inset-bottom,0px) + 16px)}
+  #stick::before{inset:12px}
+  #knob{width:32px;height:32px;margin:-16px 0 0 -16px}
+  #fly{flex-direction:row;align-items:flex-end;gap:8px;right:calc(env(safe-area-inset-right,0px) + 16px);bottom:calc(env(safe-area-inset-bottom,0px) + 16px)}
+  #fwd{width:64px;height:64px;font-size:13px}
+  #back{width:48px;height:48px;font-size:11px}
+  #teleBtn{bottom:calc(env(safe-area-inset-bottom,0px) + 48px);min-height:40px}
+  #sourceBtn{bottom:calc(env(safe-area-inset-bottom,0px) + 5px);min-height:30px}
+  #tip{bottom:calc(env(safe-area-inset-bottom,0px) + 112px)}
+  #explorerTravel{bottom:calc(env(safe-area-inset-bottom,0px) + 110px)}
+  #explorer{top:calc(env(safe-area-inset-top,0px) + 64px);bottom:calc(env(safe-area-inset-bottom,0px) + 12px);max-height:none;right:12px}
+  .explorer-heading{padding:14px 17px 12px}
+  #explorerTitle{font-size:22px}
+  .explorer-open #stick,.explorer-open #fly,.explorer-open #teleBtn,.explorer-open #sourceBtn{visibility:hidden}
+}
 
 </style>
 </head>
@@ -225,10 +309,10 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--gold);outline-o
 </div>
 <div id="fail" hidden><p id="failT"></p></div>
 
-<button type="button" id="exploreBtn" aria-expanded="false" aria-controls="explorer">探索宇宙 <span aria-hidden="true">⌕</span></button>
+<button type="button" id="exploreBtn" aria-expanded="false" aria-controls="explorer">探索 <span aria-hidden="true">⌕</span></button>
 <aside id="explorer" aria-labelledby="explorerTitle" hidden>
   <div class="explorer-heading">
-    <div><p class="explorer-eyebrow">UNIVERSE EXPLORER</p><h2 id="explorerTitle">下一站，宇宙。</h2></div>
+    <div><p class="explorer-eyebrow">UNIVERSE EXPLORER</p><h2 id="explorerTitle">探索宇宙</h2></div>
     <button type="button" id="explorerClose" aria-label="關閉探索面板">×</button>
   </div>
   <div class="explorer-scroll">
@@ -254,13 +338,31 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--gold);outline-o
       <a id="objectSource" target="_blank" rel="noopener noreferrer" hidden></a>
     </section>
 
-    <div class="explorer-quality">
-      <label for="qualitySelect">畫面品質</label>
-      <select id="qualitySelect"><option value="high">高畫質 · M5</option><option value="balanced">均衡</option><option value="auto">自動調整</option></select>
-      <p>高畫質增加雲氣與星系細節。觀測亮度可用右側按鈕切換。</p>
-    </div>
+    <details id="explorerSettings" class="explorer-detail">
+      <summary>畫面與觀測</summary>
+      <div class="explorer-detail-body">
+        <div id="explorerLookControls" aria-label="觀測效果"></div>
+        <div class="explorer-quality">
+          <label for="qualitySelect">畫面品質</label>
+          <select id="qualitySelect"><option value="high">高畫質 · M5</option><option value="balanced">均衡</option><option value="auto">自動調整</option></select>
+        </div>
+        <div id="explorerScale"></div>
+        <p class="explorer-control-guide">拖曳轉向，W／S 前進後退；雙指或滾輪調整望遠鏡。</p>
+      </div>
+    </details>
+    <details id="explorerPosition" class="explorer-detail">
+      <summary>航行資訊</summary>
+      <div class="explorer-detail-body"><dl id="explorerPositionFacts"></dl><div id="explorerNearby"></div></div>
+    </details>
+    <details id="explorerSources" class="explorer-detail">
+      <summary>資料來源與模型</summary>
+      <div class="explorer-detail-body" id="explorerAttribution">
+        <a href="https://github.com/andy32012/universe#readme" target="_blank" rel="noopener noreferrer">完整資料與授權 ↗</a>
+      </div>
+    </details>
   </div>
 </aside>
+<button type="button" id="sourceBtn" aria-controls="explorerSources">資料來源</button>
 <div id="explorerTravel" hidden>
   <span class="travel-dot" aria-hidden="true"></span><span id="explorerTravelText" role="status"></span>
   <button type="button" id="explorerStop" aria-label="停止導航、跟隨或環繞">自由飛行 <span aria-hidden="true">×</span></button>
@@ -292,7 +394,7 @@ catch(e){ fail('這台裝置的瀏覽器無法啟用 WebGL，所以畫不出宇�
 var PR = Math.min(window.devicePixelRatio || 1, 2);
 renderer.setPixelRatio(PR);
 renderer.setSize(window.innerWidth, window.innerHeight, false);
-renderer.setClearColor(0x030408, 1);
+renderer.setClearColor(0x000000, 1);
 
 /* ---------- constants ---------- */
 var AU_LY = 1/63241.077;          /* one astronomical unit in light-years */
@@ -412,6 +514,7 @@ var TERRAIN_GL = `
 uniform float uTerrain; uniform float uDetail; uniform float uRotation; uniform float uSpin; uniform float uTime;
 vec3 surfacePoint(vec3 p){ float a=(uRotation+uSpin*uTime)*6.28318530718; float c=cos(a),s=sin(a); return vec3(c*p.x-s*p.z,p.y,s*p.x+c*p.z); }
 float terrainHeight(vec3 point){
+  if(uTerrain<0.5 || uDetail<0.0001) return 0.0;
   vec3 p=surfacePoint(normalize(point));
   float h=(fb(p*23.0)-0.45)*0.6+(n3(p*95.0)-0.5)*0.12;
   // Deterministic bowl-and-rim forms demonstrate crater relief, without claiming measured craters.
@@ -466,10 +569,10 @@ void main(){
   gl_Position=projectionMatrix*mv;
 }`;
 var BODY_FS = `
-uniform float uType; uniform vec3 uTint; uniform float uAlpha; uniform float uFlux;
+uniform float uType; uniform vec3 uTint; uniform float uAlpha; uniform float uFlux; uniform float uDisplayGain;
 uniform sampler2D uMap; uniform sampler2D uMap2; uniform sampler2D uMap3;
 uniform float uHasMap; uniform float uCloudLayers; uniform mat3 uBasis; uniform vec3 uSunLocal;
-uniform sampler2D uRingMap; uniform float uHasRing; uniform vec3 uRingN;
+uniform sampler2D uRingMap; uniform float uHasRing; uniform float uRingRadiusScale; uniform vec3 uRingN;
 varying vec3 vObj; varying vec3 vNw; varying vec3 vNv; varying vec3 vV; varying vec3 vW; varying float vRw;
 ` + NOISE_GL + TERRAIN_GL + SURFACE_MAP_GL + ECLIPSE_GL + `
 float cloudsAt(vec3 p){return smoothstep(0.10,0.8,mapAt(uMap3,normalize(p),uRotation+uSpin*uTime+uTime*0.000008+0.03).r);}
@@ -508,7 +611,7 @@ void main(){
     float dn=dot(uSun,uRingN);
     if(abs(dn)>0.00001){
       float t=-dot(surface,uRingN)/dn;
-      if(t>0.0){float rr=length(surface+uSun*t);
+      if(t>0.0){float rr=length(surface+uSun*t)/uRingRadiusScale;
         if(rr>1.24 && rr<2.27){ float opacity=texture2D(uRingMap,vec2((rr-1.24)/1.03,0.5)).a; visibility*=exp(-opacity*1.9/max(abs(dn),0.08)); }
       }
     }
@@ -523,7 +626,7 @@ void main(){
     cloudShadow=exp(-cloudsAt(q)*1.7);
     if(uCloudLayers<0.5) col=mix(col,vec3(0.97),cloudA*0.9);
   }
-  vec3 outc=col*(mu*uFlux*1.15*visibility*cloudShadow+0.00025);
+  vec3 outc=col*(mu*uFlux*1.15*visibility*cloudShadow), emission=vec3(0.0);
   if(earth){
     vec3 V=normalize(cameraPosition-vW), H=normalize(uSun+V);
     // A rough ocean highlight and Schlick Fresnel response; ocean mask is inferred from the colour map.
@@ -531,16 +634,16 @@ void main(){
     float wave=0.85+0.15*n3(surfacePoint(p)*900.0+vec3(uTime*0.04));
     float spec=pow(max(dot(N,H),0.0),180.0)*7.2*fresnel*wave;
     outc+=vec3(1.0,0.97,0.90)*spec*wet*mu*uFlux*visibility*cloudShadow;
-    if(uHasMap>0.5) outc+=mapAt(uMap2,p,spin).rgb*vec3(1.0,0.80,0.53)*(1.0-smoothstep(-0.13,0.07,dot(N,uSun)))*0.7*(1.0-cloudA*0.75);
+    if(uHasMap>0.5) emission=mapAt(uMap2,p,spin).rgb*vec3(1.0,0.80,0.53)*(1.0-smoothstep(-0.13,0.07,dot(N,uSun)))*0.7*(1.0-cloudA*0.75);
   }
-  gl_FragColor=vec4(outc*uAlpha,1.0);
+  gl_FragColor=vec4((outc*uDisplayGain+emission)*uAlpha,1.0);
 }`;
 
 /* Three finite-height cloud shells: procedural thickness and approximate self-shadow,
    not a meteorological cloud field or measured cloud altitude. */
 var CLOUD_FS = `
 uniform sampler2D uMap3; uniform float uRotation; uniform float uSpin; uniform float uTime;
-uniform float uAlpha; uniform float uFlux; uniform float uLayer; uniform vec3 uSunLocal; uniform mat3 uBasis;
+uniform float uAlpha; uniform float uFlux; uniform float uDisplayGain; uniform float uLayer; uniform vec3 uSunLocal; uniform mat3 uBasis;
 varying vec3 vObj; varying vec3 vNw; varying vec3 vNv; varying vec3 vV; varying vec3 vW; varying float vRw;
 ` + NOISE_GL + SURFACE_MAP_GL + ECLIPSE_GL + `
 float density(vec3 p){
@@ -559,7 +662,7 @@ void main(){
   float visibility=eclipseAt(uBasis*p);
   float direct=max(mu,0.0)*exp(-od)*uFlux*visibility;
   float backlit=pow(max(dot(normalize(vV),normalize(vNv)),0.0),0.4);
-  vec3 lit=vec3(1.0,0.985,0.96)*(direct*1.45+uFlux*0.018*max(mu+0.2,0.0)*visibility+0.0002);
+  vec3 lit=vec3(1.0,0.985,0.96)*(direct*1.45+uFlux*0.018*max(mu+0.2,0.0)*visibility)*uDisplayGain;
   float alpha=(1.0-exp(-d*0.78))*(0.8+0.2*backlit)*uAlpha;
   gl_FragColor=vec4(lit,alpha);
 }`;
@@ -567,7 +670,7 @@ void main(){
    with a brighter haze toward the Sun. The routine follows wwwtyro/glsl-atmosphere (public domain). Lengths are in planet radii. */
 var AIR_VS = 'varying vec3 vW; varying vec3 vCtr; varying float vRw; uniform float uTop;' +
   'void main(){ vec4 w = modelMatrix*vec4(position,1.0); vW = w.xyz; vCtr = modelMatrix[3].xyz; vRw = length(modelMatrix[0].xyz)/uTop; gl_Position = projectionMatrix*viewMatrix*w; }';
-var AIR_FS = 'uniform vec3 uSun; uniform vec3 uKr; uniform float uKm; uniform float uShR; uniform float uShM; uniform float uTop; uniform float uI; uniform float uAlpha; uniform float uFlux; uniform float uAirSteps; uniform float uSunSteps;' +
+var AIR_FS = 'uniform vec3 uSun; uniform vec3 uKr; uniform float uKm; uniform float uShR; uniform float uShM; uniform float uTop; uniform float uI; uniform float uAlpha; uniform float uFlux; uniform float uDisplayGain; uniform float uAirSteps; uniform float uSunSteps;' +
   'varying vec3 vW; varying vec3 vCtr; varying float vRw;' +
   'vec2 rsi(vec3 r0, vec3 rd, float sr){ float tm = -dot(r0, rd); vec3 pp = r0 + rd*tm; float d2 = dot(pp, pp); if(d2 > sr*sr) return vec2(1e5, -1e5); float hf = sqrt(sr*sr - d2); return vec2(tm - hf, tm + hf); }' +
   'void main(){ vec3 r = normalize(vW); vec3 r0 = -vCtr/vRw;' +
@@ -585,7 +688,7 @@ var AIR_FS = 'uniform vec3 uSun; uniform vec3 uKr; uniform float uKm; uniform fl
   '   jOdR += exp(-max(jH, -0.02)/uShR)*jStep; jOdM += exp(-max(jH, -0.02)/uShM)*jStep; jTime += jStep; }' +
   '  vec3 attn = exp(-(uKm*(iOdM + jOdM) + uKr*(iOdR + jOdR)));' +
   '  totR += odR*attn; totM += odM*attn; iTime += iStep; }' +
-  ' vec3 c = uI*uFlux*(pR*uKr*totR + pM*uKm*totM);' +
+  ' vec3 c = uI*uFlux*uDisplayGain*(pR*uKr*totR + pM*uKm*totM);' +
   ' gl_FragColor = vec4(c*uAlpha, 1.0); }';
 /* scattering strength per colour, haze strength, the two scale heights, where the air ends, sunlight strength */
 var AIRS = {
@@ -596,7 +699,7 @@ var AIRS = {
 function airShell(name, radius, pos, sunDir, a, b, c, d){
   var A = AIRS[name]; if(!A) return;
   var m = new THREE.ShaderMaterial({uniforms:{uSun:{value:sunDir}, uKr:{value:new THREE.Vector3().fromArray(A.kr)}, uKm:{value:A.km}, uShR:{value:A.shR}, uShM:{value:A.shM},
-    uTop:{value:A.top}, uI:{value:A.I}, uAlpha:{value:1}, uFlux:{value:1}, uAirSteps:{value:32}, uSunSteps:{value:8}}, vertexShader:AIR_VS, fragmentShader:AIR_FS, transparent:true, blending:THREE.AdditiveBlending, depthWrite:false});
+    uTop:{value:A.top}, uI:{value:A.I}, uAlpha:{value:1}, uFlux:{value:1}, uDisplayGain:{value:1}, uAirSteps:{value:32}, uSunSteps:{value:8}}, vertexShader:AIR_VS, fragmentShader:AIR_FS, transparent:true, blending:THREE.AdditiveBlending, depthWrite:false});
   var mesh = new THREE.Mesh(sphGeo, m); mesh.position.copy(pos); mesh.scale.setScalar(radius*A.top*K('p'));
   sized.push({m:mesh, base:radius*A.top, cls:'p'});
   mesh.renderOrder=6; addLayer(mesh, a, b, c, d, auRoot); return mesh;
@@ -917,9 +1020,9 @@ var surfaceMidGeo = null, surfaceNearGeo = null;
 var big = false, sized = [], moved = [];
 function K(c){ return 1; }
 function surfaceUniforms(){
-  return {uRotation:{value:0},uTerrain:{value:0},uDetail:{value:0},uFlux:{value:1},uBasis:{value:new THREE.Matrix3()},uSunLocal:{value:new THREE.Vector3(0,1,0)},
+  return {uRotation:{value:0},uTerrain:{value:0},uDetail:{value:0},uFlux:{value:1},uDisplayGain:{value:1},uBasis:{value:new THREE.Matrix3()},uSunLocal:{value:new THREE.Vector3(0,1,0)},
     uOcc:{value:[new THREE.Vector4(),new THREE.Vector4(),new THREE.Vector4(),new THREE.Vector4()]},uOccCount:{value:0},uSunAngle:{value:0.004650},
-    uRingMap:{value:WHITE},uHasRing:{value:0},uRingN:{value:new THREE.Vector3(0,1,0)},uCloudLayers:{value:0}};
+    uRingMap:{value:WHITE},uHasRing:{value:0},uRingRadiusScale:{value:1},uRingN:{value:new THREE.Vector3(0,1,0)},uCloudLayers:{value:0}};
 }
 function body(type, radius, pos, parent, tint, sunDir, a, b, c, d, cls, maps){
   maps=maps||{}; var u=surfaceUniforms();
@@ -952,10 +1055,13 @@ function makePlanetRing(radius,pos,sunDir,a,b,c,d){
   tex.wrapS=THREE.ClampToEdgeWrapping;
   var u=surfaceUniforms(); u.uSun={value:sunDir||new THREE.Vector3(0,1,0)}; u.uAlpha={value:1};
   u.uRingMap.value=tex; u.uMapReady={value:0};
+  // The supplied ring texture's radial factors use Saturn's 60,268 km equatorial
+  // radius; the sphere uses its 58,232 km mean radius. Keep physical ring km.
+  u.uRingRadiusScale.value=60268/58232;
   u.uOcc.value[0].set(0,0,0,1); u.uOccCount.value=1;
-  var vs=`uniform mat3 uBasis; varying vec3 vRingP; varying float vRad;
-    void main(){vRingP=uBasis*position;vRad=length(position.xz);gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}`;
-  var fs=`uniform sampler2D uRingMap;uniform float uMapReady;uniform float uFlux;uniform float uAlpha;uniform vec3 uRingN;
+  var vs=`uniform mat3 uBasis; uniform float uRingRadiusScale; varying vec3 vRingP; varying float vRad;
+    void main(){vRingP=uBasis*position;vRad=length(position.xz)/uRingRadiusScale;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}`;
+  var fs=`uniform sampler2D uRingMap;uniform float uMapReady;uniform float uFlux;uniform float uDisplayGain;uniform float uAlpha;uniform vec3 uRingN;
     varying vec3 vRingP;varying float vRad;`+ECLIPSE_GL+`
     void main(){
       if(vRad<1.24 || vRad>2.27) discard;
@@ -964,11 +1070,11 @@ function makePlanetRing(radius,pos,sunDir,a,b,c,d){
       float sunHeight=abs(dot(uRingN,uSun)),visibility=eclipseAt(vRingP);
       float light=(0.10+0.90*sqrt(sunHeight))*uFlux*visibility;
       // Texture opacity encodes approximate optical depth; particle phase functions are not measured.
-      gl_FragColor=vec4(rc.rgb*(light+0.00025),rc.a*uAlpha);
+      gl_FragColor=vec4(rc.rgb*light*uDisplayGain,rc.a*uAlpha);
     }`;
   var m=new THREE.ShaderMaterial({uniforms:u,vertexShader:vs,fragmentShader:fs,transparent:true,depthWrite:false,side:THREE.DoubleSide});
   if(tex!==WHITE) mapped.push({u:{uHasMap:u.uMapReady},t:tex});
-  var geometry=new THREE.RingGeometry(1.2,2.3,192,1); geometry.rotateX(-Math.PI/2);
+  var geometry=new THREE.RingGeometry(1.2*u.uRingRadiusScale.value,2.3*u.uRingRadiusScale.value,192,1); geometry.rotateX(-Math.PI/2);
   var mesh=new THREE.Mesh(geometry,m); mesh.position.copy(pos); mesh.scale.setScalar(radius*K('p'));
   sized.push({m:mesh,base:radius,cls:'p'}); addLayer(mesh,a,b,c,d,auRoot); return mesh;
 }
@@ -987,7 +1093,7 @@ function fillOccluders(entry,entries,u,includeSelf){
     var along=delta.dot(towardSun); if(along<=0 || along>=sunDistance) continue;
     var otherR=other.radiusAU*K('p'), perp=Math.sqrt(Math.max(0,delta.lengthSq()-along*along));
     var pen=along*Math.tan(u.uSunAngle.value);
-    if(perp>ownRadius*(includeSelf?2.3:1)+otherR+pen) continue;
+    if(perp>ownRadius*(includeSelf?2.3*u.uRingRadiusScale.value:1)+otherR+pen) continue;
     list.push({delta:delta,r:otherR,score:otherR/Math.max(along,otherR)});
   }
   list.sort(function(a,b){return b.score-a.score;});
@@ -1021,7 +1127,7 @@ function updateBodyLighting(entries){
         ru.uFlux.value=u.uFlux.value;ru.uSun.value.copy(u.uSun.value);ru.uSunAngle.value=u.uSunAngle.value;
         setSurfaceBasis(e.ring,ru);ru.uRingN.value.set(0,1,0).applyQuaternion(surfaceQ);
         fillOccluders(e,lightingBodies,ru,true);
-        u.uRingN.value.copy(ru.uRingN.value);u.uRingMap.value=ru.uRingMap.value;u.uHasRing.value=ru.uMapReady.value;
+        u.uRingN.value.copy(ru.uRingN.value);u.uRingRadiusScale.value=ru.uRingRadiusScale.value;u.uRingMap.value=ru.uRingMap.value;u.uHasRing.value=ru.uMapReady.value;
       }
     }
   }
@@ -1052,10 +1158,12 @@ function updateSurfaceDetails(dt){
 }
 /* A smooth view-luminance proxy, not a calibrated human-eye or camera simulation.
    Only bodies intersecting the view cone affect it; offscreen sunlight does not darken the scene. */
+var surfaceMeterExposure=1, surfaceMeterPreset=-1;
 function updateExposure(dt){
   if(typeof finU==='undefined')return;
   var preset=typeof BRIGHT!=='undefined'?BRIGHT[brightI]:{exposure:1,auto:true};
   var base=preset&&preset.exposure||1, target=base;
+  if(surfaceMeterPreset!==brightI){surfaceMeterPreset=brightI;surfaceMeterExposure=base;}
   if(preset && preset.auto){
     var lum=0,coverage=0,forward=VIEW.fwd.value;
     var tanF=VIEW.tanF.value,aspect=VIEW.aspect?VIEW.aspect.value:window.innerWidth/window.innerHeight;
@@ -1078,16 +1186,31 @@ function updateExposure(dt){
         phase=Math.max(0,0.5+0.5*surfaceV.dot(surfaceV2));
         coverage+=weight;
       }
-      lum+=weight*flux*phase;
+      // Earth night-side cities emit light independently of direct sunlight.
+      // Their average contribution is an approximate meter proxy, not measured radiance.
+      lum+=weight*(flux*phase+(e.name==='地球'?0.025*(1-phase):0));
     }
     // Adapt strongly only when a resolved world occupies the view. An otherwise
     // dark star field retains its baseline, instead of driving exposure to infinity.
-    var adapt=0.85/Math.sqrt(Math.max(lum,0.00002));
+    var adapt=0.5/Math.max(lum,0.00002);
     if(lum<0.1)adapt=2.2+(adapt-2.2)*sstep(0.005,0.18,coverage);
-    target=base*clamp(adapt,0.04,64);
+    target=base*clamp(adapt,0.04,2048);
   }
-  var rate=target<finU.uExpo.value?3.0:0.65;
-  finU.uExpo.value+=(target-finU.uExpo.value)*(1-Math.exp(-Math.max(0,dt)*rate));
+  var rate=target<surfaceMeterExposure?3.0:0.65;
+  var blend=1-Math.exp(-Math.max(0,dt)*rate);
+  surfaceMeterExposure+=(target-surfaceMeterExposure)*blend;
+  // Approximate local HDR adaptation: the illustrative star/galaxy materials do
+  // not share an absolute radiometric calibration. Keep their display exposure
+  // bounded while resolved solar surfaces receive the full metered adaptation.
+  var skyTarget=Math.min(target,base*3);
+  finU.uExpo.value+=(skyTarget-finU.uExpo.value)*blend;
+  var displayGain=surfaceMeterExposure/Math.max(finU.uExpo.value,0.0001);
+  for(var ei=0;ei<lightingBodies.length;ei++){
+    var eb=lightingBodies[ei];if(!eb.mesh || eb.name==='太陽')continue;
+    var eu=eb.mesh.material.uniforms;if(eu.uDisplayGain)eu.uDisplayGain.value=displayGain;
+    if(eb.atmosphere && eb.atmosphere.material.uniforms.uDisplayGain)eb.atmosphere.material.uniforms.uDisplayGain.value=displayGain;
+    if(eb.ring && eb.ring.material.uniforms.uDisplayGain)eb.ring.material.uniforms.uDisplayGain.value=displayGain;
+  }
 }
 
 /* a flat picture that always turns to face you */
@@ -1151,7 +1274,7 @@ function lyText(d){
    Only Date.now drives the live clock: there is no pause or time-rate control. */
 var solarBodies = [], solarByName = {};
 var SOLAR_AU_KM = 149597870.7, SOLAR_J2000 = Date.UTC(2000,0,1,12);
-var SOLAR_SNAPSHOT_MS = Date.UTC(2026,9,7), solarOrbitStamp = -Infinity;
+var SOLAR_SNAPSHOT_MS = Date.UTC(2026,9,7);
 var SOLAR_ELEMENTS = {"Mercury":{"base":[0.38709927,0.20563593,7.00497902,252.2503235,77.45779628,48.33076593],"rate":[3.7e-07,1.906e-05,-0.00594749,149472.67411175,0.16047689,-0.12534081]},"Venus":{"base":[0.72333566,0.00677672,3.39467605,181.9790995,131.60246718,76.67984255],"rate":[3.9e-06,-4.107e-05,-0.0007889,58517.81538729,0.00268329,-0.27769418]},"EM":{"base":[1.00000261,0.01671123,-1.531e-05,100.46457166,102.93768193,0.0],"rate":[5.62e-06,-4.392e-05,-0.01294668,35999.37244981,0.32327364,0.0]},"Mars":{"base":[1.52371034,0.0933941,1.84969142,-4.55343205,-23.94362959,49.55953891],"rate":[1.847e-05,7.882e-05,-0.00813131,19140.30268499,0.44441088,-0.29257343]},"Jupiter":{"base":[5.202887,0.04838624,1.30439695,34.39644051,14.72847983,100.47390909],"rate":[-0.00011607,-0.00013253,-0.00183714,3034.74612775,0.21252668,0.20469106]},"Saturn":{"base":[9.53667594,0.05386179,2.48599187,49.95424423,92.59887831,113.66242448],"rate":[-0.0012506,-0.00050991,0.00193609,1222.49362201,-0.41897216,-0.28867794]},"Uranus":{"base":[19.18916464,0.04725744,0.77263783,313.23810451,170.9542763,74.01692503],"rate":[-0.00196176,-4.397e-05,-0.00242939,428.48202785,0.40805281,0.04240589]},"Neptune":{"base":[30.06992276,0.00859048,1.77004347,-55.12002969,44.96476227,131.78422574],"rate":[0.00026291,5.105e-05,0.00035372,218.45945325,-0.32241464,-0.00508664]}};
 var SOLAR_SNAPSHOTS = {"Moon":{"a":0.002562940788525726,"e":0.03329049725986689,"i":5.151075419834149,"node":328.7190740037287,"w":123.6804290260006,"M":52.46519586438855,"n":13.24536432370656,"period":27.17932034196082},"Io":{"a":0.002821032610326737,"e":0.003634451570357437,"i":2.227587696464272,"node":338.4080493174826,"w":34.9227180042371,"M":211.1574538763266,"n":203.2410996747669,"period":1.771295277264706},"Europa":{"a":0.004487007026710458,"e":0.009347791602856419,"i":2.077948573086685,"node":326.1981651666837,"w":230.3023703645033,"M":284.7904408097413,"n":101.3173554698042,"period":3.553191833034878},"Ganymede":{"a":0.007156096654275918,"e":0.002813011543396597,"i":2.343451106475677,"node":339.0684028100145,"w":8.327135796579018,"M":352.3891817570328,"n":50.30557662285005,"period":7.156264258712004},"Callisto":{"a":0.01258849894945483,"e":0.007301053161566898,"i":1.952445305897583,"node":336.7459456908953,"w":32.26190044586124,"M":338.1742723283473,"n":21.56079964042844,"period":16.69696885105169},"Titan":{"a":0.008168342427111522,"e":0.02865167832522045,"i":27.70562349329201,"node":169.0807202398921,"w":178.4208652976495,"M":170.8037734823691,"n":22.5734049148341,"period":15.94797069198126},"Enceladus":{"a":0.001593726782642571,"e":0.005925146104271526,"i":28.04353682924192,"node":169.5299553324468,"w":205.2733958751107,"M":32.31632840352059,"n":261.8941625613203,"period":1.374601084954343},"Pluto":{"a":38.94141411941921,"e":0.2450525595200422,"i":17.07510227356212,"node":110.2473106184284,"w":111.1073759263741,"M":56.43615890519602,"n":0.004055893078903512,"period":88759.73626438003}};
 
@@ -1238,20 +1361,9 @@ function updateSolarSystem(epochMs){
       b.mesh.material.uniforms.uRotation.value = ((turns % 1) + 1) % 1;
     }
     if(b.ring){ b.ring.position.copy(b.displayAU); b.ring.quaternion.copy(b.mesh.quaternion); }
-    if(b.orbit && b.parentName){ b.orbit.position.copy(solarByName[b.parentName].displayAU); b.orbit.scale.setScalar(k); }
     solarScratch.copy(b.posAU).applyQuaternion(auRoot.quaternion).normalize().negate();
     b.mesh.material.uniforms.uSun.value.copy(solarScratch);
     if(b.atmosphere) b.atmosphere.material.uniforms.uSun.value.copy(solarScratch);
-  }
-  /* Secular changes are slow; rebuild orbit-line vertices only once per day. */
-  if(Math.abs(epochMs - solarOrbitStamp) >= 86400000){
-    solarOrbitStamp = epochMs;
-    for(i=0;i<solarBodies.length;i++){
-      b = solarBodies[i]; if(!b.orbit) continue;
-      var attr = b.orbit.geometry.attributes.position, count = attr.count;
-      for(var j=0;j<count;j++){ solarKeplerPosition(b.elements,j/(count-1)*360,solarScratch); attr.setXYZ(j,solarScratch.x,solarScratch.y,solarScratch.z); }
-      attr.needsUpdate = true; b.orbit.geometry.computeBoundingSphere();
-    }
   }
   if(typeof updateBodyLighting === 'function') updateBodyLighting(solarBodies);
 }
@@ -1301,13 +1413,6 @@ function updateSolarSystem(epochMs){
       planetKey:spec.planetKey || null,snapshotKey:spec.snapshotKey || null,elements:{},elementWork:[0,0,0,0,0,0],
       primeMeridian:spec.spin ? spec.spin[2] : 0,spinDegreesPerDay:spec.spin ? spec.spin[3] : 0};
     mr.trueWorld = rec.trueWorld; mr.posAU = rec.posAU; mr.solarBody = rec;
-    if(spec.planetKey || spec.snapshotKey){
-      var count = spec.parentName ? 97 : 181, arr = new Float32Array(count*3);
-      var g = new THREE.BufferGeometry(); g.setAttribute('position',new THREE.BufferAttribute(arr,3));
-      var m = new THREE.LineBasicMaterial({color:spec.parentName ? 0x627383 : 0x8fa3c8,transparent:true,opacity:spec.parentName ? 0.2 : 0.35,depthWrite:false});
-      rec.orbit = new THREE.Line(g,m);
-      addLayer(rec.orbit,-9,-8,Math.log10(a*AU_LY) + 1.8,Math.log10(a*AU_LY) + 2.5,auRoot,{line:m,base:spec.parentName ? 0.2 : 0.35});
-    }
     if(spec.name === '土星' && typeof makePlanetRing === 'function'){
       rec.ring = makePlanetRing(radius,zero,sunDir,-9,-8,-2.6,-2.0); rec.ring.quaternion.copy(mesh.quaternion);
     }
@@ -1351,12 +1456,7 @@ function updateSolarSystem(epochMs){
   for(i=0;i<5200;i++){ a = rnd()*Math.PI*2; r = 30 + Math.abs(gauss())*9 + rnd()*8; kb.push([r*Math.cos(a), gauss()*r*0.09, r*Math.sin(a), 0.62,0.74,0.92, 1.3]); }
   cloud(kb, -4.6, -4.0, -2.4, -1.7, auRoot);
   label('古柏帶', '', new THREE.Vector3(44*Math.cos(rad(120)), 0, -44*Math.sin(rad(120))), -3.9, -2.2, true);
-  /* the heliopause, about 120 AU out */
-  var hp = new Float32Array(181*3);
-  for(i=0;i<=180;i++){ a = i/180*Math.PI*2; hp[i*3] = 121*Math.cos(a); hp[i*3+2] = 121*Math.sin(a); }
-  var hg = new THREE.BufferGeometry(); hg.setAttribute('position', new THREE.BufferAttribute(hp, 3));
-  var hm = new THREE.LineBasicMaterial({color:0xf3d9a2, transparent:true, opacity:0.5, depthWrite:false});
-  addLayer(new THREE.Line(hg, hm), -4.0, -3.4, -1.9, -1.3, auRoot, {line:hm, base:0.5});
+  /* The heliopause is an approximate region, not a visible circular boundary. */
   label('太陽圈邊緣', '約 120 天文單位', new THREE.Vector3(121*Math.cos(rad(20)), 0, -121*Math.sin(rad(20))), -3.5, -1.7, true);
   /* the Oort cloud: 2,000 to 100,000 AU */
   var oort = [], v;
@@ -1364,7 +1464,6 @@ function updateSolarSystem(epochMs){
   cloud(oort, -2.9, -1.9, 0.5, 1.2, auRoot);
   label('歐特雲', '彗星的老家', new THREE.Vector3(30000, 14000, 0), -1.8, 0.9, true);
 })();
-
 
 
 // Source: 50-stars.js
@@ -2017,11 +2116,11 @@ var bhU = {tScene:{value:null}, tSky:{value:null}, uSkyReady:{value:0}, uSteps:{
   uTime:TIME, uDisc:{value:1}, uSeed:{value:1}, uDn:{value:new THREE.Vector3(0.16, 0.97, 0.18).normalize()}};
 var bhMat = postMat('uniform sampler2D tScene; uniform samplerCube tSky; uniform float uSkyReady; uniform float uSteps; uniform float uStepScale; uniform vec3 uRo; uniform vec3 uRight; uniform vec3 uUp; uniform vec3 uFwd; uniform float uTanF; uniform float uAspect;' +
   'uniform float uTime; uniform float uDisc; uniform float uSeed; uniform vec3 uDn; varying vec2 vUv;' + NOISE_GL +
-  'vec3 sky(vec3 d){ vec3 allSky = uSkyReady > 0.5 ? textureCube(tSky, d).rgb : vec3(0.003, 0.004, 0.008);' +
+  'vec3 sky(vec3 d){ vec3 allSky = uSkyReady > 0.5 ? textureCube(tSky, d).rgb : vec3(0.0);' +
   ' float z = dot(d, uFwd); if(z <= 0.0) return allSky;' +
   ' vec2 q = vec2(dot(d, uRight)/(z*uTanF*uAspect), dot(d, uUp)/(z*uTanF)); float m = max(abs(q.x), abs(q.y));' +
   ' if(m >= 1.0) return allSky;' +
-  ' return mix(texture2D(tScene, q*0.5 + 0.5).rgb, allSky, smoothstep(0.84, 1.0, m)); }' +
+  ' return mix(texture2D(tScene, q*0.5 + 0.5).rgb, allSky, uSkyReady*smoothstep(0.84, 1.0, m)); }' +
   'void main(){ vec2 ndc = vUv*2.0 - 1.0;' +
   ' vec3 rd = normalize(uFwd + uRight*(ndc.x*uAspect*uTanF) + uUp*(ndc.y*uTanF));' +
   ' float tm = -dot(uRo, rd); vec3 perp = uRo + rd*tm; float b = length(perp); float ro2 = dot(uRo, uRo);' +
@@ -2064,29 +2163,34 @@ var rtBH = mkTarget(false);
 /* The black-hole shader can look behind the observer. Cache the actual scene in six
    directions instead of stretching the edge of the current screenshot into that sky.
    Capture runs before lensing/bloom, so black holes can never capture themselves. */
-var bhSky = {target:null, write:null, camera:null, size:0, ready:false, failed:false, dirty:true,
-  face:0, lastFace:-1e9, lastUpdate:-1e9, hole:null, scale:null, origin:new THREE.Vector3()};
+var bhSky = {target:null, write:null, camera:null, size:0, ready:false, failed:false, dirty:true, useHDR:HDR,
+  face:0, tile:0, lastFace:-1e9, lastUpdate:-1e9, hole:null, scale:null, cycleHole:null, cycleScale:null,
+  origin:new THREE.Vector3(), captureOrigin:new THREE.Vector3()};
 function makeSkyTarget(size){
   return new THREE.WebGLCubeRenderTarget(size, {minFilter:THREE.LinearFilter, magFilter:THREE.LinearFilter,
-    type:HDR ? THREE.HalfFloatType : THREE.UnsignedByteType, generateMipmaps:false, depthBuffer:true, stencilBuffer:false});
+    type:bhSky.useHDR ? THREE.HalfFloatType : THREE.UnsignedByteType, generateMipmaps:false, depthBuffer:true, stencilBuffer:false});
 }
 function ensureBlackHoleSky(){
-  var size = Math.min(QUALITY_MODE === 'high' ? 768 : 384, renderer.capabilities.maxCubemapSize || 1024);
+  /* Match the output's angular sampling before applying the preset cap. Tiny
+     windows do not need a desktop-size cache; normal high-quality views retain 768. */
+  var angularSize = Math.ceil(canvas.height/(2*Math.tan(rad(25)))/64)*64;
+  var size = Math.min(QUALITY_MODE === 'high' ? 768 : 384, Math.max(64, angularSize), renderer.capabilities.maxCubemapSize || 1024);
   if(bhSky.size === size && bhSky.target) return;
   if(bhSky.target) bhSky.target.dispose(); if(bhSky.write) bhSky.write.dispose();
   bhSky.target = makeSkyTarget(size); bhSky.write = makeSkyTarget(size);
   bhSky.camera = new THREE.CubeCamera(camera.near, camera.far, bhSky.write);
-  bhSky.camera.updateMatrixWorld(true); bhSky.size = size; bhSky.ready = false; bhSky.face = 0;
-  bhU.uSkyReady.value = 0;
+  bhSky.camera.updateMatrixWorld(true); bhSky.size = size; bhSky.ready = false; bhSky.face = 0; bhSky.tile = 0;
+  bhSky.cycleHole = null; bhU.uSkyReady.value = 0; bhU.tSky.value = null;
 }
-function captureSkyFaces(first, count){
+function captureSkyFaces(first, count, tile){
   var state = {right:VIEW.right.value.clone(), up:VIEW.up.value.clone(), fwd:VIEW.fwd.value.clone(),
     tan:VIEW.tanF.value, aspect:VIEW.aspect.value, target:renderer.getRenderTarget(),
     face:renderer.getActiveCubeFace ? renderer.getActiveCubeFace() : 0,
     mip:renderer.getActiveMipmapLevel ? renderer.getActiveMipmapLevel() : 0,
     clear:renderer.getClearColor(new THREE.Color()).clone(), alpha:renderer.getClearAlpha(), auto:renderer.autoClear,
     neb:NEB_SAMPLES.value, gal:GAL_SAMPLES.value, occlusion:VOLUME_OCCLUSION.value,
-    tele:HYG.u ? HYG.u.uTele.value : 1};
+    tele:HYG.u ? HYG.u.uTele.value : 1,
+    scissor:bhSky.write.scissor.clone(), scissorTest:bhSky.write.scissorTest};
   var pointUniforms = [], boardState = [], fineState = [], dotState = [], i;
   var auInverse = auRoot.quaternion.clone().invert();
   try{
@@ -2112,13 +2216,25 @@ function captureSkyFaces(first, count){
       var px = bhSky.size*0.5/Math.max(nu.uRo.value.length(), 0.5);
       nu.uFine.value.set(sstep(400, 1600, px), 0, 0);
     }
+    /* Scissor preserves the full-face camera and gl_FragCoord: adjacent tiles use
+       exactly the same projection/noise. Only one bounded tile is submitted per
+       update, including the initial capture, instead of six synchronous faces. */
+    var side = Math.ceil(bhSky.size/256), tileSize = Math.ceil(bhSky.size/side);
+    if(tile !== undefined){
+      var sx = (tile % side)*tileSize, sy = Math.floor(tile/side)*tileSize;
+      bhSky.write.scissor.set(sx, sy, Math.min(tileSize, bhSky.size - sx), Math.min(tileSize, bhSky.size - sy));
+      bhSky.write.scissorTest = true;
+    } else bhSky.write.scissorTest = false;
     for(var f=first;f<first + count;f++){
       var cc = bhSky.camera.children[f]; cc.updateMatrixWorld(true);
       var cm = cc.matrixWorld.elements;
       VIEW.right.value.set(cm[0], cm[1], cm[2]); VIEW.up.value.set(cm[4], cm[5], cm[6]); VIEW.fwd.value.set(-cm[8], -cm[9], -cm[10]);
       var aq = auInverse.clone().multiply(cc.quaternion);
       for(i=0;i<boards.length;i++) boards[i].m.quaternion.copy(boards[i].au ? aq : cc.quaternion);
-      renderer.setRenderTarget(bhSky.write, f); renderer.setClearColor(0x030408, 1); renderer.autoClear = false;
+      renderer.setRenderTarget(bhSky.write, f); renderer.setClearColor(0x000000, 1); renderer.autoClear = false;
+      if(f === 0 && (!tile || tile === undefined) && gl.checkFramebufferStatus(gl.FRAMEBUFFER) !== gl.FRAMEBUFFER_COMPLETE){
+        throw new Error('Incomplete all-sky framebuffer');
+      }
       renderer.clear(); renderer.render(scene, cc); renderer.render(volScene, cc); renderer.render(topScene, cc);
     }
   }finally{
@@ -2130,6 +2246,7 @@ function captureSkyFaces(first, count){
     for(i=0;i<boardState.length;i++) boards[i].m.quaternion.copy(boardState[i]);
     for(i=0;i<dotState.length;i++) dots[i].m.scale.copy(dotState[i]);
     for(i=0;i<fineState.length;i++) nebs[i].m.material.uniforms.uFine.value.copy(fineState[i]);
+    bhSky.write.scissor.copy(state.scissor); bhSky.write.scissorTest = state.scissorTest;
     renderer.setRenderTarget(state.target, state.face, state.mip); renderer.setClearColor(state.clear, state.alpha); renderer.autoClear = state.auto;
   }
 }
@@ -2137,25 +2254,36 @@ function updateBlackHoleSky(hole){
   if(bhSky.failed) return;
   try{
     ensureBlackHoleSky();
-    var changed = bhSky.hole !== hole || bhSky.scale !== big;
-    var moved = bhSky.origin.distanceTo(P) > Math.max(hole.rs*K('s')*0.2, P.length()*1e-7, 1e-10);
-    if(!bhSky.ready || changed){
-      captureSkyFaces(0, 6); bhSky.face = 6;
-    } else {
-      if(!bhSky.face && !bhSky.dirty && !moved && TIME.value - bhSky.lastUpdate < 4) return;
-      if(TIME.value - bhSky.lastFace < 0.10) return;
-      captureSkyFaces(bhSky.face, 1); bhSky.face++;
+    var now = performance.now()/1000;
+    var changed = bhSky.cycleHole !== hole || bhSky.cycleScale !== big;
+    if(changed){
+      bhSky.face = 0; bhSky.tile = 0; bhSky.cycleHole = hole; bhSky.cycleScale = big;
+      bhSky.ready = false; bhSky.dirty = true; bhU.uSkyReady.value = 0;
     }
-    bhSky.lastFace = TIME.value;
+    var moved = bhSky.origin.distanceTo(P) > Math.max(hole.rs*K('s')*0.2, P.length()*1e-7, 1e-10);
+    if(!bhSky.face && !bhSky.tile){
+      if(bhSky.ready && !bhSky.dirty && !moved && now - bhSky.lastUpdate < 4) return;
+      bhSky.captureOrigin.copy(P);
+    }
+    if(now - bhSky.lastFace < 1/30) return;
+    captureSkyFaces(bhSky.face, 1, bhSky.tile);
+    bhSky.tile++; bhSky.lastFace = now;
+    var side = Math.ceil(bhSky.size/256);
+    if(bhSky.tile === side*side){ bhSky.tile = 0; bhSky.face++; }
     if(bhSky.face === 6){
       var old = bhSky.target; bhSky.target = bhSky.write; bhSky.write = old;
-      bhSky.face = 0; bhSky.ready = true; bhSky.dirty = false; bhSky.origin.copy(P);
-      bhSky.lastUpdate = TIME.value; bhSky.hole = hole; bhSky.scale = big;
+      bhSky.face = 0; bhSky.ready = true; bhSky.dirty = false; bhSky.origin.copy(bhSky.captureOrigin);
+      bhSky.lastUpdate = now; bhSky.hole = hole; bhSky.scale = big;
       bhU.tSky.value = bhSky.target.texture; bhU.uSkyReady.value = 1;
     }
   }catch(err){
     /* A failed optional cache must not disable the normal renderer/HDR fallback. */
-    bhSky.failed = true; bhU.uSkyReady.value = 0;
+    bhU.uSkyReady.value = 0;
+    if(bhSky.useHDR && !gl.isContextLost()){
+      bhSky.useHDR = false; bhSky.size = 0; bhSky.ready = false;
+      return; /* Retry the cache using ordinary RGBA without changing main HDR. */
+    }
+    bhSky.failed = true; bhSky.ready = false; bhU.tSky.value = null;
     if(typeof console !== 'undefined' && console.warn) console.warn('All-sky background unavailable:', err);
   }
 }
@@ -2177,7 +2305,7 @@ function pass(mat, target){ postQuad.material = mat; renderer.setRenderTarget(ta
 var vL = new THREE.Vector3();
 function drawFrame(){
   var w = rtMain.width, h = rtMain.height, i;
-  renderer.setRenderTarget(rtMain); renderer.setClearColor(0x030408, 1); renderer.clear(); renderer.render(scene, camera);
+  renderer.setRenderTarget(rtMain); renderer.setClearColor(0x000000, 1); renderer.clear(); renderer.render(scene, camera);
   renderer.setRenderTarget(rtVol); renderer.setClearColor(0x000000, 0); renderer.clear(); renderer.render(volScene, camera);
   compU.uLens.value.z = 0;
   compU.tMain.value = rtMain.texture; compU.tVol.value = rtVol.texture; compU.uAspect.value = w/h;
@@ -2340,7 +2468,7 @@ function applyScale(){
   if(typeof updateExtraSystems === 'function') updateExtraSystems(Date.now());
   $('#scaleNote').textContent = '天體本體與距離採同一實際比例；未知尺寸標明估算。用探索或望遠鏡看清遠方。';
 }
-var BRIGHT = [{key:'natural',label:'自然',exposure:1,auto:true},{key:'photo',label:'攝影',exposure:3,auto:true},{key:'guide',label:'明亮',exposure:1.6,auto:false}], brightI = 0;
+var BRIGHT = [{key:'natural',label:'自然',exposure:1,auto:true},{key:'photo',label:'攝影',exposure:3,auto:true},{key:'guide',label:'固定曝光',exposure:1.6,auto:false}], brightI = 0;
 function applyBright(){ var preset = BRIGHT[brightI]; $('#brightBtn').textContent = '觀感：' + preset.label; finU.uExpo.value = preset.exposure; STARGAIN.value = preset.key === 'natural' ? 1.0 : (preset.key === 'photo' ? 1.7 : 1.3); }
 $('#brightBtn').addEventListener('click', function(){ brightI = (brightI + 1) % BRIGHT.length; applyBright(); });
 $('#hdrBtn').addEventListener('click', function(){ hdr.want = !hdr.on; setHdr(hdr.want); });
@@ -2398,6 +2526,22 @@ var EXPLORER = {
   startRadius:0, endRadius:0, refresh:0, catalogSignature:'', distanceNode:null, lightNode:null
 };
 var explorerPanel = $('#explorer'), explorerSearch = $('#destinationSearch'), explorerList = $('#destinationList');
+/* Keep the sky quiet. Reparenting retains the original observing-control handlers. */
+(function arrangeExplorer(){
+  var lookControls = $('#explorerLookControls'), scale = $('#explorerScale'), facts = $('#explorerPositionFacts');
+  lookControls.appendChild($('#brightBtn')); lookControls.appendChild($('#hdrBtn'));
+  scale.appendChild($('#scaleBtn')); $('#scaleBtn').style.display = 'inline-flex'; scale.appendChild($('#scaleNote'));
+  $('#scaleNote').textContent = '天體與距離採實際比例；未知尺寸與外觀會標明模型或示意。';
+  var edge = $('#hud .edge'); if(edge) facts.appendChild(edge);
+  var light = $('#dLight'), lightRow = document.createElement('div'), lightLabel = document.createElement('dt'), lightValue = document.createElement('dd');
+  lightLabel.textContent = '距太陽的光行時間'; lightValue.appendChild(light); lightRow.appendChild(lightLabel); lightRow.appendChild(lightValue); facts.appendChild(lightRow);
+  $('#explorerNearby').appendChild($('#near'));
+  var credits = $('#credit'), attribution = $('#explorerAttribution'); attribution.insertBefore(credits, attribution.firstChild);
+  $('#goHome').textContent = '回地球'; $('#goHome').setAttribute('aria-label', '回到地球附近');
+  $('#tip').textContent = '拖曳轉向 · 按住前進';
+  $('#teleBtn').title = '望遠鏡：雙指縮放或使用滑鼠滾輪';
+  setTimeout(function(){ $('#tip').classList.add('gone'); }, 7500);
+})();
 function explorerInfo(m){
   if(!m) return {};
   if(typeof catalogInfoFor === 'function'){ var info = catalogInfoFor(m); if(info) return info; }
@@ -2548,7 +2692,7 @@ function beginExplorerTravel(afterTravel){
   EXPLORER.duration = clamp(2.2 + Math.log10(Math.max(EXPLORER.startRadius/radius, 1))*0.42, 2.2, 8.5);
   EXPLORER.elapsed = 0; EXPLORER.afterTravel = afterTravel || 'follow'; EXPLORER.mode = 'travel';
   EXPLORER.axis.set(0,1,0); if(m.cls === 'p') EXPLORER.axis.applyQuaternion(auRoot.quaternion);
-  setTele(1); $('#tip').classList.add('gone'); syncExplorerTravel(); openExplorer(false);
+  setTele(1); $('#tip').classList.add('gone'); syncExplorerTravel(); openExplorer(false); canvas.focus({preventScroll:true});
 }
 function beginExplorerFollow(){
   var m = EXPLORER.selected; if(!m) return;
@@ -2559,7 +2703,7 @@ function beginExplorerFollow(){
     if(EXPLORER.offset.lengthSq() < 1e-30) EXPLORER.offset.set(0.6,0.25,1);
     EXPLORER.offset.setLength(radius);
   }
-  EXPLORER.mode = 'follow'; $('#tip').classList.add('gone'); syncExplorerTravel(); openExplorer(false);
+  EXPLORER.mode = 'follow'; $('#tip').classList.add('gone'); syncExplorerTravel(); openExplorer(false); canvas.focus({preventScroll:true});
 }
 function beginExplorerOrbit(){
   var m = EXPLORER.selected; if(!m) return;
@@ -2567,7 +2711,7 @@ function beginExplorerOrbit(){
   if(distance > radius*6 || distance < radius*0.999999){ beginExplorerTravel('orbit'); return; }
   explorerResetInput(); EXPLORER.offset.copy(P).sub(m.w); EXPLORER.mode = 'orbit';
   EXPLORER.axis.set(0,1,0); if(m.cls === 'p') EXPLORER.axis.applyQuaternion(auRoot.quaternion);
-  $('#tip').classList.add('gone'); syncExplorerTravel(); openExplorer(false);
+  $('#tip').classList.add('gone'); syncExplorerTravel(); openExplorer(false); canvas.focus({preventScroll:true});
 }
 function bindExplorerLabels(){
   labels.forEach(function(item){
@@ -2608,6 +2752,11 @@ function updateExplorer(dt){
 }
 $('#exploreBtn').addEventListener('click', function(){ openExplorer(!EXPLORER.open, false); });
 $('#explorerClose').addEventListener('click', function(){ openExplorer(false); });
+$('#sourceBtn').addEventListener('click', function(){
+  openExplorer(true, false); $('#explorerSources').open = true;
+  $('#explorerSources').querySelector('summary').focus({preventScroll:true});
+  $('#explorerSources').scrollIntoView({behavior:'smooth', block:'start'});
+});
 explorerSearch.addEventListener('input', renderExplorerDestinations);
 explorerSearch.addEventListener('focus', function(){ keys = {}; });
 explorerPanel.addEventListener('focusin', function(){ keys = {}; });
@@ -2632,7 +2781,7 @@ $('#objectFly').addEventListener('click', function(){ beginExplorerTravel('follo
 $('#objectFollow').addEventListener('click', beginExplorerFollow);
 $('#objectOrbit').addEventListener('click', beginExplorerOrbit);
 $('#objectRelease').addEventListener('click', cancelExplorerTravel);
-$('#explorerStop').addEventListener('click', cancelExplorerTravel);
+$('#explorerStop').addEventListener('click', function(){ cancelExplorerTravel(); canvas.focus({preventScroll:true}); });
 $('#qualitySelect').value = typeof QUALITY_MODE === 'string' ? QUALITY_MODE : 'high';
 $('#qualitySelect').addEventListener('change', function(e){ if(typeof setQuality === 'function') setQuality(e.target.value); });
 EXPLORER.select = selectExplorerObject;
@@ -2764,7 +2913,7 @@ function frame(now){
   }
   if(plain){
     /* if the finishing pipeline is not available on this device, draw straight to the screen */
-    renderer.setRenderTarget(null); renderer.setClearColor(0x030408, 1); renderer.autoClear = true; renderer.render(scene, camera);
+    renderer.setRenderTarget(null); renderer.setClearColor(0x000000, 1); renderer.autoClear = true; renderer.render(scene, camera);
     renderer.autoClear = false; renderer.render(volScene, camera); renderer.render(topScene, camera); renderer.autoClear = true;
   }
 
