@@ -140,20 +140,21 @@ body.booting>:not(#loading):not(#fail):not(script){visibility:hidden}
   #hud{padding-left:28px}
   #stick{left:32px;bottom:32px} #fly{right:32px;bottom:32px}
 }
-/* Quiet flight view; observing settings and scientific context live in the drawer. */
-#hud{left:24px;right:auto;top:calc(env(safe-area-inset-top,0px) + 24px);width:calc(100% - 270px);max-width:420px;padding:0}
+/* Quiet flight view with separate exploration and settings drawers. */
+#hud{left:24px;right:auto;top:calc(env(safe-area-inset-top,0px) + 24px);width:calc(100% - 358px);max-width:420px;padding:0}
 #hud .k{display:none}
 #place{font-size:30px;line-height:1.15;letter-spacing:.08em;margin:0;font-weight:500}
 #hud .stats{display:block;margin:9px 0 0}
 #hud .stats>div{display:flex;align-items:baseline;gap:8px}
 #hud .stats dt{font-size:10px;letter-spacing:.03em;color:var(--ink-faint)}
 #hud .stats dd{margin:0;font-size:12px;font-weight:400;line-height:1.4;color:var(--ink-dim)}
-#goHome,#exploreBtn{position:fixed;top:calc(env(safe-area-inset-top,0px) + 24px);z-index:8;min-height:44px;border-radius:999px;backdrop-filter:none;-webkit-backdrop-filter:none;font-size:12px;letter-spacing:.04em}
-#goHome{right:calc(env(safe-area-inset-right,0px) + 122px);width:82px;padding:0 10px;color:var(--ink-dim);background:rgba(12,16,24,.45);border:1px solid rgba(238,240,246,.12)}
+#goHome,#settingsBtn,#exploreBtn{position:fixed;top:calc(env(safe-area-inset-top,0px) + 24px);z-index:8;min-height:44px;border-radius:999px;backdrop-filter:none;-webkit-backdrop-filter:none;font-size:12px;letter-spacing:.04em}
+#goHome{right:calc(env(safe-area-inset-right,0px) + 210px);width:82px;padding:0 10px;color:var(--ink-dim);background:rgba(12,16,24,.45);border:1px solid rgba(238,240,246,.12)}
+#settingsBtn{right:calc(env(safe-area-inset-right,0px) + 122px);width:78px;padding:0 10px;color:var(--ink-dim);background:rgba(12,16,24,.45);border:1px solid rgba(238,240,246,.12)}
 #exploreBtn{right:calc(env(safe-area-inset-right,0px) + 24px);width:88px;padding:0 12px;border:1px solid rgba(243,217,162,.38);background:rgba(25,25,31,.62);color:var(--gold)}
 #exploreBtn span{font-size:19px;vertical-align:-1px;margin-left:5px}
-#exploreBtn[aria-expanded="true"]{background:rgba(243,217,162,.16)}
-#goHome:hover,#exploreBtn:hover{border-color:rgba(243,217,162,.55)}
+#settingsBtn[aria-expanded="true"],#exploreBtn[aria-expanded="true"]{background:rgba(243,217,162,.16)}
+#goHome:hover,#settingsBtn:hover,#exploreBtn:hover{border-color:rgba(243,217,162,.55)}
 #teleBtn{top:auto;left:50%;right:auto;bottom:calc(env(safe-area-inset-bottom,0px) + 44px);transform:translateX(-50%);width:102px;min-height:44px;padding:5px 8px;font-size:11px;line-height:1.4;white-space:pre-line;background:rgba(10,14,22,.45);border-color:rgba(238,240,246,.13);color:var(--ink-dim)}
 #teleBtn[aria-pressed="true"]{border-color:rgba(243,217,162,.5);color:var(--gold)}
 #stick{width:112px;height:112px;left:calc(env(safe-area-inset-left,0px) + 24px);bottom:calc(env(safe-area-inset-bottom,0px) + 28px);background:rgba(12,16,24,.25);border-color:rgba(238,240,246,.16);backdrop-filter:none;-webkit-backdrop-filter:none}
@@ -176,12 +177,17 @@ body.booting>:not(#loading):not(#fail):not(script){visibility:hidden}
 #labels .lab[data-observation-caveat]{flex-direction:column;align-items:center;gap:4px}
 .cluster-data-note{display:block;max-width:230px;white-space:normal;text-align:center;font-size:10px;line-height:1.5;color:var(--gold)}
 
-#explorer{position:fixed;top:calc(env(safe-area-inset-top,0px) + 84px);right:calc(env(safe-area-inset-right,0px) + 24px);width:360px;max-height:calc(100dvh - env(safe-area-inset-top,0px) - env(safe-area-inset-bottom,0px) - 284px);z-index:9;display:flex;flex-direction:column;border:1px solid rgba(243,217,162,.19);border-radius:20px;background:rgba(13,18,28,.96);box-shadow:0 24px 80px rgba(0,0,0,.45);backdrop-filter:none;-webkit-backdrop-filter:none;overflow:hidden;user-select:text;-webkit-user-select:text}
-#explorer[hidden],#explorerTravel[hidden],#objectCard[hidden],#objectRelease[hidden],#destinationEmpty[hidden],#objectSource[hidden],#terrainSource[hidden],#objectCometOverview[hidden]{display:none}
+#explorer,#settingsPanel{position:fixed;top:calc(env(safe-area-inset-top,0px) + 84px);right:calc(env(safe-area-inset-right,0px) + 24px);width:360px;max-height:calc(100dvh - env(safe-area-inset-top,0px) - env(safe-area-inset-bottom,0px) - 284px);z-index:9;display:flex;flex-direction:column;border:1px solid rgba(243,217,162,.19);border-radius:20px;background:rgba(13,18,28,.96);box-shadow:0 24px 80px rgba(0,0,0,.45);backdrop-filter:none;-webkit-backdrop-filter:none;overflow:hidden;user-select:text;-webkit-user-select:text}
+#settingsPanel[hidden],#explorer[hidden],#explorerTravel[hidden],#objectCard[hidden],#objectRelease[hidden],#destinationEmpty[hidden],#objectSource[hidden],#terrainSource[hidden],#objectCometOverview[hidden]{display:none}
+#settingsPanel .explorer-detail:first-child{margin-top:0;border-top:0}
+.settings-refresh{padding-top:16px;border-top:1px solid var(--line)}
+#refreshView{display:flex;justify-content:space-between;align-items:center;gap:12px;width:100%;min-height:48px;padding:0 12px;border:1px solid var(--line);border-radius:9px;color:var(--ink-dim);font-size:12px;text-align:left}
+#refreshView span{font-size:20px;color:var(--gold)}
+#refreshView:disabled{opacity:.6;cursor:wait}
 .explorer-heading{padding:21px 20px 17px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;border-bottom:1px solid var(--line)}
 .explorer-eyebrow{color:var(--gold);font-size:9px;letter-spacing:.2em;line-height:1.5;margin:0}
-#explorerTitle{font-family:var(--serif);font-size:25px;font-weight:500;letter-spacing:.08em;margin:6px 0 0;line-height:1.3}
-#explorerClose{font-size:28px;line-height:40px;width:44px;height:44px;border:1px solid var(--line);border-radius:50%;color:var(--ink-dim);flex-shrink:0}
+#explorerTitle,#settingsTitle{font-family:var(--serif);font-size:25px;font-weight:500;letter-spacing:.08em;margin:6px 0 0;line-height:1.3}
+#explorerClose,#settingsClose{font-size:28px;line-height:40px;width:44px;height:44px;border:1px solid var(--line);border-radius:50%;color:var(--ink-dim);flex-shrink:0}
 .explorer-scroll{padding:18px 20px 20px;overflow-y:auto;overscroll-behavior:contain;min-height:0;scrollbar-width:thin;scrollbar-color:rgba(243,217,162,.25) transparent}
 .explorer-search-label{display:block;font-size:11px;color:var(--ink-dim);margin-bottom:8px}
 #destinationSearch{display:block;width:100%;min-height:44px;padding:10px 12px;border-radius:10px;border:1px solid rgba(243,217,162,.24);background:rgba(0,0,0,.17);font:inherit;font-size:14px;color:var(--ink);-webkit-user-select:text;user-select:text}
@@ -235,8 +241,8 @@ body.booting>:not(#loading):not(#fail):not(script){visibility:hidden}
 #observationImageCredit,#observationImageLicense,#observationImageSource{font-size:11px;padding:6px 0;min-height:36px}
 #observationImageRetry{min-height:44px;margin-top:8px;padding:0 12px;border:1px solid var(--line);border-radius:8px;font-size:11px}
 #explorerLookControls{display:flex;flex-wrap:wrap;gap:8px}
-#explorer #brightBtn,#explorer #hdrBtn{position:static;top:auto;right:auto;bottom:auto;left:auto;transform:none;flex:1;min-height:44px;padding:0 12px;border:1px solid var(--line);border-radius:9px;background:rgba(238,240,246,.035);font-size:12px;color:var(--ink-dim)}
-#explorer #hdrBtn[hidden]{display:none}
+#settingsPanel #brightBtn,#settingsPanel #hdrBtn{position:static;top:auto;right:auto;bottom:auto;left:auto;transform:none;flex:1;min-height:44px;padding:0 12px;border:1px solid var(--line);border-radius:9px;background:rgba(238,240,246,.035);font-size:12px;color:var(--ink-dim)}
+#settingsPanel #hdrBtn[hidden]{display:none}
 .explorer-quality{display:grid;grid-template-columns:1fr auto;align-items:center;gap:12px;margin-top:14px}
 .explorer-quality label{font-size:12px;color:var(--ink-dim)}
 #qualitySelect{max-width:172px;padding:10px;min-height:44px;border:1px solid var(--line);border-radius:9px;background:#151b27;color:var(--ink);font:inherit;font-size:12px}
@@ -251,14 +257,15 @@ body.booting>:not(#loading):not(#fail):not(script){visibility:hidden}
 #explorerTravelText{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--gold)}
 #explorerStop{border-left:1px solid var(--line);padding:7px 8px 7px 11px;white-space:nowrap;color:var(--ink-dim);font-size:10px;flex-shrink:0}
 @media(max-width:650px){
-  #hud{left:16px;top:calc(env(safe-area-inset-top,0px) + 19px);width:calc(100% - 200px)}
+  #hud{left:16px;top:calc(env(safe-area-inset-top,0px) + 76px);width:calc(100% - 32px)}
   #place{font-size:24px;letter-spacing:.06em}
   #hud .stats{margin-top:7px}
   #hud .stats>div{gap:6px}
   #hud .stats dt{font-size:9px}
   #hud .stats dd{font-size:11px}
-  #goHome,#exploreBtn{top:calc(env(safe-area-inset-top,0px) + 16px);font-size:11px}
-  #goHome{right:calc(env(safe-area-inset-right,0px) + 104px);width:64px;padding:0 8px}
+  #goHome,#settingsBtn,#exploreBtn{top:calc(env(safe-area-inset-top,0px) + 16px);font-size:11px}
+  #goHome{right:calc(env(safe-area-inset-right,0px) + 176px);width:64px;padding:0 8px}
+  #settingsBtn{right:calc(env(safe-area-inset-right,0px) + 104px);width:64px;padding:0 8px}
   #exploreBtn{right:calc(env(safe-area-inset-right,0px) + 16px);width:80px}
   #stick{width:92px;height:92px;left:calc(env(safe-area-inset-left,0px) + 18px);bottom:calc(env(safe-area-inset-bottom,0px) + 24px)}
   #knob{width:34px;height:34px;margin:-17px 0 0 -17px}
@@ -267,20 +274,20 @@ body.booting>:not(#loading):not(#fail):not(script){visibility:hidden}
   #back{width:48px;height:48px}
   #teleBtn{bottom:calc(env(safe-area-inset-bottom,0px) + 38px);width:94px;padding:5px 8px;font-size:10px}
   #tip{bottom:calc(env(safe-area-inset-bottom,0px) + 170px);font-size:10px}
-  #explorer{left:12px;right:12px;top:calc(env(safe-area-inset-top,0px) + 76px);bottom:calc(env(safe-area-inset-bottom,0px) + 12px);width:auto;max-height:none;border-radius:17px}
+  #explorer,#settingsPanel{left:12px;right:12px;top:calc(env(safe-area-inset-top,0px) + 76px);bottom:calc(env(safe-area-inset-bottom,0px) + 12px);width:auto;max-height:none;border-radius:17px}
   .explorer-heading{padding:16px 17px 14px}
-  #explorerTitle{font-size:23px}
+  #explorerTitle,#settingsTitle{font-size:23px}
   .explorer-scroll{padding:16px 17px 20px}
-  .explorer-open #stick,.explorer-open #fly,.explorer-open #teleBtn{visibility:hidden}
+  .explorer-open #stick,.explorer-open #fly,.explorer-open #teleBtn,.settings-open #stick,.settings-open #fly,.settings-open #teleBtn{visibility:hidden}
   #explorerTravel{bottom:calc(env(safe-area-inset-bottom,0px) + 178px)}
 }
 @media(max-height:440px){
-  #hud{left:14px;top:calc(env(safe-area-inset-top,0px) + 12px);width:calc(100% - 230px)}
+  #hud{left:14px;top:calc(env(safe-area-inset-top,0px) + 12px);width:calc(100% - 320px)}
   #place{font-size:22px}
   #hud .stats{margin-top:5px}
   #hud .stats dt{font-size:9px}
   #hud .stats dd{font-size:10px}
-  #goHome,#exploreBtn{top:calc(env(safe-area-inset-top,0px) + 10px);min-height:40px}
+  #goHome,#settingsBtn,#exploreBtn{top:calc(env(safe-area-inset-top,0px) + 10px);min-height:44px}
   #stick{width:80px;height:80px;left:calc(env(safe-area-inset-left,0px) + 16px);bottom:calc(env(safe-area-inset-bottom,0px) + 16px)}
   #stick::before{inset:12px}
   #knob{width:32px;height:32px;margin:-16px 0 0 -16px}
@@ -290,10 +297,10 @@ body.booting>:not(#loading):not(#fail):not(script){visibility:hidden}
   #teleBtn{bottom:calc(env(safe-area-inset-bottom,0px) + 48px);min-height:44px}
   #tip{bottom:calc(env(safe-area-inset-bottom,0px) + 112px)}
   #explorerTravel{bottom:calc(env(safe-area-inset-bottom,0px) + 110px)}
-  #explorer{top:calc(env(safe-area-inset-top,0px) + 64px);bottom:calc(env(safe-area-inset-bottom,0px) + 12px);max-height:none;right:12px}
+  #explorer,#settingsPanel{top:calc(env(safe-area-inset-top,0px) + 64px);bottom:calc(env(safe-area-inset-bottom,0px) + 12px);max-height:none;right:12px}
   .explorer-heading{padding:14px 17px 12px}
-  #explorerTitle{font-size:22px}
-  .explorer-open #stick,.explorer-open #fly,.explorer-open #teleBtn{visibility:hidden}
+  #explorerTitle,#settingsTitle{font-size:22px}
+  .explorer-open #stick,.explorer-open #fly,.explorer-open #teleBtn,.settings-open #stick,.settings-open #fly,.settings-open #teleBtn{visibility:hidden}
 }
 
 @media(max-width:380px) and (max-height:440px){
@@ -309,6 +316,10 @@ body.booting>:not(#loading):not(#fail):not(script){visibility:hidden}
 .music-volume{display:grid;grid-template-columns:auto 1fr 3.2em;align-items:center;gap:12px;margin-top:12px;font-size:12px;color:var(--ink-dim)}
 #musicVolume{width:100%;min-height:44px;margin:0;accent-color:var(--gold);touch-action:pan-y}
 #musicVolumeText{text-align:right;font-size:11px;font-variant-numeric:tabular-nums}
+
+@media(max-width:480px) and (max-height:440px){
+  #hud{top:calc(env(safe-area-inset-top,0px) + 64px);width:calc(100% - 28px)}
+}
 
 </style>
 </head>
@@ -356,6 +367,7 @@ body.booting>:not(#loading):not(#fail):not(script){visibility:hidden}
 </div>
 <div id="fail" hidden><p id="failT"></p></div>
 
+<button type="button" id="settingsBtn" aria-expanded="false" aria-controls="settingsPanel">設定</button>
 <button type="button" id="exploreBtn" aria-expanded="false" aria-controls="explorer">探索 <span aria-hidden="true">⌕</span></button>
 <aside id="explorer" aria-labelledby="explorerTitle" hidden>
   <div class="explorer-heading">
@@ -413,6 +425,18 @@ body.booting>:not(#loading):not(#fail):not(script){visibility:hidden}
       </details>
     </section>
 
+    <details id="explorerPosition" class="explorer-detail">
+      <summary>航行資訊</summary>
+      <div class="explorer-detail-body"><dl id="explorerPositionFacts"></dl><div id="explorerNearby"></div></div>
+    </details>
+  </div>
+</aside>
+<aside id="settingsPanel" aria-labelledby="settingsTitle" hidden>
+  <div class="explorer-heading">
+    <div><p class="explorer-eyebrow">PREFERENCES</p><h2 id="settingsTitle">設定</h2></div>
+    <button type="button" id="settingsClose" aria-label="關閉設定面板">×</button>
+  </div>
+  <div class="explorer-scroll">
     <details id="explorerMusic" class="explorer-detail">
       <summary>宇宙音樂</summary>
       <div class="explorer-detail-body">
@@ -438,10 +462,10 @@ body.booting>:not(#loading):not(#fail):not(script){visibility:hidden}
         </div>
       </div>
     </details>
-    <details id="explorerPosition" class="explorer-detail">
-      <summary>航行資訊</summary>
-      <div class="explorer-detail-body"><dl id="explorerPositionFacts"></dl><div id="explorerNearby"></div></div>
-    </details>
+    <div class="settings-refresh">
+      <button type="button" id="refreshView">重新整理畫面 <span aria-hidden="true">↻</span></button>
+      <p class="explorer-muted">重新載入遊戲，回到地球附近。</p>
+    </div>
   </div>
 </aside>
 <div id="explorerTravel" hidden>
@@ -4998,6 +5022,7 @@ var EXPLORER = {
   startRadius:0, endRadius:0, refresh:0, catalogSignature:'', distanceNode:null, lightNode:null, terrainNode:null
 };
 var explorerPanel = $('#explorer'), explorerSearch = $('#destinationSearch'), explorerList = $('#destinationList');
+var settingsPanel = $('#settingsPanel');
 /* Keep the sky quiet. Reparenting retains the original observing-control handlers. */
 (function arrangeExplorer(){
   var lookControls = $('#explorerLookControls'), facts = $('#explorerPositionFacts');
@@ -5034,13 +5059,32 @@ function explorerStableMark(m){
   return m;
 }
 function openExplorer(open, focusSearch){
+  var wasOpen = EXPLORER.open;
+  if(open) openSettings(false);
   EXPLORER.open = !!open; explorerPanel.hidden = !open;
   document.body.classList.toggle('explorer-open', !!open);
   $('#exploreBtn').setAttribute('aria-expanded', open ? 'true' : 'false');
   if(open){
+    resetFlightInput();
     renderExplorerDestinations();
     if(focusSearch) explorerSearch.focus({preventScroll:true});
+    else if(!wasOpen) $('#explorerClose').focus({preventScroll:true});
   } else if(explorerPanel.contains(document.activeElement)) $('#exploreBtn').focus({preventScroll:true});
+}
+function openSettings(open){
+  if(open){ openExplorer(false); resetFlightInput(); }
+  settingsPanel.hidden = !open;
+  document.body.classList.toggle('settings-open', !!open);
+  $('#settingsBtn').setAttribute('aria-expanded', open ? 'true' : 'false');
+  if(open) $('#settingsClose').focus({preventScroll:true});
+  else if(settingsPanel.contains(document.activeElement)) $('#settingsBtn').focus({preventScroll:true});
+}
+function refreshUniverseView(){
+  var next = new URL(window.location.href);
+  next.searchParams.set('refresh', Date.now().toString(36));
+  $('#refreshView').disabled = true;
+  $('#refreshView').textContent = '重新載入中…';
+  window.location.replace(next.href);
 }
 function renderExplorerDestinations(){
   var catalog = explorerCatalog(), q = explorerSearch.value.trim().toLocaleLowerCase();
@@ -5334,6 +5378,9 @@ function updateExplorer(dt){
 }
 $('#exploreBtn').addEventListener('click', function(){ openExplorer(!EXPLORER.open, false); });
 $('#explorerClose').addEventListener('click', function(){ openExplorer(false); });
+$('#settingsBtn').addEventListener('click', function(){ openSettings(settingsPanel.hidden); });
+$('#settingsClose').addEventListener('click', function(){ openSettings(false); });
+$('#refreshView').addEventListener('click', refreshUniverseView);
 explorerSearch.addEventListener('input', renderExplorerDestinations);
 document.querySelectorAll('[data-destination-filter]').forEach(function(button){
   button.addEventListener('click',function(){
@@ -5344,9 +5391,13 @@ explorerSearch.addEventListener('focus', function(){ keys = {}; });
 explorerPanel.addEventListener('focusin', function(){ keys = {}; });
 explorerPanel.addEventListener('keydown', function(e){ e.stopPropagation(); });
 explorerPanel.addEventListener('keyup', function(e){ keys[e.key.toLowerCase()] = false; e.stopPropagation(); });
+settingsPanel.addEventListener('focusin', resetFlightInput);
+settingsPanel.addEventListener('keydown', function(e){ e.stopPropagation(); });
+settingsPanel.addEventListener('keyup', function(e){ keys[e.key.toLowerCase()] = false; e.stopPropagation(); });
 window.addEventListener('keydown', function(e){
   if(e.key === 'Escape'){
-    if(EXPLORER.open) openExplorer(false); else cancelExplorerTravel();
+    if(!settingsPanel.hidden) openSettings(false);
+    else if(EXPLORER.open) openExplorer(false); else cancelExplorerTravel();
     keys = {}; e.preventDefault(); e.stopImmediatePropagation();
   }
 }, true);
