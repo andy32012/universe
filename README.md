@@ -2,7 +2,7 @@
 
 以第一人稱在宇宙中飛行：從太陽系一路到可觀測宇宙的邊界。
 
-主程式、星表、表面影像與音樂程式都在 `index.html`，月球及火星實測地形另放在 `assets/`，按需下載。透過 GitHub Pages 等靜態網站直接開啟，不需安裝套件。直接以 `file://` 開啟時，瀏覽器可能阻擋地形下載，仍可使用程序地形探索。
+主程式、基礎星表、數值星曆、表面貼圖與音樂程式在 `index.html`；月球／火星實測地形、星團成員目錄及觀測參考影像放在 `assets/`，按需下載。透過 GitHub Pages 等靜態網站直接開啟，不需安裝套件。直接以 `file://` 開啟時，瀏覽器可能阻擋外部資料下載；地形可使用程序替代，星團不會以隨機成員冒充載入成功。
 
 ## 探索方式
 
@@ -38,6 +38,19 @@
 - 星雲增加氣體細節和塵埃遮蔽；黑洞可取樣全天空背景，改善彎曲光線離開螢幕後的缺口。
 - 天體資料卡區分觀測參數、模型估算及程序示意，並附資料來源。
 
+## 觀測資料與重建範圍
+
+資料卡新增「觀測與模型」，逐項區分**觀測資料、推算模型、視覺示意、尚未知曉**。保留沒有完整觀測資料的科學模型；「有觀測依據」不等於「每一點都精確量得」。系外行星表面、星雲完整三維密度、黑洞吸積流等仍無法由現有資料唯一還原。
+
+- **太陽系位置：**八大行星、冥王星、月球、木星四大衛星、土衛六及土衛二，使用 2026-04-01 至 2027-04-01 的 JPL Horizons 幾何位置與速度表，依 UTC 作三次 Hermite 插值。地球直接採 399 地心，衛星用母星中心座標後合成；J2000 黃道至銀河座標使用正交轉換。星曆是觀測約束的動力學推算，非當下拍攝的位置，未加入光行時與像差；表外日期或資料不可用時，明示回退近似軌道。未來若新增閏秒需重產資料。自轉、天平動與陰影中的表面形狀仍有近似。
+- **疏散星團：**畢宿 515 筆、昴宿 819 筆，採 Cantat-Gaudin 等（2020）的 Gaia DR2 成員目錄。保留成員機率 ≥ 0.9、視差訊噪比 ≥ 20、G 波段觀測次數 ≥ 50 且必要欄位有效的資料。距離使用高訊噪比視差的簡單反演，仍有視差誤差、零點與樣本選擇限制；不是完整成員清單。與既有 HYG 可靠匹配的成員避免重複繪製。
+- **半人馬座 ω 星團：**使用 Vasiliev／Baumgardt（2021）的 Gaia EDR3 目錄，保留作者 `qflag=3`、成員機率 ≥ 0.99、G ≤ 19 的 27,529 筆。方向與測光來自目錄；全體採 5,430 ± 50 秒差距的共同距離。這是觀測方向的共同距離投影，**沒有捏造個別恆星的視線深度**，也不會補隨機星冒充未解析核心。
+- **ω 星團核心方向星源：**原成員選樣在擁擠核心不完整，空缺不代表物理空洞。另以 Gaia FPR 的 SIF 觀測星源作獨立圖層：中心 8 角分內、G ≤ 19 共 106,517 筆，方向固定於 J2017.5。它們沒有成員機率與 BP／RP 色指數，不混稱已確認星團成員，以中性白光顯示 G 波段測光。共同距離僅為呈現假設，前景／背景身分及逐星深度未知；載入狀態與限制同時在資料卡和場景標籤顯示。依官方目錄規則排除已有一般 Gaia 星表對應的星源，未把這份資料當成完整核心普查。
+- **星雲觀測影像：**獵戶座、蟹狀、環狀星雲的資料卡可展開 ESA/Hubble 官方二維影像，附曝光日期、波段、合成色說明及完整署名。三張合計約 540 KB，只有展開時下載，不上傳為三維紋理。保留完整畫幅，僅使用官方縮圖或等比例縮放／格式壓縮；不裁切補畫、不生成細節。遊戲體積星雲與昴宿反射雲仍是明示模型。
+- **黑洞：**六個黑洞改用具文獻來源的質量與誤差，黑影尺度統一由質量及非旋轉模型推算。TON 618 採約 407 億太陽質量的文獻估計，同時列出約 661 億的另一估計；兩值不是置信區間。人馬座 A* 為與整個程序銀河對齊仍用近似銀心，資料卡明示其與觀測參考位置的差別。其他位置也是固定參考座標，未推進所有自行／雙星位移；透鏡、盤與伴星相位並非精密觀測重建。
+
+三份成員目錄合計約 2.80 MB，FPR 核心方向目錄約 5.30 MB，只有選取或接近相應星團時才下載；觀測圖片只在展開時下載。點源繪圖程式在啟動畫面預熱，目錄驗證與建構分段進行；全部四個目錄使用最多四次點雲繪製，頂點資料約 3.79 MB；整團在視野外時略過頂點提交，不刪減星源或降低可見畫質。首次實際頂點上傳及 JSON 解析仍有成本，不宣稱在所有裝置零停頓。星曆同步內嵌以確保開場地球與相機使用同一位置，不會在下載完成後突然移動。原始研究資料、測試程式、測試影像與執行紀錄不隨網站發布。
+
 ## 資料與程式來源
 
 - 恆星位置、亮度、顏色：[HYG Database](https://github.com/astronexus/HYG-Database)，CC BY-SA 4.0。本專案內嵌的是其中 16,166 顆恆星的子集，並轉換為銀河座標；這份內嵌資料同樣以 CC BY-SA 4.0 授權。
@@ -45,8 +58,12 @@
 - 繪圖函式庫：[three.js](https://github.com/mrdoob/three.js) r128，MIT。
 - 黑洞光線追蹤的做法參考 [oseiskar/black-hole](https://github.com/oseiskar/black-hole)（MIT）。
 - 大氣散射的算法參考 [wwwtyro/glsl-atmosphere](https://github.com/wwwtyro/glsl-atmosphere)（公有領域）。
-- 行星近似軌道：[JPL Approximate Positions of the Planets](https://ssd.jpl.nasa.gov/planets/approx_pos.html)，採用 1800–2050 年公式。
-- 月球、主要衛星與冥王星：[JPL Horizons](https://ssd.jpl.nasa.gov/horizons/)，使用 2026-10-07 的軌道要素快照。
+- 行星、月球、主要衛星與冥王星：[JPL Horizons](https://ssd.jpl.nasa.gov/horizons/)，2026-04-01 至 2027-04-01 的位置／速度表；各體取樣間隔、參考中心與來源連結保留在內嵌資料中。回退採 [JPL 1800–2050 年近似公式](https://ssd.jpl.nasa.gov/planets/approx_pos.html) 及 2026-10-07 的衛星／冥王星軌道要素。
+- 畢宿／昴宿成員：[Cantat-Gaudin 等（2020）](https://doi.org/10.1051/0004-6361/202038192)，[CDS/VizieR 目錄](https://doi.org/10.26093/cds/vizier.36400001)，依 [CDS/VizieR 使用條件](https://cds.unistra.fr/vizier-org/licences_vizier.html) 提供已篩選子集，保留作者及原始目錄署名；不另宣稱整份目錄為 CC 授權。
+- 半人馬座 ω 星團成員：[Vasiliev／Baumgardt（2021）Zenodo v2](https://doi.org/10.5281/zenodo.4891252)，CC BY 4.0；本專案進行品質／亮度篩選及欄位精簡。[共同距離來源](https://people.smp.uq.edu.au/HolgerBaumgardt/globular/fits/ngc5139.html)。
+- ω 星團核心方向星源：ESA/Gaia/DPAC，Gaia FPR `crowded_field_source`；[Weingrill 等（2023）](https://doi.org/10.1051/0004-6361/202347203)。採 [Gaia 使用授權](https://www.cosmos.esa.int/web/gaia-users/license)所列 [CC BY-NC 3.0 IGO](https://creativecommons.org/licenses/by-nc/3.0/igo/deed.en)，與前項 Zenodo 及 Hubble 影像的授權不同。感謝 ESA Gaia 任務、Gaia DPAC、參與資助機構與 CDS VizieR；本專案取亮度／天空範圍子集並精簡為顯示欄位。
+- 星雲圖片：[獵戶座 heic0601a](https://esahubble.org/images/heic0601a/)、[蟹狀 heic0515a](https://esahubble.org/images/heic0515a/)、[環狀 heic1310a](https://esahubble.org/images/heic1310a/)，[ESA/Hubble CC BY 4.0 使用條件](https://esahubble.org/copyright/)。完整各圖署名在圖片旁顯示並連至官方原圖，曝光年份與發布年份分別標明。
+- 黑洞質量與距離：[Miller-Jones 等（2021）](https://doi.org/10.1126/science.abb3363)、[El-Badry 等（2023）](https://doi.org/10.1093/mnras/stac3140)、[GRAVITY（2022）](https://www.aanda.org/articles/aa/full_html/2022/01/aa42465-21/aa42465-21.html)、[EHT（2019）Paper VI](https://doi.org/10.3847/2041-8213/ab1141)、[Ge 等（2019）](https://doi.org/10.3847/1538-3881/ab0956)／[Shemmer 等（2004）](https://doi.org/10.1086/423607)，以及下列 Gaia BH3 論文；部分方向採 [SIMBAD](https://simbad.cds.unistra.fr/)。各體的方法與限制見資料卡。
 - 穀神星、灶神星、貝努：[JPL Small-Body Database](https://ssd.jpl.nasa.gov/tools/sbdb_lookup.html) 的物理參數，以及 [JPL Horizons](https://ssd.jpl.nasa.gov/horizons/) 的 2026-10-07 日心軌道要素。[NASA 貝努資料](https://science.nasa.gov/solar-system/asteroids/101955-bennu/)提供表面岩塊的觀測背景。
 - 月球地形：[NASA LRO／LOLA LDEM_16 V3.1](https://imbrium.mit.edu/DATA/LOLA_GDR/CYLINDRICAL/IMG/LDEM_16.LBL)，半徑為 1,737,400 + 0.5 × DN 公尺。火星地形：[NASA MGS／MOLA MEGR90N000EB V2.0](https://pds-geosciences.wustl.edu/mgs/mgs-m-mola-5-megdr-l3-v1/mgsl_300x/meg016/megr90n000eb.lbl)，採徑向形狀而非大地水準面高程，半徑為 3,396,000 + DN 公尺。來源屬 [PDS 公共領域資料](https://pds-geosciences.wustl.edu/faq.html)。
 - 67P 和 2P：核尺寸來自 [JPL Small-Body Database](https://ssd.jpl.nasa.gov/tools/sbdb_lookup.html) 與 [NASA 恩克彗星資料](https://science.nasa.gov/solar-system/comets/2p-encke/)，位置採 [JPL Horizons](https://ssd.jpl.nasa.gov/horizons/) 的 2026-10-07 日心軌道要素快照。67P 的雙葉外形參考 Rosetta 觀測與 [Jorda 等（2016）](https://doi.org/10.1016/j.icarus.2016.05.002)，本程式沒有使用探測器地形網格。
@@ -57,11 +74,11 @@
 
 ## 哪些是真的
 
-- 太陽系：公開資料中的天體尺寸及軌道參數，位置與自轉為近似計算。衛星採二體軌道，離要素基準日期越久，相位誤差可能越大；不能用來預報精密日月食或掩星。
-- 16,166 顆恆星的三維位置與亮度。
+- 太陽系：公開資料中的天體尺寸及數值星曆；位置精度受來源與插值限制，自轉為近似計算。表外回退的衛星二體軌道會隨日期產生較大相位誤差；不能把整個畫面當作精密日月食或掩星預報。
+- 16,166 筆 HYG 星表恆星的快照位置、光度與色指數。三維距離是星表推算；內嵌資料未保留逐星誤差／完整缺值旗標，不能聲稱每顆同等精確。
 - 有名字的星雲、星系、星系團、黑洞的方向與距離（部分座標為近似值）。
 
-其餘的恆星、旋臂上未命名的星雲、宇宙網，是依照真實的分布規律生成的。
+其餘的恆星、旋臂上未命名的星雲與宇宙網，是依近似分布模型生成的，並非逐一天體的觀測目錄。
 
 未直接測得的恆星半徑可能由亮度和色指數估算。系外行星的表面、部分軌道朝向及相位為示意；未知的海洋或地貌不代表已被觀測。
 
