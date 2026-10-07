@@ -217,6 +217,9 @@ var canvas = $('#gl'), renderer;
    No antialiasing on the screen itself: only a full-screen picture is drawn there, and the scene is smoothed where it is drawn (see MSAA). */
 try{ renderer = new THREE.WebGLRenderer({canvas:canvas, antialias:false, alpha:true, premultipliedAlpha:false, powerPreference:'high-performance'}); }
 catch(e){ fail('這台裝置的瀏覽器無法啟用 WebGL，所以畫不出宇宙。請換一個瀏覽器再試。'); return; }
+/* layers: 0 everything drawn in the main picture; L_BODY solid bodies (also in 0), whose depths stop the clouds; L_EM things that shine
+   without hiding what is behind them, drawn in a picture of their own and dimmed only by the clouds in front of them (see OCC and PROBE) */
+var PROBES = !!(renderer.capabilities.isWebGL2 && renderer.capabilities.vertexTextures && THREE.DepthTexture), L_BODY = 1, L_EM = 2;
 var PR = Math.min(window.devicePixelRatio || 1, 2);
 renderer.setPixelRatio(PR);
 renderer.setSize(window.innerWidth, window.innerHeight, false);
@@ -340,8 +343,12 @@ var auRoot = new THREE.Group(); scene.add(auRoot);      /* the solar system, mea
   auRoot.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(X, P, Z));
 })();
 
-var PT_VS = 'attribute float aSize; attribute vec3 aCol; uniform float uPR; uniform float uSz; uniform float uGrow; varying vec3 vC; varying float vS;' +
-  'void main(){ vC = aCol; vec4 mv = modelViewMatrix*vec4(position,1.0); gl_Position = projectionMatrix*mv;' +
+/* how much light gets through the clouds to probe i, from a texture of results laid out row by row */
+var PROBE_GL = 'float probeT(sampler2D t, vec2 sz, float i){ return 1.0 - texture2D(t, (vec2(mod(i, sz.x), floor(i/sz.x)) + 0.5)/sz).a; }\n';
+var PT_VS = 'attribute float aSize; attribute vec3 aCol; uniform float uPR; uniform float uSz; uniform float uGrow; varying vec3 vC; varying float vS;\n' +
+  '#ifdef PROBE\n attribute float aProbe; uniform sampler2D tProbeS; uniform vec2 uProbeSS; uniform float uProbeOn;\n' + PROBE_GL + '#endif\n' +
+  'void main(){ vC = aCol; vec4 mv = modelViewMatrix*vec4(position,1.0); gl_Position = projectionMatrix*mv;\n' +
+  '#ifdef PROBE\n if(uProbeOn > 0.5) vC *= probeT(tProbeS, uProbeSS, aProbe);\n#endif\n' +
   ' float sz = aSize*uSz*clamp(0.4/max(-mv.z, 0.001), 1.0, uGrow); vS = sz; gl_PointSize = sz*uPR*(sz > 4.0 ? 2.4 : 1.0); }';
 var STARGAIN = {value:1.55};
 var PT_FS = 'uniform float uAlpha; uniform float uGain; varying vec3 vC; varying float vS;' +
@@ -358,25 +365,33 @@ function addLayer(obj, a, b, c, d, parent, uniforms){
   var L = {obj:obj, a:a, b:b, c:c, d:d, u:uniforms || (obj.material && obj.material.uniforms)};
   layers.push(L); return L;
 }
-function cloud(list, a, b, c, d, parent, grow){
+function cloud(list, a, b, c, d, parent, grow, probe){
   var n = list.length, pos = new Float32Array(n*3), col = new Float32Array(n*3), siz = new Float32Array(n);
   for(var i=0;i<n;i++){
     var s = list[i];
     pos[i*3] = s[0]; pos[i*3+1] = s[1]; pos[i*3+2] = s[2];
     col[i*3] = s[3]; col[i*3+1] = s[4]; col[i*3+2] = s[5]; siz[i] = s[6];
   }
-  return cloudArrays(pos, col, siz, a, b, c, d, parent, grow);
+  return cloudArrays(pos, col, siz, a, b, c, d, parent, grow, probe);
 }
-function cloudArrays(pos, col, siz, a, b, c, d, parent, grow){
+/* probe: each point is dimmed only by the clouds between you and it (for stars that can sit in front of a nebula or of the Milky Way's dust) */
+function cloudArrays(pos, col, siz, a, b, c, d, parent, grow, probe){
   var g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
   g.setAttribute('aCol', new THREE.BufferAttribute(col, 3));
   g.setAttribute('aSize', new THREE.BufferAttribute(siz, 1));
-  var m = new THREE.ShaderMaterial({
-    uniforms:{uPR:{value:PR}, uSz:{value:1}, uAlpha:{value:1}, uGrow:{value:grow || 2.5}, uGain:STARGAIN}, vertexShader:PT_VS, fragmentShader:PT_FS,
-    transparent:true, blending:THREE.AdditiveBlending, depthWrite:false
-  });
-  return addLayer(new THREE.Points(g, m), a, b, c, d, parent);
+  var u = {uPR:{value:PR}, uSz:{value:1}, uAlpha:{value:1}, uGrow:{value:grow || 2.5}, uGain:STARGAIN}, defs = {};
+  if(probe && PROBES){ g.setAttribute('aProbe', new THREE.BufferAttribute(probeStatics(pos), 1)); defs.PROBE = ''; u.tProbeS = PROBE.tS; u.uProbeSS = PROBE.sizeS; u.uProbeOn = PROBE.use; }
+  var m = new THREE.ShaderMaterial({uniforms:u, defines:defs, vertexShader:PT_VS, fragmentShader:PT_FS, transparent:true, blending:THREE.AdditiveBlending, depthWrite:false});
+  var Y = addLayer(new THREE.Points(g, m), a, b, c, d, parent);
+  if(probe && PROBES) Y.obj.layers.set(L_EM);
+  return Y;
+}
+/* register fixed positions (light-years) as probes; returns each one's index */
+function probeStatics(pos){
+  var n = pos.length/3, base = PROBE.statics.reduce(function(t, q){ return t + q.length/3; }, 0), idx = new Float32Array(n);
+  for(var i=0;i<n;i++) idx[i] = base + i;
+  PROBE.statics.push(pos); return idx;
 }
 function starColour(){
   var t = rnd();
@@ -503,10 +518,11 @@ function airShell(name, radius, pos, sunDir, a, b, c, d){
   addLayer(mesh, a, b, c, d, auRoot);
 }
 var QUAD_VS = 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix*modelViewMatrix*vec4(position,1.0); }';
-var GLOW_FS = 'uniform vec3 uTint; uniform float uAlpha; varying vec2 vUv;' +
+var GLOW_FS = 'uniform vec3 uTint; uniform float uAlpha; uniform float uProbe; uniform sampler2D tProbeB; uniform vec2 uProbeBS; uniform float uProbeOn; varying vec2 vUv;\n' + PROBE_GL +
   'void main(){ vec2 c = vUv*2.0 - 1.0; float d = length(c); float g = 0.035/(d*d + 0.03) - 0.034;' +
   ' float a = atan(c.y, c.x); float rays = (0.5 + 0.5*cos(a*4.0))*(0.5 + 0.5*cos(a*4.0)); rays = pow(rays, 12.0)*exp(-d*3.0)*0.5;' +
-  ' gl_FragColor = vec4(uTint*(max(g, 0.0)*2.5 + rays*1.3*(1.0 - smoothstep(0.6, 1.0, d)))*uAlpha, 1.0); }';
+  ' float tr = uProbeOn > 0.5 && uProbe >= 0.0 ? probeT(tProbeB, uProbeBS, uProbe) : 1.0;' +
+  ' gl_FragColor = vec4(uTint*(max(g, 0.0)*2.5 + rays*1.3*(1.0 - smoothstep(0.6, 1.0, d)))*uAlpha*tr, 1.0); }';
 var NEB_FS = 'uniform vec3 uTint; uniform float uAlpha; uniform float uSeed; uniform float uRing; varying vec2 vUv;' + NOISE_GL +
   'void main(){ vec2 p = vUv*2.0 - 1.0; float r = length(p); if(r > 1.0) discard;' +
   'float n = fb(vec3(p*2.2, uSeed)); float n2 = fb(vec3(p*5.0 + n*2.0, uSeed + 3.0));' +
@@ -584,7 +600,24 @@ var VOL_NOISE =
   ' float F1(vec3 p){ return 0.5*N1(p) + 0.25*N1(p*2.0 + vec3(13.1,7.7,4.3)) + 0.125*N1(p*4.0 + vec3(31.7,3.3,17.9)) + 0.0625*N1(p*8.0 + vec3(5.9,21.3,9.1)); }\n' +
   ' float F2(vec3 p){ return F1(p + 17.3); }\n' +
   '#endif\n';
-var VOL_HEAD = 'uniform vec3 uRo; uniform vec3 uRight; uniform vec3 uUp; uniform vec3 uFwd; uniform float uTanF; uniform float uAspect; uniform float uAlpha; uniform float uSteps; varying vec2 vNdc;\n' + VOL_NOISE;
+/* Clouds are drawn in a pass of their own and laid over everything else, so on their own they would dim whatever lies in front of them too.
+   Two things keep what is in front of a cloud clear of it:
+   - solid bodies (planets, moons, stars up close): each cloud ray stops at the nearest body in its pixel, read from a picture of the bodies' depths (OCC);
+   - things that shine without hiding what is behind them (points of starlight, glows): each one is a probe. For each probe the clouds are followed
+     from you to that one point only (PROBE.mode), and it is dimmed by what lies in between and nothing else.
+   Both need WebGL 2; elsewhere everything is drawn as before. */
+var OCC = {tex:{value:null}, on:{value:0}, res:{value:new THREE.Vector2(1, 1)}, n:{value:0.01}, f:{value:1e7}};
+var PROBE = {mode:{value:0}, pos:{value:null}, size:{value:new THREE.Vector2(1, 1)}, count:{value:0}, use:{value:0},
+  tS:{value:null}, sizeS:{value:new THREE.Vector2(1, 1)}, tB:{value:null}, sizeB:{value:new THREE.Vector2(32, 16)}, statics:[]};
+var VOL_HEAD = 'uniform vec3 uRo; uniform vec3 uRight; uniform vec3 uUp; uniform vec3 uFwd; uniform float uTanF; uniform float uAspect; uniform float uAlpha; uniform float uSteps; varying vec2 vNdc;\n' +
+  'uniform float uVolK; uniform float uMode; uniform sampler2D tPPos; uniform vec2 uPSize; uniform float uPN; uniform vec3 uCtr; uniform float uRad;\n' +
+  'uniform sampler2D tOcc; uniform float uOccOn; uniform vec2 uOccRes; uniform float uOccK; uniform float uOccN; uniform float uOccF;\n' + VOL_NOISE +
+  /* how far along this pixel's ray (in the cloud's units) the nearest solid body is */
+  'float occEnd(vec3 rw){ if(uOccOn < 0.5) return 1e9; float dz = texture2D(tOcc, gl_FragCoord.xy/uOccRes).r; if(dz >= 1.0) return 1e9;' +
+  ' float vz = 2.0*uOccN*uOccF/(uOccF + uOccN - (dz*2.0 - 1.0)*(uOccF - uOccN)); return vz/max(dot(rw, uFwd), 1e-4)*uOccK; }\n' +
+  /* in probe mode each pixel is one shining thing: the light-years of it, relative to the cloud, in the cloud's units */
+  'float probeIndex(){ return floor(gl_FragCoord.y)*uPSize.x + floor(gl_FragCoord.x); }\n' +
+  'vec3 probeAt(){ return (texture2D(tPPos, gl_FragCoord.xy/uPSize).xyz - uCtr)/uRad; }\n';
 var VOL_FS = VOL_HEAD +
   'uniform float uType; uniform float uSeed; uniform vec3 uAxis; uniform vec3 uTintA; uniform vec3 uTintB; uniform float uExtra; uniform vec3 uFine;' +
   'float seg(vec3 p, vec3 a, vec3 b, out float h){ vec3 pa = p - a; vec3 ba = b - a; h = clamp(dot(pa, ba)/dot(ba, ba), 0.0, 1.0); return length(pa - ba*h); }' +
@@ -673,14 +706,17 @@ var VOL_FS = VOL_HEAD +
   ' }' +
   ' return vec4(em, dust); }' +
   'void main(){' +
-  ' vec3 rd = normalize(uFwd + uRight*(vNdc.x*uAspect*uTanF) + uUp*(vNdc.y*uTanF));' +
+  ' vec3 rw = normalize(uFwd + uRight*(vNdc.x*uAspect*uTanF) + uUp*(vNdc.y*uTanF)); vec3 rd = rw; float tEnd;' +
+  ' if(uMode > 0.5){ if(probeIndex() >= uPN) discard; vec3 dv = probeAt() - uRo; tEnd = length(dv); rd = dv/max(tEnd, 1e-12); } else tEnd = occEnd(rw);' +
   ' float b = dot(uRo, rd); vec3 perp0 = uRo - rd*b; float h = 1.0 - dot(perp0, perp0); if(h < 0.0) discard;' +
-  ' h = sqrt(h); float t0 = max(-b - h, 0.0); float t1 = -b + h; if(t1 <= t0) discard;' +
+  ' h = sqrt(h); float t0 = max(-b - h, 0.0); float t1 = -b + h; if(min(t1, tEnd) <= t0) discard;' +
   ' float dith = fract(52.9829189*fract(0.06711056*gl_FragCoord.x + 0.00583715*gl_FragCoord.y));' +
-  ' float dt = (t1 - t0)/uSteps; float t = t0 + dt*dith; vec3 col = vec3(0.0); float T = 1.0;' +
-  ' for(int i=0;i<MAXSTEPS;i++){ if(float(i) >= uSteps) break; vec4 sm = neb(uRo + rd*t); col += T*sm.rgb*dt*0.95; T *= exp(-sm.a*dt*3.0); t += dt; if(T < 0.02) break; }' +
+  ' float dt = (t1 - t0)/uSteps; float tStop = min(t1, tEnd); float t = t0 + dt*dith; vec3 col = vec3(0.0); float T = 1.0;' +
+  ' for(int i=0;i<MAXSTEPS;i++){ if(float(i) >= uSteps) break; float dd = tEnd < t1 ? min(dt, tStop - t) : dt; if(dd <= 0.0) break;' +
+  '  vec4 sm = neb(uRo + rd*t); col += T*sm.rgb*dd*0.95; T *= exp(-sm.a*dd*3.0); t += dt; if(T < 0.02) break; }' +
+  ' if(uMode > 0.5){ gl_FragColor = vec4(0.0, 0.0, 0.0, (1.0 - T)*uAlpha*uVolK); return; }' +
   ' float tc = dot(-uRo, rd);' +
-  ' if(tc > 0.0 && uType < 2.5){ vec3 u1 = normalize(cross(uAxis, vec3(0.03,1.0,0.07))); vec3 u2 = cross(uAxis, u1);' +
+  ' if(tc > 0.0 && tc < tStop && uType < 2.5){ vec3 u1 = normalize(cross(uAxis, vec3(0.03,1.0,0.07))); vec3 u2 = cross(uAxis, u1);' +
   '  for(int k=0;k<4;k++){ if(uType > 0.5 && k > 0) break;' +
   '   vec3 sp = uType > 0.5 ? vec3(0.0) : (u1*(float(k) - 1.5)*0.012 + u2*(mod(float(k), 2.0) - 0.5)*0.016);' +
   '   vec3 sv = sp - uRo; vec3 sperp = sv - rd*dot(sv, rd); float d2 = dot(sperp, sperp);' +
@@ -690,13 +726,14 @@ var VOL_FS = VOL_HEAD +
 var GALV_FS = VOL_HEAD +
   'uniform mat3 uM; uniform float uArms; uniform float uB; uniform float uR0; uniform float uSeed; uniform float uKind; uniform float uGain; uniform vec3 uCore; uniform vec3 uArmCol;' +
   'void main(){' +
-  ' vec3 rd = uM*normalize(uFwd + uRight*(vNdc.x*uAspect*uTanF) + uUp*(vNdc.y*uTanF));' +
+  ' vec3 rw = normalize(uFwd + uRight*(vNdc.x*uAspect*uTanF) + uUp*(vNdc.y*uTanF)); vec3 rd = uM*rw; float tEnd;' +
+  ' if(uMode > 0.5){ if(probeIndex() >= uPN) discard; vec3 dv = uM*probeAt() - uRo; tEnd = length(dv); rd = dv/max(tEnd, 1e-12); } else tEnd = occEnd(rw);' +
   ' vec3 so = uRo*vec3(1.0,3.2,1.0); vec3 sd = rd*vec3(1.0,3.2,1.0);' +
   ' float A = dot(sd, sd); float Bq = dot(so, sd); vec3 cl = so - sd*(Bq/A); float h = A*(1.0 - dot(cl, cl)); if(h < 0.0) discard;' +
-  ' h = sqrt(h); float t0 = max((-Bq - h)/A, 0.0); float t1 = (-Bq + h)/A; if(t1 <= t0) discard;' +
+  ' h = sqrt(h); float t0 = max((-Bq - h)/A, 0.0); float t1 = (-Bq + h)/A; if(min(t1, tEnd) <= t0) discard;' +
   ' float dith = fract(52.9829189*fract(0.06711056*gl_FragCoord.x + 0.00583715*gl_FragCoord.y));' +
-  ' float dt = (t1 - t0)/uSteps; float t = t0 + dt*dith; vec3 col = vec3(0.0); float T = 1.0;' +
-  ' for(int i=0;i<MAXSTEPS;i++){ if(float(i) >= uSteps) break;' +
+  ' float dt = (t1 - t0)/uSteps; float tStop = min(t1, tEnd); float t = t0 + dt*dith; vec3 col = vec3(0.0); float T = 1.0;' +
+  ' for(int i=0;i<MAXSTEPS;i++){ if(float(i) >= uSteps) break; float dd = tEnd < t1 ? min(dt, tStop - t) : dt; if(dd <= 0.0) break;' +
   '  vec3 p = uRo + rd*t; float r = length(p.xz); float z = p.y; vec3 em = vec3(0.0); float dust = 0.0;' +
   '  if(uKind < 0.5){' +
   '   float hz = 0.018 + 0.030*r; float fall = 1.0 - smoothstep(0.80, 1.0, r);' +
@@ -728,12 +765,16 @@ var GALV_FS = VOL_HEAD +
   '   float bodyI = exp(-(p.x*p.x*3.0 + z*z*30.0 + p.z*p.z*9.0))*smoothstep(0.3, 0.6, n + 0.15);' +
   '   em = uArmCol*bodyI*3.0 + vec3(1.0,0.4,0.55)*bodyI*smoothstep(0.62, 0.8, n2)*8.0 + uCore*bodyI;' +
   '   dust = bodyI*smoothstep(0.5, 0.7, n2)*8.0; }' +
-  '  col += T*em*dt*3.0*uGain; T *= exp(-dust*dt); t += dt; if(T < 0.02) break; }' +
+  '  col += T*em*dd*3.0*uGain; T *= exp(-dust*dd); t += dt; if(T < 0.02) break; }' +
+  ' if(uMode > 0.5){ gl_FragColor = vec4(0.0, 0.0, 0.0, (1.0 - T)*uAlpha*uVolK); return; }' +
   ' gl_FragColor = vec4(col*uAlpha, (1.0 - T)*uAlpha); }';
 var noiseTexU = {value:noiseTex};
 function volMaterial(fs, uniforms, steps, most){
   uniforms.uRo = {value:new THREE.Vector3()}; uniforms.uRight = VIEW.right; uniforms.uUp = VIEW.up; uniforms.uFwd = VIEW.fwd;
   uniforms.uTanF = VIEW.tanF; uniforms.uAspect = VIEW.aspect; uniforms.uAlpha = {value:1}; uniforms.uSteps = steps;
+  uniforms.uMode = PROBE.mode; uniforms.tPPos = PROBE.pos; uniforms.uPSize = PROBE.size; uniforms.uPN = PROBE.count;
+  uniforms.uCtr = {value:new THREE.Vector3()}; uniforms.uRad = {value:1}; uniforms.uOccK = {value:0};
+  uniforms.uVolK = VOLK; uniforms.tOcc = OCC.tex; uniforms.uOccOn = OCC.on; uniforms.uOccRes = OCC.res; uniforms.uOccN = OCC.n; uniforms.uOccF = OCC.f;
   var defs = {};
   if(HAS3D){ uniforms.uVol = volTex; defs.VOL3D = ''; } else uniforms.uNoiseT = noiseTexU;
   return new THREE.ShaderMaterial({uniforms:uniforms, defines:defs, vertexShader:VOL_VS, fragmentShader:fs.split('MAXSTEPS').join(String(most)),
@@ -781,6 +822,7 @@ function body(type, radius, pos, parent, tint, sunDir, a, b, c, d, cls, maps){
   });
   if(maps.map) mapped.push({u:m.uniforms, t:maps.map});
   var mesh = new THREE.Mesh(sphGeo, m); mesh.position.copy(pos); mesh.scale.setScalar(radius*K(cls));
+  if(PROBES) mesh.layers.enable(L_BODY);
   sized.push({m:mesh, base:radius, cls:cls});
   addLayer(mesh, a, b, c, d, parent); return mesh;
 }
@@ -791,14 +833,17 @@ function board(fs, uniforms, size, pos, parent, a, b, c, d, solid){
     blending:solid ? THREE.NormalBlending : THREE.AdditiveBlending});
   var mesh = new THREE.Mesh(quadGeo, m); mesh.position.copy(pos); mesh.scale.setScalar(size);
   if(solid) mesh.renderOrder = 10;
+  if(PROBES && !solid) mesh.layers.set(L_EM);
   boards.push({m:mesh, au:parent === auRoot});
   addLayer(mesh, a, b, c, d, parent); return mesh;
 }
-var dots = [];
+var dots = [], PROBE_B = 512;
 /* Every body is drawn at its true size, which from any distance is far too small to see.
    So each one also carries a point of light that always covers a few pixels; for stars it merges into the corona up close, for planets it fades away. */
 function dot(pos, parent, tint, R, k, star, a, b, c, d, cls){
-  var m = board(GLOW_FS, {uTint:{value:new THREE.Vector3().fromArray(tint)}}, R*7, pos, parent, a, b, c, d);
+  /* each glow is a probe of its own; the first PROBE_B of them are followed */
+  var m = board(GLOW_FS, {uTint:{value:new THREE.Vector3().fromArray(tint)}, uProbe:{value:dots.length < PROBE_B ? dots.length : -1},
+    tProbeB:PROBE.tB, uProbeBS:PROBE.sizeB, uProbeOn:PROBE.use}, R*7, pos, parent, a, b, c, d);
   var unit = parent === auRoot ? AU_LY : 1, w = pos.clone();
   if(parent === auRoot) w.applyQuaternion(auRoot.quaternion).multiplyScalar(AU_LY);
   dots.push({m:m, w:w, R:R*unit, k:k, star:star, unit:unit, cls:cls});
@@ -1017,8 +1062,11 @@ var HYG = {n:0};
   g.setAttribute('aAbs', new THREE.BufferAttribute(ab, 1));
   g.setAttribute('aCi', new THREE.BufferAttribute(ci, 1));
   HYG.u = {uPR:{value:PR}, uAlpha:{value:1}, uGain:STARGAIN, uS:{value:1}, uTele:{value:1}, uHide:{value:new THREE.Vector3(1e20, 0, 0)}};
-  var m = new THREE.ShaderMaterial({uniforms:HYG.u,
-    vertexShader:'attribute float aAbs; attribute float aCi; uniform float uPR; uniform float uS; uniform float uTele; uniform vec3 uHide; varying vec3 vC; varying float vS;' +
+  var defs = {};
+  if(PROBES){ g.setAttribute('aProbe', new THREE.BufferAttribute(probeStatics(pos), 1)); defs.PROBE = ''; HYG.u.tProbeS = PROBE.tS; HYG.u.uProbeSS = PROBE.sizeS; HYG.u.uProbeOn = PROBE.use; }
+  var m = new THREE.ShaderMaterial({uniforms:HYG.u, defines:defs,
+    vertexShader:'attribute float aAbs; attribute float aCi; uniform float uPR; uniform float uS; uniform float uTele; uniform vec3 uHide; varying vec3 vC; varying float vS;\n' +
+      '#ifdef PROBE\n attribute float aProbe; uniform sampler2D tProbeS; uniform vec2 uProbeSS; uniform float uProbeOn;\n' + PROBE_GL + '#endif\n' +
       'void main(){ vec4 mv = modelViewMatrix*vec4(position,1.0); gl_Position = projectionMatrix*mv;' +
       ' float dly = max(length(mv.xyz)*uS, 1e-9);' +
       ' float m = aAbs + 5.0*log(dly/32.6156)/2.302585 - 2.0*log(uTele)/2.302585;' +      /* how bright it looks from here; a telescope gathers more light */
@@ -1026,9 +1074,11 @@ var HYG = {n:0};
       ' if(distance(position, uHide) < 1e-6*(1.0 + length(uHide))) a = 0.0;' +
       ' vec3 c = aCi < 0.3 ? mix(vec3(0.62,0.74,1.0), vec3(0.95,0.96,1.0), clamp((aCi + 0.2)/0.5, 0.0, 1.0))' +
       '  : (aCi < 0.9 ? mix(vec3(0.95,0.96,1.0), vec3(1.0,0.90,0.70), (aCi - 0.3)/0.6) : mix(vec3(1.0,0.90,0.70), vec3(1.0,0.60,0.40), clamp((aCi - 0.9)/0.8, 0.0, 1.0)));' +
-      ' vC = c*a; vS = sz; gl_PointSize = a > 0.0 ? sz*uPR*(sz > 4.0 ? 2.4 : 1.0) : 0.0; }',
+      ' vC = c*a; vS = sz; gl_PointSize = a > 0.0 ? sz*uPR*(sz > 4.0 ? 2.4 : 1.0) : 0.0;\n' +
+      '#ifdef PROBE\n if(uProbeOn > 0.5) vC *= probeT(tProbeS, uProbeSS, aProbe);\n#endif\n }',
     fragmentShader:PT_FS, transparent:true, blending:THREE.AdditiveBlending, depthWrite:false});
-  addLayer(new THREE.Points(g, m), -9, -8, 3.4, 4.2);
+  var hy = addLayer(new THREE.Points(g, m), -9, -8, 3.4, 4.2);
+  if(PROBES) hy.obj.layers.set(L_EM);
 })();
 
 /* ---------- 2. the stars around the Sun (real positions) ---------- */
@@ -1104,7 +1154,7 @@ var STARS = [
     v = inSphere(3800); v.y *= 1 - 0.72*sstep(300, 1600, v.length());
     c = starColour(); far.push([v.x, v.y, v.z, c[0], c[1], c[2], 2.0*c[3] + 0.9]);
   }
-  cloud(far, 1.1, 1.9, 3.9, 4.6);
+  cloud(far, 1.1, 1.9, 3.9, 4.6, null, undefined, true);
   label('太陽', '你的家', new THREE.Vector3(), -1.0, 3.2, false, true);
   /* black holes inside the Milky Way: real positions, masses, spins and the stars that circle them.
      The companions go round 3,600 times faster than in life (an hour every second), so their orbits can be seen; the gas in the discs is shown slowed down. */
@@ -1363,21 +1413,48 @@ function mkMain(msaa){
   t.samples = MSAA; return t;
 }
 var rtMain = mkMain(QUALITY[qual.level].msaa), rtVol = mkTarget(false), rtComp = mkTarget(false), rtDown = [], rtUp = [], BL = 5, volScale = 0.5;
+/* for the clouds to know what is in front of them (see OCC and PROBE): the shining things drawn on their own, the bodies' depths at the
+   clouds' resolution (seen by a camera with a nearer far plane and a farther near plane, for depth precision), and the probe results */
+var rtEm = PROBES ? mkTarget(true) : null, rtOcc = null, occCam = null, occMat = null, probeS = null, probeB = null;
+if(PROBES){
+  rtOcc = new THREE.WebGLRenderTarget(4, 4, {minFilter:THREE.NearestFilter, magFilter:THREE.NearestFilter, depthBuffer:true, stencilBuffer:false});
+  rtOcc.depthTexture = new THREE.DepthTexture(4, 4); rtOcc.depthTexture.type = THREE.UnsignedIntType;
+  occCam = new THREE.PerspectiveCamera(50, 1, OCC.n.value, OCC.f.value); occCam.rotation.order = 'YXZ'; occCam.layers.set(L_BODY);
+  occMat = new THREE.MeshBasicMaterial({colorWrite:false});
+  OCC.tex.value = rtOcc.depthTexture;
+}
+/* the probe positions: the fixed ones (catalogued stars and the generated stars nearby) once, the glows every frame */
+function probeTarget(w, h){ return new THREE.WebGLRenderTarget(w, h, {minFilter:THREE.NearestFilter, magFilter:THREE.NearestFilter, depthBuffer:false, stencilBuffer:false}); }
+function probeSetup(){
+  if(probeS) return;
+  var n = PROBE.statics.reduce(function(t, q){ return t + q.length/3; }, 0), W = 256, H = Math.max(1, Math.ceil(n/W)), data = new Float32Array(W*H*4), k = 0;
+  PROBE.statics.forEach(function(q){ for(var i=0;i<q.length;i+=3){ data[k*4] = q[i]; data[k*4+1] = q[i+1]; data[k*4+2] = q[i+2]; k++; } });
+  probeS = {n:n, pos:new THREE.DataTexture(data, W, H, THREE.RGBAFormat, THREE.FloatType), rt:probeTarget(W, H)};
+  probeS.pos.needsUpdate = true; PROBE.tS.value = probeS.rt.texture; PROBE.sizeS.value.set(W, H);
+  probeB = {data:new Float32Array(32*16*4), rt:probeTarget(32, 16)};
+  probeB.pos = new THREE.DataTexture(probeB.data, 32, 16, THREE.RGBAFormat, THREE.FloatType); PROBE.tB.value = probeB.rt.texture;
+}
+function probePass(src, n, rt){
+  PROBE.pos.value = src; PROBE.size.value.set(rt.width, rt.height); PROBE.count.value = n;
+  renderer.setRenderTarget(rt); renderer.setClearColor(0x000000, 0); renderer.clear(); renderer.render(volScene, camera);
+}
 for(var bi=0;bi<BL;bi++){ rtDown.push(mkTarget(false)); if(bi < BL - 1) rtUp.push(mkTarget(false)); }
 function sizeTargets(){
   var w = Math.max(4, Math.round(window.innerWidth*PR)), h = Math.max(4, Math.round(window.innerHeight*PR));
-  rtMain.setSize(w, h); rtComp.setSize(w, h); if(typeof rtBH !== 'undefined') rtBH.setSize(w, h);
+  rtMain.setSize(w, h); rtComp.setSize(w, h); if(typeof rtBH !== 'undefined') rtBH.setSize(w, h); if(rtEm) rtEm.setSize(w, h);
   rtVol.setSize(Math.max(4, Math.round(w*volScale)), Math.max(4, Math.round(h*volScale)));
+  if(rtOcc){ rtOcc.setSize(rtVol.width, rtVol.height); OCC.res.value.set(rtVol.width, rtVol.height); }
   for(var i=0;i<BL;i++){ var d = Math.pow(2, i + 1), ww = Math.max(2, Math.round(w/d)), hh = Math.max(2, Math.round(h/d)); rtDown[i].setSize(ww, hh); if(i < BL - 1) rtUp[i].setSize(ww, hh); }
 }
 var postScene = new THREE.Scene(), postCam = new THREE.Camera(), postQuad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), null);
 postQuad.frustumCulled = false; postScene.add(postQuad);
 var POST_VS = 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }';
 function postMat(fs, uniforms){ return new THREE.ShaderMaterial({uniforms:uniforms, vertexShader:POST_VS, fragmentShader:fs, depthTest:false, depthWrite:false}); }
-var compU = {tMain:{value:null}, tVol:{value:null}, uVolK:VOLK};
-var compMat = postMat('uniform sampler2D tMain; uniform sampler2D tVol; uniform float uVolK; varying vec2 vUv;' +
+var compU = {tMain:{value:null}, tVol:{value:null}, tEm:{value:null}, uEmOn:{value:0}, uVolK:VOLK};
+var compMat = postMat('uniform sampler2D tMain; uniform sampler2D tVol; uniform sampler2D tEm; uniform float uEmOn; uniform float uVolK; varying vec2 vUv;' +
   'void main(){ vec4 m = texture2D(tMain, vUv); vec4 v = texture2D(tVol, vUv)*uVolK;' +
-  ' gl_FragColor = vec4(m.rgb*(1.0 - v.a) + v.rgb, 1.0); }', compU);
+  ' vec3 e = uEmOn > 0.5 ? texture2D(tEm, vUv).rgb : vec3(0.0);' +
+  ' gl_FragColor = vec4(m.rgb*(1.0 - v.a) + v.rgb + e, 1.0); }', compU);
 var downU = {tSrc:{value:null}, uPx:{value:new THREE.Vector2()}, uThr:{value:0}};
 var downMat = postMat('uniform sampler2D tSrc; uniform vec2 uPx; uniform float uThr; varying vec2 vUv;' +
   'void main(){ vec3 c = texture2D(tSrc, vUv + uPx*vec2(1.0,1.0)).rgb + texture2D(tSrc, vUv + uPx*vec2(-1.0,1.0)).rgb + texture2D(tSrc, vUv + uPx*vec2(1.0,-1.0)).rgb + texture2D(tSrc, vUv + uPx*vec2(-1.0,-1.0)).rgb;' +
@@ -1518,12 +1595,13 @@ function skyUpdate(){
     SKY.rt = new THREE.WebGLCubeRenderTarget(size, {format:THREE.RGBAFormat, minFilter:THREE.LinearFilter, magFilter:THREE.LinearFilter, type:type, generateMipmaps:false, depthBuffer:false});
     SKY.face = new THREE.WebGLRenderTarget(size, size, {minFilter:THREE.LinearFilter, magFilter:THREE.LinearFilter, type:type, depthBuffer:true, stencilBuffer:false});
     SKY.faceVol = new THREE.WebGLRenderTarget(size/2, size/2, {minFilter:THREE.LinearFilter, magFilter:THREE.LinearFilter, type:type, depthBuffer:false, stencilBuffer:false});
-    if(!SKY.cam) SKY.cam = new THREE.CubeCamera(camera.near, camera.far, SKY.rt);
+    if(!SKY.cam){ SKY.cam = new THREE.CubeCamera(camera.near, camera.far, SKY.rt); SKY.cam.children.forEach(function(c){ c.layers.enable(L_EM); }); }
     SKY.cam.updateMatrixWorld(true);
     SKY.n = size; SKY.fresh = false; bhU.tSky.value = SKY.rt.texture;
   }
   viewKeep[0].copy(VIEW.right.value); viewKeep[1].copy(VIEW.up.value); viewKeep[2].copy(VIEW.fwd.value); viewKeep[3] = VIEW.tanF.value; viewKeep[4] = VIEW.aspect.value;
   VIEW.tanF.value = 1; VIEW.aspect.value = 1;                     /* each face is a square, 90 degrees across */
+  var keepUse = PROBE.use.value, keepOcc = OCC.on.value; PROBE.use.value = 0; OCC.on.value = 0; compU.uEmOn.value = 0;
   for(var k=0, n=SKY.fresh ? q.sky[1] : 6; k<n; k++){
     var cam = SKY.cam.children[SKY.next], e = cam.matrixWorld.elements;
     VIEW.right.value.set(e[0], e[1], e[2]); VIEW.up.value.set(e[4], e[5], e[6]); VIEW.fwd.value.set(-e[8], -e[9], -e[10]);
@@ -1536,6 +1614,7 @@ function skyUpdate(){
   }
   VIEW.right.value.copy(viewKeep[0]); VIEW.up.value.copy(viewKeep[1]); VIEW.fwd.value.copy(viewKeep[2]); VIEW.tanF.value = viewKeep[3]; VIEW.aspect.value = viewKeep[4];
   orientBoards(camera.quaternion);
+  PROBE.use.value = keepUse; OCC.on.value = keepOcc;
   SKY.fresh = true;
 }
 var bhRel = new THREE.Vector3();
@@ -1559,9 +1638,35 @@ function drawFrame(){
     bhU.uE1.value.copy(bestH.e1); bhU.uE2.value.copy(bestH.e2); bhU.uAx.value.copy(bestH.ax);
     bhU.uA.value = bestH.a; bhU.uRin.value = bestH.rin; bhU.uDisc.value = bestH.disc; bhU.uJet.value = bestH.jet; bhU.uTemp.value = bestH.temp; bhU.uSeed.value = bestH.seed;
   } else SKY.fresh = false;
+  /* where any cloud is in view: the bodies' depths (to stop the clouds' rays) and the light reaching each shining thing through them */
+  var anyVol = false;
+  for(i=0;i<volScene.children.length;i++){ if(volScene.children[i].visible){ anyVol = true; break; } }
+  var useP = PROBES && anyVol;
+  PROBE.use.value = 0; OCC.on.value = 0;
+  if(useP){
+    occCam.quaternion.copy(camera.quaternion); occCam.updateMatrixWorld();
+    if(occCam.fov !== camera.fov || occCam.aspect !== camera.aspect){ occCam.fov = camera.fov; occCam.aspect = camera.aspect; occCam.updateProjectionMatrix(); }
+    renderer.setRenderTarget(rtOcc); renderer.clear(); scene.overrideMaterial = occMat; renderer.render(scene, occCam); scene.overrideMaterial = null;
+    probeSetup();
+    var nB = Math.min(dots.length, PROBE_B);
+    for(i=0;i<nB;i++){ var dw = dots[i].w; probeB.data[i*4] = dw.x; probeB.data[i*4+1] = dw.y; probeB.data[i*4+2] = dw.z; }
+    probeB.pos.needsUpdate = true;
+    PROBE.mode.value = 1;
+    probePass(probeS.pos, probeS.n, probeS.rt);
+    probePass(probeB.pos, nB, probeB.rt);
+    PROBE.mode.value = 0;
+    PROBE.use.value = 1; OCC.on.value = 1;
+  }
   renderer.setRenderTarget(rtMain); renderer.setClearColor(0x030408, 1); renderer.clear(); renderer.render(scene, camera);
   renderer.setRenderTarget(rtVol); renderer.setClearColor(0x000000, 0); renderer.clear(); renderer.render(volScene, camera);
-  compU.tMain.value = rtMain.texture; compU.tVol.value = rtVol.texture;
+  if(PROBES){
+    /* the shining things, hidden behind the bodies in front of them (their depths go in first, unseen) */
+    renderer.setRenderTarget(rtEm); renderer.setClearColor(0x000000, 0); renderer.clear();
+    camera.layers.set(L_BODY); scene.overrideMaterial = occMat; renderer.render(scene, camera); scene.overrideMaterial = null;
+    camera.layers.set(L_EM); renderer.autoClear = false; renderer.render(scene, camera); renderer.autoClear = true;
+    camera.layers.set(0);
+  }
+  compU.tMain.value = rtMain.texture; compU.tVol.value = rtVol.texture; compU.tEm.value = rtEm ? rtEm.texture : null; compU.uEmOn.value = PROBES ? 1 : 0;
   pass(compMat, rtComp);
   var scene0 = rtComp;
   if(bestH){ bhU.tScene.value = rtComp.texture; pass(bhMat, rtBH); scene0 = rtBH; }
@@ -1900,6 +2005,7 @@ function frame(now){
   for(i=0;i<gals.length;i++){
     var G = gals[i], gu = G.m.material.uniforms;
     gu.uRo.value.copy(P).sub(G.w).divideScalar(G.R).applyMatrix3(G.M);
+    gu.uCtr.value.copy(G.w); gu.uRad.value = G.R; gu.uOccK.value = 1/(s*G.R);
     /* from inside a galaxy its light surrounds you; hold it down so it reads as a soft band, not a wall */
     var gy = gu.uRo.value, inside = 1 - sstep(0.9, 1.6, Math.sqrt(gy.x*gy.x + gy.y*gy.y*10.24 + gy.z*gy.z));
     gu.uGain.value = 1 - 0.93*inside;
@@ -1909,6 +2015,7 @@ function frame(now){
     var Nb = nebs[i];
     if(Nb.R < 0){ Nb.m.visible = false; continue; }
     Nb.m.material.uniforms.uRo.value.copy(P).sub(Nb.w).divideScalar(Nb.R*K('n'));
+    Nb.m.material.uniforms.uCtr.value.copy(Nb.w); Nb.m.material.uniforms.uRad.value = Nb.R*K('n'); Nb.m.material.uniforms.uOccK.value = 1/(s*Nb.R*K('n'));
     /* how many pixels the cloud's radius covers decides how much fine detail is worth drawing */
     var pxR = (rtVol.height/2)/(VIEW.tanF.value*Math.max(Nb.m.material.uniforms.uRo.value.length(), 0.5));
     Nb.m.material.uniforms.uFine.value.set(sstep(400, 1600, pxR), sstep(3200, 12800, pxR), sstep(25000, 100000, pxR));
@@ -1923,8 +2030,10 @@ function frame(now){
   }
   if(plain){
     /* if the finishing pipeline is not available on this device, draw straight to the screen */
+    PROBE.use.value = 0; OCC.on.value = 0; camera.layers.enable(L_EM);
     renderer.setRenderTarget(null); renderer.setClearColor(0x030408, 1); renderer.autoClear = true; renderer.render(scene, camera);
     renderer.autoClear = false; renderer.render(volScene, camera); renderer.autoClear = true;
+    camera.layers.set(0);
   }
 
   /* labels: the dozen or so things you are closest to, relative to how far each one can be seen from */
