@@ -723,6 +723,7 @@ var BODY_VS = 'varying vec3 vObj; varying vec3 vNw; varying vec3 vNv; varying ve
   'vec4 mv = modelViewMatrix*vec4(position,1.0); vV = -mv.xyz; vW = (modelMatrix*vec4(position,1.0)).xyz; gl_Position = projectionMatrix*mv; }';
 /* Real surface maps (Solar System Scope, CC BY 4.0) are wrapped round the bodies that have them. */
 var WHITE = (function(){ var t = new THREE.DataTexture(new Uint8Array([255,255,255,255]), 1, 1, THREE.RGBAFormat); t.needsUpdate = true; return t; })();
+var CLEAR = (function(){ var t = new THREE.DataTexture(new Uint8Array([0,0,0,0]), 1, 1, THREE.RGBAFormat); t.needsUpdate = true; return t; })();
 var ASSETS = window.ASSETS || {tex:{}, named:{}, n:0};
 var STARTUP_TEXTURES = [];
 function loadMap(key){
@@ -5487,9 +5488,18 @@ function drawFrame(){
       camera.layers.set(L_EM); renderer.setRenderTarget(rtMain); renderSceneWithoutClear(scene, camera); camera.layers.set(0);
     }
   }
-  if(RENDER_BUDGET.volumePasses){
+  /* the black hole that looks biggest from here, counting its disc and jets, if any is big enough on screen to matter */
+  var bestA = 0.0012, bestH = null;
+  for(i=0;i<holes.length;i++){
+    var H = kerrHole(holes[i]), reach = H.jet ? 12 : (H.kdisc ? 4 : 1);
+    var app = H.rs*reach*K('s')/Math.max(H.w.distanceTo(P), 1e-30)/(2*VIEW.tanF.value);
+    if(app > bestA && blackHoleAffectsView(H)){ bestA = app; bestH = H; }
+  }
+  /* the hole reads the main picture's depth to keep nearer bodies unbent, so the overlay below must not clear it: with a hole and no
+     clouds, the picture is copied out first and the overlay drawn on the copy */
+  if(RENDER_BUDGET.volumePasses || (bestH && mainDepthSupported)){
     compU.uLens.value.z = 0;
-    compU.tMain.value = rtMain.texture; compU.tVol.value = rtVol.texture; compU.uAspect.value = w/h;
+    compU.tMain.value = rtMain.texture; compU.tVol.value = RENDER_BUDGET.volumePasses ? rtVol.texture : CLEAR; compU.uAspect.value = w/h;
     pass(compMat, rtComp); scene0 = rtComp;
   }
   renderer.autoClear = false; renderer.setRenderTarget(scene0);
@@ -5506,13 +5516,6 @@ function drawFrame(){
       nepCompU.tExp.value = rtExp[expI].texture; nepCompU.uExpOn.value = NEP.ui && !NEP.probe ? 1 : 0;
     }
     nepCompU.tScene.value = scene0.texture; nepCompU.tNep.value = rtNep.texture; pass(nepCompMat, rtNepC); scene0 = rtNepC;
-  }
-  /* the black hole that looks biggest from here, counting its disc and jets, if any is big enough on screen to matter */
-  var bestA = 0.0012, bestH = null;
-  for(i=0;i<holes.length;i++){
-    var H = kerrHole(holes[i]), reach = H.jet ? 12 : (H.kdisc ? 4 : 1);
-    var app = H.rs*reach*K('s')/Math.max(H.w.distanceTo(P), 1e-30)/(2*VIEW.tanF.value);
-    if(app > bestA && blackHoleAffectsView(H)){ bestA = app; bestH = H; }
   }
   RENDER_BUDGET.blackHolePass = !!bestH;
   if(bestH){
