@@ -474,7 +474,7 @@ body.booting>:not(#loading):not(#fail):not(script){visibility:hidden}
         <div id="explorerLookControls" aria-label="觀測效果"></div>
         <div class="explorer-quality">
           <label for="qualitySelect">畫面品質</label>
-          <select id="qualitySelect"><option value="ultra">極致</option><option value="high">高畫質</option><option value="balanced">均衡</option><option value="auto">自動調整</option></select>
+          <select id="qualitySelect"><option value="ultra">極致</option><option value="high">高畫質</option><option value="balanced">均衡</option><option value="smooth">流暢</option><option value="auto">自動調整</option></select>
         </div>
       </div>
     </details>
@@ -4350,15 +4350,25 @@ function mkTarget(depth){
 }
 /* Pixel density stays stable while the volume budget adapts. Labels are DOM text,
    and planets/stars stay in the sharper main target instead of the cloud target. */
+/* The automatic setting moves along these levels as a whole: the main picture's pixel density (pr, at most), the clouds' resolution and
+   samples, the black-hole trace, and the number of glow (bloom) levels. */
 var RENDER_LEVELS = [
-  {scale:0.30, neb:32, gal:24, detail:0.25, shadow:0, bh:190},
-  {scale:0.40, neb:40, gal:28, detail:0.35, shadow:0, bh:210},
-  {scale:0.50, neb:48, gal:32, detail:0.45, shadow:0, bh:230},
-  {scale:0.50, neb:64, gal:48, detail:0.55, shadow:0, bh:250},
-  {scale:0.60, neb:72, gal:48, detail:0.65, shadow:0.15, bh:260},
-  {scale:0.70, neb:80, gal:56, detail:0.75, shadow:0.25, bh:280},
-  {scale:0.80, neb:96, gal:64, detail:0.85, shadow:0.35, bh:300}
+  {scale:0.30, neb:32, gal:24, detail:0.25, shadow:0, bh:190, pr:1.0, bloom:3},
+  {scale:0.40, neb:40, gal:28, detail:0.35, shadow:0, bh:210, pr:1.0, bloom:3},
+  {scale:0.50, neb:48, gal:32, detail:0.45, shadow:0, bh:230, pr:1.25, bloom:4},
+  {scale:0.50, neb:64, gal:48, detail:0.55, shadow:0, bh:250, pr:1.25, bloom:4},
+  {scale:0.60, neb:72, gal:48, detail:0.65, shadow:0.15, bh:260, pr:1.5, bloom:5},
+  {scale:0.70, neb:80, gal:56, detail:0.75, shadow:0.25, bh:280, pr:1.5, bloom:5},
+  {scale:0.80, neb:96, gal:64, detail:0.85, shadow:0.35, bh:300, pr:1.5, bloom:5}
 ];
+var BLOOM_N = 5;
+/* the most pixels per CSS pixel the main picture may use, by setting: 流暢 (smooth) keeps it near one */
+function qualityPixelRatioCap(){
+  if(QUALITY_MODE === 'high') return 2;
+  if(QUALITY_MODE === 'balanced') return 1.5;
+  if(QUALITY_MODE === 'smooth') return 1.25;
+  return RENDER_LEVELS[RENDER_BUDGET.level].pr;
+}
 var RENDER_BUDGET = {level:3, ema:0, slow:0, fast:0, lastChange:0, lastResize:0, lastSample:0,
   resizeCount:0, volumePasses:0, blackHolePass:false};
 var VOLUME_CACHE = {valid:false, signature:[], scratch:[], hits:0, renders:0};
@@ -4429,7 +4439,7 @@ function sizeVolumeTarget(){
 /* Neptune's volume: its own resolution, steps and shadow steps by quality (each step costs a ray march toward the Sun as well) */
 function nepQuality(){
   var lv = typeof RENDER_BUDGET !== 'undefined' ? RENDER_BUDGET.level : 3;
-  return QUALITY_MODE === 'high' ? (QUALITY_ULTRA ? [1.0, 128, 6] : [1.0, 96, 5]) : (QUALITY_MODE === 'balanced' || lv >= 2 ? [0.75, 64, 4] : [0.5, 40, 3]);
+  return QUALITY_MODE === 'high' ? (QUALITY_ULTRA ? [1.0, 128, 6] : [1.0, 96, 5]) : (QUALITY_MODE === 'balanced' || (QUALITY_MODE === 'auto' && lv >= 2) ? [0.75, 64, 4] : [0.5, 40, 3]);
 }
 function sizeNepTarget(){
   if(typeof rtNepC === 'undefined') return;
@@ -4442,8 +4452,8 @@ function sizeNepTarget(){
 }
 function sizeTargets(){
   /* Bound allocation on very large external displays; never infer hardware from a user-agent. */
-  var pixels = QUALITY_MODE === 'high' ? 8388608 : 4194304;
-  var density = Math.min(window.devicePixelRatio || 1, QUALITY_MODE === 'high' ? 2 : 1.5,
+  var pixels = QUALITY_MODE === 'high' ? 8388608 : (QUALITY_MODE === 'smooth' ? 2621440 : 4194304);
+  var density = Math.min(window.devicePixelRatio || 1, qualityPixelRatioCap(),
     Math.sqrt(pixels/Math.max(window.innerWidth*window.innerHeight, 1)));
   if(Math.abs(PR - density) > 0.0001){
     PR = density; renderer.setPixelRatio(PR); renderer.setSize(window.innerWidth, window.innerHeight, false);
@@ -4978,14 +4988,15 @@ function updateBlackHoleSky(hole){
   }
 }
 function applyAutomaticLevel(level, now){
-  var q = RENDER_LEVELS[level], oldScale = volScale;
-  RENDER_BUDGET.level = level; volScale = q.scale;
+  var q = RENDER_LEVELS[level], oldScale = volScale, oldPr = RENDER_LEVELS[RENDER_BUDGET.level].pr;
+  RENDER_BUDGET.level = level; volScale = q.scale; BLOOM_N = q.bloom;
   NEB_SAMPLES.value = HAS3D ? q.neb : Math.max(24, Math.round(q.neb*2/3));
   GAL_SAMPLES.value = HAS3D ? q.gal : Math.max(18, Math.round(q.gal*2/3));
   RENDER_DETAIL.value = VOLUME_DETAIL.value = q.detail; VOLUME_OCCLUSION.value = q.shadow;
   bhU.uSteps.value = q.bh; bhU.uStepScale.value = 1;
   invalidateVolumeCache();
-  if(oldScale !== volScale){ sizeVolumeTarget(); RENDER_BUDGET.lastResize = now; }
+  if(oldPr !== q.pr){ sizeTargets(); RENDER_BUDGET.lastResize = now; }
+  else if(oldScale !== volScale){ sizeVolumeTarget(); RENDER_BUDGET.lastResize = now; }
 }
 function resetRenderBudgetHistory(now){
   RENDER_BUDGET.ema = 0; RENDER_BUDGET.slow = 0; RENDER_BUDGET.fast = 0;
@@ -5008,11 +5019,11 @@ function updateRenderBudget(rawDt, now){
   b.slow = b.ema > 0.028 ? b.slow + dt : 0;
   b.fast = b.ema < 0.0185 ? b.fast + dt : 0;
   var level = b.level;
-  if(b.slow >= 0.8 && now - b.lastChange >= 1000 && level > 0) level--;
-  else if(b.fast >= 6 && now - b.lastChange >= 6000 && level < RENDER_LEVELS.length - 1) level++;
+  if(b.slow >= 1.0 && now - b.lastChange >= 1500 && level > 0) level--;
+  else if(b.fast >= 8 && now - b.lastChange >= 8000 && level < RENDER_LEVELS.length - 1) level++;
   if(level === b.level) return false;
   /* Samples can change cheaply; resize only this one target, at most every 2 s. */
-  if(RENDER_LEVELS[level].scale !== volScale && now - b.lastResize < 2000) return false;
+  if((RENDER_LEVELS[level].scale !== volScale || RENDER_LEVELS[level].pr !== RENDER_LEVELS[b.level].pr) && now - b.lastResize < 2000) return false;
   applyAutomaticLevel(level, now); b.lastChange = now; b.slow = b.fast = 0;
   return true;
 }
@@ -5020,7 +5031,7 @@ function updateRenderBudget(rawDt, now){
    edges by multisampling. The choice is remembered on this device. */
 var QUALITY_ULTRA = false;
 function setQuality(mode, transient){
-  if(mode !== 'ultra' && mode !== 'high' && mode !== 'balanced' && mode !== 'auto') return false;
+  if(mode !== 'ultra' && mode !== 'high' && mode !== 'balanced' && mode !== 'smooth' && mode !== 'auto') return false;
   QUALITY_ULTRA = mode === 'ultra'; if(QUALITY_ULTRA) mode = 'high';
   QUALITY_MODE = mode;
   if(!transient){ try{ localStorage.setItem('universe-quality', QUALITY_ULTRA ? 'ultra' : mode); }catch(e){} }
@@ -5033,7 +5044,12 @@ function setQuality(mode, transient){
   RENDER_DETAIL.value = VOLUME_DETAIL.value = high ? 1 : 0.55; VOLUME_OCCLUSION.value = high ? 1 : 0;
   bhU.uSteps.value = high ? 380 : 250; bhU.uStepScale.value = high ? 0.65 : 1;
   if(QUALITY_ULTRA){ NEB_SAMPLES.value = HAS3D ? 160 : 72; GAL_SAMPLES.value = HAS3D ? 112 : 56; bhU.uSteps.value = 400; bhU.uStepScale.value = 0.55; }
+  BLOOM_N = 5;
+  /* 流暢 (smooth): about one pixel per CSS pixel, a third fewer cloud pixels and samples, a coarser black-hole trace, three glow levels */
+  if(mode === 'smooth'){ volScale = 0.4; NEB_SAMPLES.value = HAS3D ? 48 : 36; GAL_SAMPLES.value = HAS3D ? 32 : 24; RENDER_DETAIL.value = VOLUME_DETAIL.value = 0.45;
+    bhU.uSteps.value = 220; bhU.uStepScale.value = 1.2; BLOOM_N = 3; }
   RENDER_BUDGET.level = 3; resetRenderBudgetHistory(performance.now());
+  if(mode === 'auto') BLOOM_N = RENDER_LEVELS[3].bloom;
   /* A preset change may alter the tile grid even when the cube dimensions match. */
   bhSky.dirty = true; bhSky.face = bhSky.tile = 0;
   if(typeof ftA !== 'undefined') ftA = 0; if(typeof ftN !== 'undefined') ftN = 0;
@@ -5401,9 +5417,9 @@ function drawFrame(){
     pass(bhMat, rtBH); scene0 = rtBH;
   }
   var src = scene0;
-  for(i=0;i<BL;i++){ downU.tSrc.value = src.texture; downU.uPx.value.set(1/src.width, 1/src.height); downU.uThr.value = i === 0 ? (HDR ? 0.85 : 0.62) : 0; pass(downMat, rtDown[i]); src = rtDown[i]; }
-  var low = rtDown[BL - 1];
-  for(i=BL-2;i>=0;i--){ upU.tA.value = rtDown[i].texture; upU.tB.value = low.texture; upU.uPx.value.set(1/low.width, 1/low.height); pass(upMat, rtUp[i]); low = rtUp[i]; }
+  for(i=0;i<BLOOM_N;i++){ downU.tSrc.value = src.texture; downU.uPx.value.set(1/src.width, 1/src.height); downU.uThr.value = i === 0 ? (HDR ? 0.85 : 0.62) : 0; pass(downMat, rtDown[i]); src = rtDown[i]; }
+  var low = rtDown[BLOOM_N - 1];
+  for(i=BLOOM_N-2;i>=0;i--){ upU.tA.value = rtDown[i].texture; upU.tB.value = low.texture; upU.uPx.value.set(1/low.width, 1/low.height); pass(upMat, rtUp[i]); low = rtUp[i]; }
   finU.tScene.value = scene0.texture; finU.tBloom.value = low.texture; finU.uAspect.value = w/h; finU.uRes.value.set(w, h);
   pass(finMat, null);
 }
