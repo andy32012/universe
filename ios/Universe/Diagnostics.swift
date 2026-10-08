@@ -108,13 +108,14 @@ final class DiagnosticsHandler: NSObject, WKScriptMessageHandler {
         if text.hasPrefix("PERF "), let line = perfLine(String(text.dropFirst(5))) {
             DiagnosticsLog.shared.write(line)
         } else {
-            DiagnosticsLog.shared.write(String(text.prefix(4000)))
+            DiagnosticsLog.shared.write(String(text.prefix(12000)))
         }
     }
 
-    /* One line per five seconds: frame rate, the whole system's CPU use over the same five seconds, the game
-       code's time per frame, and a guess at the bottleneck. iPadOS gives apps no GPU use figure, so a slow
-       frame with an idle CPU and quick game code is put down to the GPU. */
+    /* One line per five seconds: frame rate, the whole system's CPU use over the same five seconds, and the game
+       code's time per frame. That time includes waiting: when the GPU falls behind, WebKit holds the page's
+       drawing calls until it catches up, so a long time with idle cores means waiting on the GPU. The GPU 分段
+       reports say which passes and objects that time goes to. */
     private func perfLine(_ json: String) -> String? {
         guard let data = json.data(using: .utf8),
               let p = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
@@ -122,13 +123,8 @@ final class DiagnosticsHandler: NSObject, WKScriptMessageHandler {
               let js = p["js"] as? Double, let jsMax = p["jsMax"] as? Double else { return nil }
         let load = cpu.sample()
         let cpuText = load.map { String(format: "CPU 全部 %.0f%%・最忙的核心 %.0f%%", $0.total, $0.busiest) } ?? "CPU 量測中"
-        let frameMs = 1000 / max(fps, 0.1)
-        let bottleneck: String
-        if fps >= 55 { bottleneck = "無（順暢）" }
-        else if js >= frameMs * 0.7 || (load?.busiest ?? 0) >= 90 { bottleneck = "CPU（推測）" }
-        else { bottleneck = "GPU（推測）" }
         return String(format: "PERF %.1f 幀/秒｜最慢一幀 %.0f 毫秒｜", fps, worst) + cpuText +
-            String(format: "｜遊戲程式每幀 %.1f 毫秒（最多 %.0f）｜瓶頸 ", js, jsMax) + bottleneck + ((p["where"] as? String) ?? "")
+            String(format: "｜遊戲程式每幀 %.1f 毫秒（最多 %.0f）", js, jsMax) + ((p["where"] as? String) ?? "")
     }
 
     /* Runs in the game page before its own code. It reports errors, files that fail to load, the graphics
@@ -148,7 +144,9 @@ final class DiagnosticsHandler: NSObject, WKScriptMessageHandler {
       function where(){
         var place = document.getElementById('place'), nep = document.getElementById('nepInfo'), q = null;
         try{ q = localStorage.getItem('universe-quality'); }catch(e){}
+        var cv = document.querySelector('canvas:not(#hdr)'), hdrCv = document.getElementById('hdr');
         return '｜位置 ' + (place ? place.textContent.trim() : '?') +
+          (cv ? '｜繪圖 ' + cv.width + '×' + cv.height : '') + (hdrCv && hdrCv.style.display === 'block' ? '｜HDR 開' : '') +
           (nep && !nep.hidden && nep.firstChild ? '｜' + String(nep.firstChild.nodeValue).trim() : '') +
           '｜畫質 ' + (q || 'high（預設）');
       }
@@ -169,6 +167,83 @@ final class DiagnosticsHandler: NSObject, WKScriptMessageHandler {
           return original.apply(console, arguments);
         };
       });
+      /* ---- GPU timing ----
+         iPadOS gives web pages no GPU timer, so every fifteen seconds one frame is drawn with the GPU made to finish
+         before and after each pass (renderer.render) and each object (renderBufferDirect), which shows how long each
+         takes. three.js is caught as it defines itself, so the renderer the game makes is timed without changing it. */
+      var profiling = null, profileDue = performance.now() + 15000, ids = new WeakMap(), nextId = {S:0, M:0, T:0}, legend = {};
+      function idOf(o, kind){ if(!o) return '?'; var v = ids.get(o); if(!v){ v = kind + (++nextId[kind]); ids.set(o, v); } return v; }
+      function add(map, key, ms){ var e = map[key] || (map[key] = {ms:0, n:0}); e.ms += ms; e.n++; }
+      function hook(r){
+        var gl = r.getContext(), render = r.render, draw = r.renderBufferDirect, px = new Uint8Array(4), syncFb = null;
+        /* wait until the GPU has done everything asked of it so far: finish(), and since some browsers return from
+           finish() at once, also a one-pixel read from a framebuffer of our own (bindings are put back as they were,
+           so three.js's own record of them stays true) */
+        function sync(){
+          gl.finish();
+          if(typeof WebGL2RenderingContext === 'undefined' || !(gl instanceof WebGL2RenderingContext)) return;
+          if(!syncFb){
+            var unit = gl.getParameter(gl.TEXTURE_BINDING_2D), tex = gl.createTexture();
+            gl.bindTexture(gl.TEXTURE_2D, tex);
+            gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+            gl.bindTexture(gl.TEXTURE_2D, unit);
+            var read = gl.getParameter(gl.READ_FRAMEBUFFER_BINDING);
+            syncFb = gl.createFramebuffer();
+            gl.bindFramebuffer(gl.READ_FRAMEBUFFER, syncFb);
+            gl.framebufferTexture2D(gl.READ_FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
+            gl.bindFramebuffer(gl.READ_FRAMEBUFFER, read);
+          }
+          var before = gl.getParameter(gl.READ_FRAMEBUFFER_BINDING);
+          gl.bindFramebuffer(gl.READ_FRAMEBUFFER, syncFb);
+          gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px);
+          gl.bindFramebuffer(gl.READ_FRAMEBUFFER, before);
+        }
+        r.render = function(scene){
+          if(!profiling) return render.apply(r, arguments);
+          var t = r.getRenderTarget();
+          var label = idOf(scene, 'S') + '（' + (scene && scene.children ? scene.children.length : 0) + ' 個物件' +
+            (scene && scene.overrideMaterial ? '，覆蓋材質' : '') + '）→ ' + (t ? idOf(t, 'T') + ' ' + t.width + '×' + t.height : '螢幕');
+          sync(); var s = performance.now();
+          try{ return render.apply(r, arguments); }
+          finally{ sync(); add(profiling.passes, label, performance.now() - s); }
+        };
+        r.renderBufferDirect = function(camera, scene, geometry, material, object){
+          if(!profiling) return draw.apply(r, arguments);
+          var id = (object && object.name) || idOf(material, 'M');
+          if(!legend[id]) legend[id] = (material ? material.type : '?') + '：' + (material && material.uniforms ? Object.keys(material.uniforms).join(',') : '');
+          sync(); var s = performance.now();
+          try{ return draw.apply(r, arguments); }
+          finally{ sync(); add(profiling.objects, id, performance.now() - s); }
+        };
+      }
+      try{
+        var three;
+        Object.defineProperty(window, 'THREE', {configurable:true, enumerable:true, get:function(){ return three; }, set:function(ns){
+          three = ns;
+          var Original;
+          function Renderer(params){
+            var r = new Original(params);
+            try{ hook(r); }catch(e){ post('ERROR GPU 計時掛不上去：' + e); }
+            return r;
+          }
+          Object.defineProperty(ns, 'WebGLRenderer', {configurable:true, enumerable:true,
+            get:function(){ return Original ? Renderer : undefined; },
+            set:function(c){ Original = c; Renderer.prototype = c.prototype; }});
+        }});
+      }catch(e){ post('ERROR GPU 計時無法準備：' + e); }
+      function ranked(map, n){
+        return Object.keys(map).map(function(k){ return [k, map[k].ms, map[k].n]; }).sort(function(a, b){ return b[1] - a[1]; }).slice(0, n);
+      }
+      function report(p, frameMs){
+        var passes = ranked(p.passes, 12), objects = ranked(p.objects, 12);
+        if(!passes.length){ profileDue = performance.now() + 1000; return; }
+        var sum = 0; Object.keys(p.passes).forEach(function(k){ sum += p.passes[k].ms; });
+        function line(x){ return '  ' + x[1].toFixed(1) + ' 毫秒  ' + x[0] + (x[2] > 1 ? '（' + x[2] + ' 次）' : ''); }
+        post('GPU 分段｜這一幀 ' + Math.round(frameMs) + ' 毫秒，各步驟加起來 ' + Math.round(sum) + ' 毫秒' + where() +
+          '\n 步驟（最久的在前）：\n' + passes.map(line).join('\n') +
+          '\n 最花時間的繪製：\n' + objects.map(function(x){ return line(x) + '  ' + legend[x[0]]; }).join('\n'), true);
+      }
+
       window.addEventListener('webglcontextlost', function(){ post('GPU 繪圖環境中斷（webglcontextlost）' + where()); }, true);
       window.addEventListener('webglcontextrestored', function(){ post('GPU 繪圖環境恢復' + where()); }, true);
 
@@ -188,8 +263,16 @@ final class DiagnosticsHandler: NSObject, WKScriptMessageHandler {
       var raf = window.requestAnimationFrame.bind(window), busy = 0, busyMax = 0, calls = 0;
       window.requestAnimationFrame = function(cb){
         return raf(function(t){
-          var s = performance.now();
-          try{ return cb(t); }finally{ var d = performance.now() - s; busy += d; calls++; if(d > busyMax) busyMax = d; }
+          var s = performance.now(), timed = false, loading = document.getElementById('loading');
+          if(!profiling && s >= profileDue && !document.hidden && loading && loading.hidden){
+            profiling = {passes:{}, objects:{}}; timed = true; profileDue = s + 15000;
+          }
+          try{ return cb(t); }
+          finally{
+            var d = performance.now() - s;
+            if(timed){ var p = profiling; profiling = null; report(p, d); }
+            else { busy += d; calls++; if(d > busyMax) busyMax = d; }
+          }
         });
       };
       var frames = 0, worst = 0, last = 0, since = 0;
