@@ -1774,7 +1774,8 @@ function blackHole(name, sub, pos, rs, disc, lo, hi, a, b, c, d){
    flow: 'thin' is a thin, dense disc glowing like a hot body, as round a hole feeding fast (lam: how fast, as a fraction of the Eddington rate);
    'thick' is the thin, hot, puffed-up gas round a hole that is barely feeding, which light passes through; none: nothing shines round it.
    disc: how strongly it is shown; rout: how far out it reaches (GM/c^2); jet: the twin jets along the spin axis.
-   Spins and axes are measured values where there are any (Cygnus X-1 about 0.95, M87* jet angle about 17 degrees), reasonable guesses otherwise. */
+   Spins and axes are measured values where there are any (Cygnus X-1 about 0.95, M87* jet angle about 17 degrees, GRS 1915+105 near the
+   limit with its jet at about 60 degrees, A0620-00 about 0.12, V404 Cygni at about 67 degrees, A0620-00 at 51), reasonable guesses otherwise. */
 var MSUN_LY = 1.4766/9.4607e12;    /* GM/c^2 for one Sun (1.48 km), in light-years: the unit the tracer works in */
 var KERR = {
   '天鵝座 X-1':{spin:0.95, incl:27, pa:20, flow:'thin', lam:0.02, rout:20, disc:1, jet:0.35},
@@ -1782,7 +1783,13 @@ var KERR = {
   '蓋亞 BH3':{spin:0.3, incl:70, pa:300},
   '人馬座 A*':{spin:0.9, incl:30, pa:60, flow:'thick', rout:25, thick:0.8, disc:0.7},
   'M87*':{spin:0.9, incl:17, pa:288, flow:'thick', rout:30, thick:0.6, disc:1, jet:1},
-  'TON 618':{spin:0.9, incl:10, pa:40, flow:'thin', lam:1, rout:45, disc:1, jet:0.6}
+  'TON 618':{spin:0.9, incl:10, pa:40, flow:'thin', lam:1, rout:45, disc:1, jet:0.6},
+  '天鵝座 V404':{spin:0.6, incl:67, pa:200, flow:'thin', lam:0.1, rout:30, disc:0.9, jet:0.3},
+  'GRS 1915+105':{spin:0.98, incl:60, pa:150, flow:'thin', lam:1, rout:40, disc:1, jet:1},
+  'A0620-00':{spin:0.12, incl:51, pa:80, flow:'thick', rout:30, thick:0.7, disc:0.5},
+  'M31*':{spin:0.6, incl:77, pa:38, flow:'thick', rout:20, thick:0.8, disc:0.5},
+  '半人馬座 A*':{spin:0.7, incl:50, pa:55, flow:'thick', rout:25, thick:0.5, disc:0.8, jet:1},
+  'NGC 4889*':{spin:0.5, incl:40, pa:10}
 };
 var bhRel = new THREE.Vector3(), dragQ = new THREE.Quaternion();
 /* the innermost stable orbit, inside which the gas plunges in; closer for a faster spin (Bardeen, Press and Teukolsky 1972) */
@@ -4118,6 +4125,52 @@ var OBSERVED_BLACK_HOLES=[
     sourceLabel:'Gaia Collaboration（2024），表 2／式 5',sourceUrl:'https://doi.org/10.1051/0004-6361/202449763',dormant:true,
     description:'天鷹座方向的安靜黑洞，透過伴星運動發現。它本身不發出可見光，畫面不添加明亮吸積盤、噴流或虛構的附近石頭；伴星尚未重建。'}
 ];
+/* six more holes, with the same kind of record: masses and distances from the studies named; directions from SIMBAD (rounded to about
+   an arcsecond, ample at these distances). keepPosition: kept at the centre of the galaxy drawn round it, as for Sgr A*. */
+OBSERVED_BLACK_HOLES.push(
+  {name:'天鵝座 V404',aliases:['V404 Cygni','V404 Cyg','GS 2023+338','天鹅座 V404'],mass:9.0,
+    massText:'9.0 +0.2/−0.6 個太陽質量（伴星光譜與光變曲線）',distancePc:2390,ra:306.01592,dec:33.86719,
+    distanceText:'2.39 ± 0.14 千秒差距，約 7,800 ± 460 光年；電波干涉儀直接量得的視差（0.418 ± 0.024 mas）。',
+    positionText:'方向採 SIMBAD 座標，距離採視差解。固定系統位置，未推進自行或雙星位移；伴星相位為示意。',
+    sourceLabel:'Miller-Jones 等（2009）視差／Khargharia 等（2010）質量',sourceUrl:'https://arxiv.org/abs/0910.5253',secondarySourceUrl:'https://arxiv.org/abs/1004.5358',coordinateId:'V404 Cyg',
+    companionRadiusSolar:6,companionText:'伴星是 K3 III 巨星，半徑約 6 個太陽半徑為近似值；相對位置、表面和軌道相位為示意。',
+    description:'2015 年猛烈爆發過的恆星級黑洞。質量依賴伴星質量函數與傾角，早期估計曾高達約 12 個太陽質量。'},
+  {name:'GRS 1915+105',aliases:['GRS1915+105','V1487 Aql','V1487 Aquilae'],mass:12.4,
+    massText:'12.4 +2.0/−1.8 個太陽質量（視差距離＋軌道解）',distancePc:8600,ra:288.79812,dec:10.94577,
+    distanceText:'8.6 +2.0/−1.6 千秒差距，約 2.8 萬光年；甚長基線干涉儀視差。',
+    positionText:'方向採 SIMBAD 座標，距離採視差解。固定系統位置；伴星相位為示意。',
+    sourceLabel:'Reid 等（2014），ApJ 796, 2',sourceUrl:'https://doi.org/10.1088/0004-637X/796/1/2',coordinateId:'GRS 1915+105',
+    companionRadiusSolar:20,companionText:'伴星是 K 型巨星，半徑約 20 個太陽半徑為粗略近似；相對位置、表面與軌道相位為示意。',
+    description:'銀河系裡的「微類星體」：噴流以約 0.65–0.81 倍光速射出，論文也初步確認黑洞自轉極快。'},
+  {name:'A0620-00',aliases:['A0620−00','V616 Mon','V616 Monocerotis','Nova Monocerotis 1975'],mass:6.61,
+    massText:'6.61 ± 0.25 個太陽質量（三十年光變資料求傾角）',distancePc:1060,ra:95.68543,dec:-0.34576,
+    distanceText:'1.06 ± 0.12 千秒差距，約 3,460 ± 390 光年；由雙星模型與伴星星等推得。',
+    positionText:'方向採 SIMBAD 座標。固定系統位置；伴星相位為示意。',
+    sourceLabel:'Cantrell 等（2010），ApJ 710, 1127',sourceUrl:'https://arxiv.org/abs/1001.0261',coordinateId:'V616 Mon',
+    companionRadiusSolar:0.7,companionText:'伴星是 K 型矮星，半徑約 0.7 個太陽半徑為近似值；不到 8 小時繞一圈，相位為示意。',
+    description:'離我們最近的黑洞之一，平時幾乎不吃東西，只剩稀薄的熱氣流。'},
+  {name:'M31*',aliases:['M31 black hole','M31 SMBH','仙女座星系中心黑洞','Andromeda black hole'],mass:1.4e8,keepPosition:true,
+    massText:'約 1.4 億個太陽質量（中心藍色星盤 P3 的轉速）；各方法約 0.3–2.3 億',distancePc:765000,ra:10.68471,dec:41.26875,
+    distanceText:'仙女座星系約 254 萬光年（約 0.78 百萬秒差距；各方法約 0.75–0.79 百萬秒差距）。',
+    positionText:'放在畫面上仙女座星系的中心，與整個星系模型對齊；量測方向見 SIMBAD。',
+    sourceLabel:'Bender 等（2005），ApJ 631, 280',sourceUrl:'https://arxiv.org/abs/astro-ph/0509839',coordinateId:'M 31',
+    massLimit:'Bender 等以 P3 星盤的克卜勒轉速推得約 1.4 億；其他動力學方法落在約 0.3–2.3 億之間，並非單一置信區間。',
+    description:'仙女座星系中心的超大質量黑洞，被一圈年輕藍色恆星組成的小星盤繞著。'},
+  {name:'半人馬座 A*',aliases:['Centaurus A*','Cen A*','NGC 5128 black hole','半人马座 A*'],mass:5.5e7,
+    massText:'5,500 ± 3,000 萬個太陽質量（恆星運動，3σ）',distancePc:3.8e6,ra:201.36508,dec:-43.01911,
+    distanceText:'3.8 ± 0.1 百萬秒差距，約 1,240 萬光年；多種距離指標的綜合。',
+    positionText:'方向採 SIMBAD 的星系核心座標，距離採 Harris 等的綜合值。未重建宿主星系。',
+    sourceLabel:'Cappellari 等（2009）質量／Harris 等（2010）距離',sourceUrl:'https://arxiv.org/abs/0812.1000',secondarySourceUrl:'https://arxiv.org/abs/0911.3180',coordinateId:'Centaurus A',
+    massLimit:'以氣體運動求得約 4,500 萬，與恆星運動的 5,500 萬在誤差內一致；誤差超過一半，數值依方法而異。',
+    description:'最近的活躍星系核，噴流噴出星系之外好幾萬光年。'},
+  {name:'NGC 4889*',aliases:['NGC 4889 black hole','Caldwell 35 black hole','后髮座 NGC 4889'],mass:2.1e10,dormant:true,
+    massText:'約 210 億個太陽質量（最佳擬合；可能範圍約 60–370 億）',distancePc:1.03e8,ra:195.03388,dec:27.97694,
+    distanceText:'約 103 百萬秒差距，約 3.36 億光年；論文採用的后髮座星系團距離，其他估計約 94 百萬秒差距。',
+    positionText:'方向採 SIMBAD 的星系核心座標；未重建宿主星系。',
+    sourceLabel:'McConnell 等（2011），Nature 480, 215',sourceUrl:'https://arxiv.org/abs/1112.1078',coordinateId:'NGC 4889',
+    massLimit:'以恆星運動求得；最佳值約 210 億，範圍約 60–370 億，誤差很大。',
+    description:'后髮座星系團最亮的星系中心、已知最重的黑洞之一，現在幾乎不吃東西：周圍不發光，只看得到被彎曲的星空。'}
+);
 function observedBlackHolePosition(spec){
   var distance=spec.redshift ? COSMOLOGY.atRedshift(spec.redshift).distanceLy : spec.distancePc*OBSERVED_BH_PC_LY;
   var ra=rad(spec.ra),dec=rad(spec.dec),x=Math.cos(dec)*Math.cos(ra),y=Math.cos(dec)*Math.sin(ra),z=Math.sin(dec);
@@ -4138,8 +4191,8 @@ OBSERVED_BLACK_HOLES.forEach(function(spec){
     {label:'畫面外觀',kind:'illustration',text:appearance},
     {label:'未重建項目',kind:'unknown',text:spec.companionText?'當前雙星相位、伴星表面細節及吸積流三維結構未重建。':spec.dormant?'伴星尚未定位重建；自轉大小與轉軸方向是假設值，完整三維環境未驗證。':'吸積流三維密度、磁場與時變亮度未重建；自轉大小與轉軸方向除天鵝座 X-1、M87* 有觀測推論外為合理假設。'}
   ];
-  if(spec.secondarySourceUrl)evidence[0].text+=' 舊估計來源：Shemmer 等（2004），doi:10.1086/423607。';
-  BODY_INFO[spec.name]={kind:spec.dormant?'安靜恆星級黑洞':spec.name==='TON 618'?'類星體／超大質量黑洞':'黑洞',aliases:spec.aliases,
+  if(spec.secondarySourceUrl)evidence[0].text+=spec.name==='TON 618'?' 舊估計來源：Shemmer 等（2004），doi:10.1086/423607。':' 另見：'+spec.secondarySourceUrl;
+  BODY_INFO[spec.name]={kind:spec.dormant?(spec.mass>1e5?'安靜超大質量黑洞':'安靜恆星級黑洞'):spec.name==='TON 618'?'類星體／超大質量黑洞':'黑洞',aliases:spec.aliases,
     massSolar:spec.mass,massText:spec.massText,schwarzschildRadiusKm:rs,schwarzschildRadiusNote:sizeNote,shadowRadiusKm:2.6*rs,
     sourceLabel:spec.sourceLabel,sourceUrl:source,physicalSourceUrl:source,secondarySourceUrl:spec.secondarySourceUrl,
     coordinateSourceUrl:spec.coordinateId?'https://simbad.cds.unistra.fr/simbad/sim-id?Ident='+encodeURIComponent(spec.coordinateId):source,
@@ -4183,6 +4236,26 @@ function calibrateObservedBlackHoles(){
 (function(){
   var spec=OBSERVED_BLACK_HOLES[5],radius=2.6*observedSchwarzschildKm(spec.mass)*AU_LY/SOLAR_AU_KM;
   blackHole(spec.name,spec.massText,observedBlackHolePosition(spec),radius,0,1.2,4.4,1.2,2.0,4.4,5.0);
+  calibrateObservedBlackHoles();
+  /* the six added holes: label range, the point of light that stands for each from afar (colour, size, when it shows), its companion star */
+  var MORE={
+    '天鵝座 V404':{lo:2.9,hi:5.1,glow:[1.0,0.62,0.3],k:0.006,ga:[1.6,2.4,5.0,5.6],comp:[2.31e-6,[1.0,0.80,0.58]]},
+    'GRS 1915+105':{lo:3.2,hi:5.3,glow:[1.0,0.7,0.4],k:0.006,ga:[2.0,2.8,5.2,5.8],comp:[7.6e-6,[1.0,0.72,0.48]]},
+    'A0620-00':{lo:2.6,hi:4.8,glow:[1.0,0.62,0.3],k:0.005,ga:[1.4,2.2,4.8,5.4],comp:[2.78e-7,[1.0,0.70,0.45]]},
+    'M31*':{lo:4.5,hi:5.6,glow:[1.0,0.66,0.35],k:0.008,ga:[4.6,5.4,7.6,8.2],at:M31},
+    '半人馬座 A*':{lo:5.6,hi:6.6,glow:[1.0,0.7,0.4],k:0.01,ga:[5.0,5.8,8.2,8.8]},
+    'NGC 4889*':{lo:7.0,hi:7.9}
+  };
+  OBSERVED_BLACK_HOLES.slice(6).forEach(function(sp){
+    var o=MORE[sp.name],r=2.6*observedSchwarzschildKm(sp.mass)*AU_LY/SOLAR_AU_KM,pos=o.at?o.at.clone():observedBlackHolePosition(sp);
+    blackHole(sp.name,sp.massText,pos,r,sp.dormant?0:1,o.lo,o.hi,1.2,2.0,4.4,5.0);
+    if(o.glow) dot(pos,lyRoot,o.glow,r,o.k,false,o.ga[0],o.ga[1],o.ga[2],o.ga[3],'s');
+    if(o.comp){
+      var off=new THREE.Vector3(o.comp[0],o.comp[0]*0.1,o.comp[0]*0.33),cp=pos.clone().add(off),cr=sp.companionRadiusSolar*RSUN_LY;
+      var bm=body(9,cr,cp,lyRoot,o.comp[1],null,o.ga[0],o.ga[1],o.ga[2],o.ga[3],'s'),dm=dot(cp,lyRoot,o.comp[1],cr,0.011,true,o.ga[0],o.ga[1],o.ga[2],o.ga[3],'s');
+      moved.push({b:bm,d:dm,rec:dots[dots.length-1],hole:pos.clone(),off:off});
+    }
+  });
   calibrateObservedBlackHoles();
 })();
 
