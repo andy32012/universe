@@ -474,7 +474,7 @@ body.booting>:not(#loading):not(#fail):not(script){visibility:hidden}
         <div id="explorerLookControls" aria-label="觀測效果"></div>
         <div class="explorer-quality">
           <label for="qualitySelect">畫面品質</label>
-          <select id="qualitySelect"><option value="high">高畫質</option><option value="balanced">均衡</option><option value="auto">自動調整</option></select>
+          <select id="qualitySelect"><option value="ultra">極致</option><option value="high">高畫質</option><option value="balanced">均衡</option><option value="auto">自動調整</option></select>
         </div>
       </div>
     </details>
@@ -4373,6 +4373,33 @@ var rtMain = mkTarget(true), rtVol = mkTarget(false), rtComp = mkTarget(false), 
 // of the accumulated distant gas. No extra scene draw or full-size colour target.
 var mainDepthSupported=renderer.capabilities.isWebGL2 || !!gl.getExtension('WEBGL_depth_texture');
 if(mainDepthSupported)rtMain.depthTexture=new THREE.DepthTexture(4,4,THREE.UnsignedShortType);
+/* Smoother edges on planets, rings and orbits at the higher settings: the main picture is drawn with several samples per pixel where the
+   device can, and resolved (colour and depth) before the clouds use it. */
+var MSAA = (function(){
+  try{
+    if(!renderer.capabilities.isWebGL2 || !THREE.WebGLMultisampleRenderTarget) return 0;
+    var n = Math.min(4, gl.getParameter(gl.MAX_SAMPLES) || 0); if(n < 2) return 0;
+    var rb = gl.createRenderbuffer(); gl.bindRenderbuffer(gl.RENDERBUFFER, rb);
+    gl.renderbufferStorageMultisample(gl.RENDERBUFFER, n, HDR ? gl.RGBA16F : gl.RGBA8, 4, 4);
+    var fb = gl.createFramebuffer(); gl.bindFramebuffer(gl.FRAMEBUFFER, fb);
+    gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.RENDERBUFFER, rb);
+    var ok = gl.checkFramebufferStatus(gl.FRAMEBUFFER) === gl.FRAMEBUFFER_COMPLETE && gl.getError() === gl.NO_ERROR;
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null); gl.bindRenderbuffer(gl.RENDERBUFFER, null); gl.deleteFramebuffer(fb); gl.deleteRenderbuffer(rb);
+    renderer.state.reset();
+    return ok ? n : 0;
+  }catch(e){ return 0; }
+})(), mainMsaa = false;
+function setMainMsaa(on){
+  on = !!(on && MSAA);
+  if(on === mainMsaa) return;
+  var w = rtMain.width, h = rtMain.height, opts = {minFilter:THREE.LinearFilter, magFilter:THREE.LinearFilter, type:HDR ? THREE.HalfFloatType : THREE.UnsignedByteType, depthBuffer:true, stencilBuffer:false};
+  var t = on ? new THREE.WebGLMultisampleRenderTarget(w, h, opts) : new THREE.WebGLRenderTarget(w, h, opts);
+  if(on) t.samples = MSAA;
+  if(mainDepthSupported) t.depthTexture = new THREE.DepthTexture(w, h, THREE.UnsignedShortType);
+  var old = rtMain; rtMain = t; mainMsaa = on; old.dispose();
+  if(typeof compU !== 'undefined') compU.tDepth.value = rtMain.depthTexture || WHITE;
+  invalidateVolumeCache();
+}
 for(var bi=0;bi<BL;bi++){ rtDown.push(mkTarget(false)); if(bi < BL - 1) rtUp.push(mkTarget(false)); }
 function resizeTarget(target, w, h){
   if(target.width === w && target.height === h) return false;
@@ -4387,7 +4414,7 @@ function sizeVolumeTarget(){
 /* Neptune's volume: its own resolution, steps and shadow steps by quality (each step costs a ray march toward the Sun as well) */
 function nepQuality(){
   var lv = typeof RENDER_BUDGET !== 'undefined' ? RENDER_BUDGET.level : 3;
-  return QUALITY_MODE === 'high' ? [1.0, 96, 5] : (QUALITY_MODE === 'balanced' || lv >= 2 ? [0.75, 64, 4] : [0.5, 40, 3]);
+  return QUALITY_MODE === 'high' ? (QUALITY_ULTRA ? [1.0, 128, 6] : [1.0, 96, 5]) : (QUALITY_MODE === 'balanced' || lv >= 2 ? [0.75, 64, 4] : [0.5, 40, 3]);
 }
 function sizeNepTarget(){
   if(typeof rtNepC === 'undefined') return;
@@ -4974,9 +5001,15 @@ function updateRenderBudget(rawDt, now){
   applyAutomaticLevel(level, now); b.lastChange = now; b.slow = b.fast = 0;
   return true;
 }
+/* 極致 (ultra) is 高 with more samples through the clouds, a finer trace round black holes and through Neptune's air; 高 and 極致 smooth
+   edges by multisampling. The choice is remembered on this device. */
+var QUALITY_ULTRA = false;
 function setQuality(mode){
-  if(mode !== 'high' && mode !== 'balanced' && mode !== 'auto') return false;
+  if(mode !== 'ultra' && mode !== 'high' && mode !== 'balanced' && mode !== 'auto') return false;
+  QUALITY_ULTRA = mode === 'ultra'; if(QUALITY_ULTRA) mode = 'high';
   QUALITY_MODE = mode;
+  try{ localStorage.setItem('universe-quality', QUALITY_ULTRA ? 'ultra' : mode); }catch(e){}
+  setMainMsaa(mode === 'high');
   invalidateVolumeCache();
   var high = mode === 'high';
   volScale = high ? 1.0 : 0.5;
@@ -4984,13 +5017,14 @@ function setQuality(mode){
   GAL_SAMPLES.value = HAS3D ? (high ? 96 : 48) : (high ? 48 : 32);
   RENDER_DETAIL.value = VOLUME_DETAIL.value = high ? 1 : 0.55; VOLUME_OCCLUSION.value = high ? 1 : 0;
   bhU.uSteps.value = high ? 380 : 250; bhU.uStepScale.value = high ? 0.65 : 1;
+  if(QUALITY_ULTRA){ NEB_SAMPLES.value = HAS3D ? 160 : 72; GAL_SAMPLES.value = HAS3D ? 112 : 56; bhU.uSteps.value = 400; bhU.uStepScale.value = 0.55; }
   RENDER_BUDGET.level = 3; resetRenderBudgetHistory(performance.now());
   /* A preset change may alter the tile grid even when the cube dimensions match. */
   bhSky.dirty = true; bhSky.face = bhSky.tile = 0;
   if(typeof ftA !== 'undefined') ftA = 0; if(typeof ftN !== 'undefined') ftN = 0;
   sizeTargets(); return true;
 }
-setQuality('high');
+(function(){ var saved = null; try{ saved = localStorage.getItem('universe-quality'); }catch(e){} if(!setQuality(saved)) setQuality('high'); })();
 function pass(mat, target){ postQuad.material = mat; renderer.setRenderTarget(target); renderer.render(postScene, postCam); }
 /* Main/volume targets are explicitly cleared once by their caller. Leave the
    post passes' tile-friendly automatic clears and the caller's setting intact. */
@@ -5961,7 +5995,7 @@ $('#objectFollow').addEventListener('click', beginExplorerFollow);
 $('#objectOrbit').addEventListener('click', beginExplorerOrbit);
 $('#objectRelease').addEventListener('click', cancelExplorerTravel);
 $('#explorerStop').addEventListener('click', function(){ cancelExplorerTravel(); canvas.focus({preventScroll:true}); });
-$('#qualitySelect').value = typeof QUALITY_MODE === 'string' ? QUALITY_MODE : 'high';
+$('#qualitySelect').value = typeof QUALITY_MODE === 'string' ? (QUALITY_ULTRA ? 'ultra' : QUALITY_MODE) : 'high';
 $('#qualitySelect').addEventListener('change', function(e){ if(typeof setQuality === 'function') setQuality(e.target.value); });
 EXPLORER.select = selectExplorerObject;
 EXPLORER.fly = beginExplorerTravel;
@@ -6860,6 +6894,12 @@ document.addEventListener('visibilitychange', function(){
 showState();
 })();
 
+</script>
+<script>
+/* keep a copy for offline use once the page is installed (see sw.js); only works when served over http(s) */
+if('serviceWorker' in navigator && /^https?:$/.test(location.protocol)){
+  window.addEventListener('load', function(){ navigator.serviceWorker.register('sw.js').catch(function(){}); });
+}
 </script>
 </body>
 </html>
