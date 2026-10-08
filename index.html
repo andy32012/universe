@@ -533,7 +533,91 @@ var clamp = function(x,a,b){ return Math.min(b, Math.max(a, x)); };
 var sstep = function(a,b,x){ var t = clamp((x - a)/(b - a), 0, 1); return t*t*(3 - 2*t); };
 /* galactic longitude, latitude (degrees) and distance -> scene axes: x toward the galactic centre, y toward the galactic north pole */
 function gal(l, b, d){ l = rad(l); b = rad(b); return new THREE.Vector3(d*Math.cos(b)*Math.cos(l), d*Math.sin(b), -d*Math.cos(b)*Math.sin(l)); }
-var rnd = (function(){ var s = 20261007; return function(){ s = (s*1664525 + 1013904223) >>> 0; return s/4294967296; }; })();
+var RNG = {s:20261007};
+var rnd = function(){ RNG.s = (RNG.s*1664525 + 1013904223) >>> 0; return RNG.s/4294967296; };
+/* The heavy start-up generation (the baked cloud noise, the galaxies of the cosmic web) runs in a Web Worker built from genKit, so the
+   page stays responsive while it works. genKit is self-contained and draws from the same random stream (its state is handed over), so the
+   universe comes out exactly as it would on the main thread, which is where it runs if workers are not available. */
+function genKit(R){
+  function rnd(){ R.s = (R.s*1664525 + 1013904223) >>> 0; return R.s/4294967296; }
+  /* two independent fields of four-octave value noise, on an N^3 grid that repeats, as bytes */
+  function bake(N){
+    var octs = [4, 8, 16, 32], amps = [0.5, 0.25, 0.125, 0.0625], acc = new Float32Array(N*N*N*2), o, x, y, z, ch;
+    for(o=0;o<octs.length;o++){
+      var c = octs[o], lat = new Float32Array(c*c*c*2), amp = amps[o], k;
+      for(k=0;k<lat.length;k++) lat[k] = rnd();
+      var i0 = new Int32Array(N), i1 = new Int32Array(N), tw = new Float32Array(N);
+      for(k=0;k<N;k++){ var f = k/N*c, fi = Math.floor(f), t = f - fi; i0[k] = fi % c; i1[k] = (fi + 1) % c; tw[k] = t*t*(3 - 2*t); }
+      for(z=0;z<N;z++){ var z0 = i0[z]*c*c, z1 = i1[z]*c*c, tz = tw[z];
+        for(y=0;y<N;y++){ var y0 = i0[y]*c, y1 = i1[y]*c, ty = tw[y], row = (z*N + y)*N*2;
+          for(x=0;x<N;x++){ var x0 = i0[x], x1 = i1[x], tx = tw[x];
+            for(ch=0;ch<2;ch++){
+              var a00 = lat[(z0 + y0 + x0)*2 + ch], a10 = lat[(z0 + y0 + x1)*2 + ch], a01 = lat[(z0 + y1 + x0)*2 + ch], a11 = lat[(z0 + y1 + x1)*2 + ch];
+              var b00 = lat[(z1 + y0 + x0)*2 + ch], b10 = lat[(z1 + y0 + x1)*2 + ch], b01 = lat[(z1 + y1 + x0)*2 + ch], b11 = lat[(z1 + y1 + x1)*2 + ch];
+              var lo = (a00 + (a10 - a00)*tx) + ((a01 + (a11 - a01)*tx) - (a00 + (a10 - a00)*tx))*ty;
+              var hi = (b00 + (b10 - b00)*tx) + ((b01 + (b11 - b01)*tx) - (b00 + (b10 - b00)*tx))*ty;
+              acc[row + x*2 + ch] += amp*(lo + (hi - lo)*tz);
+            } } } }
+    }
+    var out = new Uint8Array(N*N*N*2);
+    for(var q=0;q<out.length;q++) out[q] = Math.min(255, Math.round(acc[q]/0.9375*255));
+    return {out:out, transfer:[out.buffer]};
+  }
+  /* value noise, used to lay galaxies out along walls and filaments */
+  function hashN(x, y, z){ var n = Math.sin(x*127.1 + y*311.7 + z*74.7)*43758.5453; return n - Math.floor(n); }
+  function noise3(x, y, z){
+    var xi = Math.floor(x), yi = Math.floor(y), zi = Math.floor(z), xf = x - xi, yf = y - yi, zf = z - zi;
+    var u = xf*xf*(3 - 2*xf), v = yf*yf*(3 - 2*yf), w = zf*zf*(3 - 2*zf);
+    function L(a, b, t){ return a + (b - a)*t; }
+    return L(L(L(hashN(xi,yi,zi), hashN(xi+1,yi,zi), u), L(hashN(xi,yi+1,zi), hashN(xi+1,yi+1,zi), u), v),
+             L(L(hashN(xi,yi,zi+1), hashN(xi+1,yi,zi+1), u), L(hashN(xi,yi+1,zi+1), hashN(xi+1,yi+1,zi+1), u), v), w);
+  }
+  /* n galaxies within radius R, gathered onto walls and filaments of the given cell size: [x, y, z, r, g, b, size] each */
+  function webby(Rad, n, cell, col, size){
+    var out = [], tries = 0, x, y, z;
+    while(out.length < n && tries < n*40){
+      tries++;
+      do{ x = rnd()*2-1; y = rnd()*2-1; z = rnd()*2-1; }while(x*x + y*y + z*z > 1);
+      x *= Rad; y *= Rad; z *= Rad;
+      var a = noise3(x/cell + 11.3, y/cell + 4.1, z/cell + 7.7)*0.6 + noise3(x/cell*2.1, y/cell*2.1 + 9.0, z/cell*2.1)*0.4;
+      var b = noise3(x/cell + 31.0, y/cell + 17.0, z/cell + 2.0);
+      var wa = 1 - Math.abs(2*a - 1), wb = 1 - Math.abs(2*b - 1);
+      if(rnd() < Math.pow(wa, 7)*(0.25 + 0.75*Math.pow(wb, 3))){
+        var t = rnd();
+        out.push([x, y, z, col[0]*(0.8 + 0.2*t), col[1]*(0.8 + 0.2*t), col[2], size*(0.8 + 0.6*rnd())]);
+      }
+    }
+    return out;
+  }
+  /* several webs in turn, as typed arrays ready for the graphics card */
+  function web(jobs){
+    var clouds = [], transfer = [];
+    jobs.forEach(function(j){
+      var list = webby(j[0], j[1], j[2], j[3], j[4]), n = list.length, pos = new Float32Array(n*3), col = new Float32Array(n*3), siz = new Float32Array(n);
+      for(var i=0;i<n;i++){ var q = list[i]; pos[i*3] = q[0]; pos[i*3+1] = q[1]; pos[i*3+2] = q[2]; col[i*3] = q[3]; col[i*3+1] = q[4]; col[i*3+2] = q[5]; siz[i] = q[6]; }
+      clouds.push({pos:pos, col:col, siz:siz}); transfer.push(pos.buffer, col.buffer, siz.buffer);
+    });
+    return {out:clouds, transfer:transfer};
+  }
+  return {bake:bake, webby:webby, web:web};
+}
+var KIT = genKit(RNG);
+/* run a genKit job off the main thread, starting the random stream at state s; done(result, the stream's state after) */
+function genJob(job, arg, s, done){
+  function here(){ setTimeout(function(){ var R = {s:s}, r = genKit(R)[job](arg); done(r.out, R.s); }, 0); }
+  var w, settled = false;
+  try{
+    if(typeof Worker === 'undefined' || typeof Blob === 'undefined' || !window.URL || !URL.createObjectURL) throw 0;
+    if(!genJob.url) genJob.url = URL.createObjectURL(new Blob(['var R = {s:0}, G = (' + genKit.toString() + ')(R);' +
+      'onmessage = function(e){ R.s = e.data.s; var r = G[e.data.job](e.data.arg); postMessage({out:r.out, s:R.s}, r.transfer); };'], {type:'text/javascript'}));
+    w = new Worker(genJob.url);
+  }catch(e){ here(); return; }
+  w.onmessage = function(e){ if(settled) return; settled = true; w.terminate(); done(e.data.out, e.data.s); };
+  w.onerror = function(e){ if(e && e.preventDefault) e.preventDefault(); if(settled) return; settled = true; w.terminate(); here(); };
+  w.postMessage({job:job, arg:arg, s:s});
+}
+/* the state of the stream after k more draws (to step past draws made elsewhere) */
+function rngSkip(s, k){ for(var i=0;i<k;i++) s = (s*1664525 + 1013904223) >>> 0; return s; }
 function gauss(){ var u = 1 - rnd(), v = rnd(); return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v); }
 function inSphere(R){ var v = new THREE.Vector3(); do{ v.set(rnd()*2-1, rnd()*2-1, rnd()*2-1); }while(v.lengthSq() > 1); return v.multiplyScalar(R); }
 
@@ -604,6 +688,9 @@ function cloud(list, a, b, c, d, parent, grow, probe){
     pos[i*3] = s[0]; pos[i*3+1] = s[1]; pos[i*3+2] = s[2];
     col[i*3] = s[3]; col[i*3+1] = s[4]; col[i*3+2] = s[5]; siz[i] = s[6];
   }
+  return cloudArrays(pos, col, siz, a, b, c, d, parent, grow, probe);
+}
+function cloudArrays(pos, col, siz, a, b, c, d, parent, grow, probe){
   var g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
   g.setAttribute('aCol', new THREE.BufferAttribute(col, 3));
@@ -1217,31 +1304,15 @@ var VIEW = {right:{value:new THREE.Vector3()}, up:{value:new THREE.Vector3()}, f
    Both paths give the same kind of noise; the baked one simply lets the clouds use many more samples. */
 var HAS3D = !!(renderer.capabilities && renderer.capabilities.isWebGL2 && THREE.DataTexture3D);
 var volTex = {value:null};
-function bakeVolume(N){
-  var octs = [4, 8, 16, 32], amps = [0.5, 0.25, 0.125, 0.0625], acc = new Float32Array(N*N*N*2), o, x, y, z, ch;
-  for(o=0;o<octs.length;o++){
-    var c = octs[o], lat = new Float32Array(c*c*c*2), amp = amps[o], k;
-    for(k=0;k<lat.length;k++) lat[k] = rnd();
-    var i0 = new Int32Array(N), i1 = new Int32Array(N), tw = new Float32Array(N);
-    for(k=0;k<N;k++){ var f = k/N*c, fi = Math.floor(f), t = f - fi; i0[k] = fi % c; i1[k] = (fi + 1) % c; tw[k] = t*t*(3 - 2*t); }
-    for(z=0;z<N;z++){ var z0 = i0[z]*c*c, z1 = i1[z]*c*c, tz = tw[z];
-      for(y=0;y<N;y++){ var y0 = i0[y]*c, y1 = i1[y]*c, ty = tw[y], row = (z*N + y)*N*2;
-        for(x=0;x<N;x++){ var x0 = i0[x], x1 = i1[x], tx = tw[x];
-          for(ch=0;ch<2;ch++){
-            var a00 = lat[(z0 + y0 + x0)*2 + ch], a10 = lat[(z0 + y0 + x1)*2 + ch], a01 = lat[(z0 + y1 + x0)*2 + ch], a11 = lat[(z0 + y1 + x1)*2 + ch];
-            var b00 = lat[(z1 + y0 + x0)*2 + ch], b10 = lat[(z1 + y0 + x1)*2 + ch], b01 = lat[(z1 + y1 + x0)*2 + ch], b11 = lat[(z1 + y1 + x1)*2 + ch];
-            var lo = (a00 + (a10 - a00)*tx) + ((a01 + (a11 - a01)*tx) - (a00 + (a10 - a00)*tx))*ty;
-            var hi = (b00 + (b10 - b00)*tx) + ((b01 + (b11 - b01)*tx) - (b00 + (b10 - b00)*tx))*ty;
-            acc[row + x*2 + ch] += amp*(lo + (hi - lo)*tz);
-          } } } }
-  }
-  var out = new Uint8Array(N*N*N*2);
-  for(var q=0;q<out.length;q++) out[q] = Math.min(255, Math.round(acc[q]/0.9375*255));
-  return out;
-}
+/* the noise is baked off the main thread (see genKit); it is ready before the first frame (the loader waits for it) */
+var VOLUME_BAKE = {promise:null, ready:false};
 if(HAS3D){
   try{
-    var VN = 96, vt = new THREE.DataTexture3D(bakeVolume(VN), VN, VN, VN);
+    var VN = 96, vt = new THREE.DataTexture3D(new Uint8Array(VN*VN*VN*2).fill(128), VN, VN, VN);
+    var bakeFrom = RNG.s; RNG.s = rngSkip(RNG.s, (4*4*4 + 8*8*8 + 16*16*16 + 32*32*32)*2);      /* the lattice draws the bake makes */
+    VOLUME_BAKE.promise = new Promise(function(resolve){
+      genJob('bake', VN, bakeFrom, function(data){ vt.image.data = data; vt.needsUpdate = true; VOLUME_BAKE.ready = true; if(typeof invalidateVolumeCache === 'function') invalidateVolumeCache(); resolve(); });
+    });
     vt.format = THREE.RGFormat; vt.type = THREE.UnsignedByteType; vt.internalFormat = 'RG8';
     vt.minFilter = vt.magFilter = THREE.LinearFilter; vt.wrapS = vt.wrapT = vt.wrapR = THREE.RepeatWrapping; vt.unpackAlignment = 1; vt.needsUpdate = true;
     volTex.value = vt;
@@ -4007,30 +4078,8 @@ var M31 = gal(121.2, -21.6, 2.54e6), M33 = gal(133.6, -31.3, 2.73e6), LMC = gal(
   mark('三角座星系', label('三角座星系', '273 萬光年', M33, 5.7, 7.5, false), 6000);
 })();
 
-/* value noise in script, used to lay galaxies out along walls and filaments */
-function hashN(x, y, z){ var n = Math.sin(x*127.1 + y*311.7 + z*74.7)*43758.5453; return n - Math.floor(n); }
-function noise3(x, y, z){
-  var xi = Math.floor(x), yi = Math.floor(y), zi = Math.floor(z), xf = x - xi, yf = y - yi, zf = z - zi;
-  var u = xf*xf*(3 - 2*xf), v = yf*yf*(3 - 2*yf), w = zf*zf*(3 - 2*zf);
-  function L(a, b, t){ return a + (b - a)*t; }
-  return L(L(L(hashN(xi,yi,zi), hashN(xi+1,yi,zi), u), L(hashN(xi,yi+1,zi), hashN(xi+1,yi+1,zi), u), v),
-           L(L(hashN(xi,yi,zi+1), hashN(xi+1,yi,zi+1), u), L(hashN(xi,yi+1,zi+1), hashN(xi+1,yi+1,zi+1), u), v), w);
-}
-function webby(R, n, cell, col, size){
-  var out = [], tries = 0, v;
-  while(out.length < n && tries < n*40){
-    tries++;
-    v = inSphere(R);
-    var a = noise3(v.x/cell + 11.3, v.y/cell + 4.1, v.z/cell + 7.7)*0.6 + noise3(v.x/cell*2.1, v.y/cell*2.1 + 9.0, v.z/cell*2.1)*0.4;
-    var b = noise3(v.x/cell + 31.0, v.y/cell + 17.0, v.z/cell + 2.0);
-    var wa = 1 - Math.abs(2*a - 1), wb = 1 - Math.abs(2*b - 1);
-    if(rnd() < Math.pow(wa, 7)*(0.25 + 0.75*Math.pow(wb, 3))){
-      var t = rnd();
-      out.push([v.x, v.y, v.z, col[0]*(0.8 + 0.2*t), col[1]*(0.8 + 0.2*t), col[2], size*(0.8 + 0.6*rnd())]);
-    }
-  }
-  return out;
-}
+/* galaxies along walls and filaments (see genKit), drawn from the shared random stream */
+function webby(R, n, cell, col, size){ return KIT.webby(R, n, cell, col, size); }
 
 /* ---------- 5. our supercluster: Virgo and Laniakea (real cluster positions) ---------- */
 /* (layers 5 and 6 are built a moment after the first frame, so the page appears at once) */
@@ -4073,8 +4122,12 @@ setTimeout(function(){
 
 /* ---------- 6. the cosmic web, out to the edge ---------- */
 setTimeout(function(){
-  cloud(webby(3.6e9, 42000, 3.2e8, [0.82,0.86,1.0], 1.9), 7.9, 8.6, 10.0, 10.6);
-  cloud(webby(EDGE*0.985, 80000, 3.4e9, [0.86,0.84,1.0], 1.8), 9.1, 9.8, 12.5, 13);
+  /* the two largest webs (122,000 galaxies) are generated off the main thread and added when ready */
+  genJob('web', [[3.6e9, 42000, 3.2e8, [0.82,0.86,1.0], 1.9], [EDGE*0.985, 80000, 3.4e9, [0.86,0.84,1.0], 1.8]], RNG.s, function(clouds, after){
+    RNG.s = after;
+    cloudArrays(clouds[0].pos, clouds[0].col, clouds[0].siz, 7.9, 8.6, 10.0, 10.6);
+    cloudArrays(clouds[1].pos, clouds[1].col, clouds[1].siz, 9.1, 9.8, 12.5, 13);
+  });
   label('牧夫座空洞', '7 億光年', gal(80, 60, 7e8), 8.4, 9.8, false);
   label('史隆長城', '約 12 億光年', gal(310, 62, 1.2e9), 8.6, 10.0, false);
   label('武仙–北冕座長城', '約 150 億光年', gal(60, 45, 1.5e10), 9.8, 11.1, false);
@@ -6147,6 +6200,7 @@ function prepareUniverse(){
       for(i=0;i<segments.length;i++){
         await bootYield();surfaceGeometry(segments[i]);bootProgress('準備天體',true);
       }
+      if(VOLUME_BAKE.promise){ await VOLUME_BAKE.promise; }
       for(i=0;i<stages.length;i++){
         await bootYield();renderer.compile(stages[i],camera);await bootProgramsReady();bootProgress('即將啟程',true);
       }
