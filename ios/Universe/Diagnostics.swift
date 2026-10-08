@@ -1,8 +1,8 @@
 import UIKit
 import WebKit
 
-/* A plain-text log of errors and performance, kept at 檔案 → 我的 iPad → 宇宙 → universe-log.txt,
-   so it can be attached to a message. It records no diary text or other content of the game. */
+/* A plain-text log of errors and performance in the app's Documents folder, sent with the settings panel's
+   分享記錄檔 button. It records no diary text or other content of the game. */
 final class DiagnosticsLog {
     static let shared = DiagnosticsLog()
 
