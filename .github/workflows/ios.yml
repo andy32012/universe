@@ -41,6 +41,7 @@ jobs:
           xcodebuild build -project ios/Universe.xcodeproj -scheme Universe -configuration Release \
             -destination 'generic/platform=iOS' -derivedDataPath "$RUNNER_TEMP/derived" \
             CODE_SIGNING_ALLOWED=NO
+          plutil -p "$RUNNER_TEMP/derived/Build/Products/Release-iphoneos/Universe.app/Info.plist"
           mkdir -p "$RUNNER_TEMP/ipa/Payload"
           cp -R "$RUNNER_TEMP/derived/Build/Products/Release-iphoneos/Universe.app" "$RUNNER_TEMP/ipa/Payload/"
           (cd "$RUNNER_TEMP/ipa" && zip -qry Universe-unsigned.ipa Payload)
