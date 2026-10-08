@@ -18,6 +18,20 @@ final class DiagnosticsLog {
     }()
     private var observers: [NSObjectProtocol] = []
 
+    /* waits for the writes already queued, before the file is handed to the share sheet */
+    func flush() { queue.sync {} }
+
+    var sizeText: String {
+        flush()
+        let bytes = ((try? FileManager.default.attributesOfItem(atPath: url.path)[.size]) as? Int) ?? 0
+        return bytes < 1024 ? "\(bytes) bytes" : "\(bytes / 1024) KB"
+    }
+
+    static var version: String {
+        let info = Bundle.main.infoDictionary ?? [:]
+        return "\(info["CFBundleShortVersionString"] ?? "?") (\(info["CFBundleVersion"] ?? "?"))"
+    }
+
     func write(_ text: String) {
         let line = "\(stamp.string(from: Date())) \(text)\n"
         queue.async { [url, limit] in
@@ -39,8 +53,7 @@ final class DiagnosticsLog {
 
     /* what the device is and what iPadOS reports about heat, power and memory */
     func start() {
-        let info = Bundle.main.infoDictionary ?? [:]
-        let version = "\(info["CFBundleShortVersionString"] ?? "?") (\(info["CFBundleVersion"] ?? "?"))"
+        let version = Self.version
         let process = ProcessInfo.processInfo
         let screen = UIScreen.main
         write("===== 開啟 App \(version)｜\(Self.model())｜\(UIDevice.current.systemName) \(UIDevice.current.systemVersion)" +
@@ -192,6 +205,24 @@ final class DiagnosticsHandler: NSObject, WKScriptMessageHandler {
         raf(tick);
       }
       raf(tick);
+      /* a button at the end of the settings panel that hands the log file to the share sheet, with the
+         app's version beside it (window.universeApp is set by the app before this script) */
+      document.addEventListener('DOMContentLoaded', function(){
+        var after = document.querySelector('.settings-refresh');
+        if(!after || !window.webkit || !window.webkit.messageHandlers.shareLog) return;
+        var style = document.createElement('style');
+        style.textContent = '#shareLog{display:flex;justify-content:space-between;align-items:center;gap:12px;width:100%;min-height:48px;padding:0 12px;' +
+          'border:1px solid var(--line);border-radius:9px;color:var(--ink-dim);font-size:12px;text-align:left}';
+        document.head.appendChild(style);
+        var box = document.createElement('div'), button = document.createElement('button'), note = document.createElement('p');
+        box.className = 'settings-refresh'; note.className = 'explorer-muted';
+        button.type = 'button'; button.id = 'shareLog'; button.innerHTML = '分享記錄檔 <span aria-hidden="true">↗</span>';
+        button.addEventListener('click', function(){ window.webkit.messageHandlers.shareLog.postMessage(''); });
+        var app = window.universeApp || {};
+        note.textContent = 'App 版本 ' + (app.version || '?') + '｜錯誤與效能的記錄（開啟時 ' + (app.logSize || '?') + '），可以傳給開發者。';
+        box.appendChild(button); box.appendChild(note);
+        after.parentNode.insertBefore(box, after.nextSibling);
+      });
       /* time spent in the background is not counted */
       document.addEventListener('visibilitychange', function(){ reset(); since = 0; last = 0; });
     })();
@@ -223,5 +254,23 @@ final class CPUMeter {
             busiest = max(busiest, (all - idle) / all)
         }
         return total > 0 ? (busy / total * 100, busiest * 100) : nil
+    }
+}
+
+/* The settings panel's 分享記錄檔 button: opens the share sheet with the log file, so it can be sent
+   (to the Claude app, AirDrop, Mail) or saved to Files without finding the app's folder there. */
+final class ShareLogHandler: NSObject, WKScriptMessageHandler {
+    static let name = "shareLog"
+
+    func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {
+        guard let webView = message.webView else { return }
+        DiagnosticsLog.shared.write("SHARE 分享記錄檔")
+        DiagnosticsLog.shared.flush()
+        let sheet = UIActivityViewController(activityItems: [DiagnosticsLog.shared.url], applicationActivities: nil)
+        sheet.popoverPresentationController?.sourceView = webView
+        sheet.popoverPresentationController?.sourceRect = CGRect(x: webView.bounds.midX, y: webView.bounds.midY, width: 1, height: 1)
+        var top = webView.window?.rootViewController
+        while let next = top?.presentedViewController { top = next }
+        top?.present(sheet, animated: true)
     }
 }

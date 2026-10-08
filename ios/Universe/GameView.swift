@@ -14,9 +14,12 @@ struct GameView: UIViewRepresentable {
         configuration.setURLSchemeHandler(BundleSchemeHandler(), forURLScheme: BundleSchemeHandler.scheme)
         configuration.allowsInlineMediaPlayback = true
         configuration.mediaTypesRequiringUserActionForPlayback = []
+        let app = "window.universeApp = {version: \"\(DiagnosticsLog.version)\", logSize: \"\(DiagnosticsLog.shared.sizeText)\"};"
+        configuration.userContentController.addUserScript(WKUserScript(source: app, injectionTime: .atDocumentStart, forMainFrameOnly: true))
         configuration.userContentController.addUserScript(WKUserScript(source: DiagnosticsHandler.pageScript,
                                                                        injectionTime: .atDocumentStart, forMainFrameOnly: true))
         configuration.userContentController.add(DiagnosticsHandler(), name: DiagnosticsHandler.name)
+        configuration.userContentController.add(ShareLogHandler(), name: ShareLogHandler.name)
 
         let webView = WKWebView(frame: .zero, configuration: configuration)
         let background = UIColor(named: "LaunchBackground")
