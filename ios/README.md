@@ -12,7 +12,7 @@ App 是一個外殼：用 `WKWebView` 執行跟網站相同的 `index.html`。�
 用免費的 Apple ID 簽名，不用加入 Apple Developer Program。限制是裝好的 App **7 天後就打不開**，要重新安裝一次；而且同時最多只能裝 3 個這樣的 App。
 
 1. **下載 App**：登入 GitHub 後，到「Actions → iPad App」，點最新一次成功的執行，在最下方「Artifacts」下載 `Universe-unsigned-ipa`，解壓縮後會得到 `Universe-unsigned.ipa`。
-2. **準備電腦**：在電腦上安裝 [Sideloadly](https://sideloadly.io)（或 AltStore），並依照它網站的說明安裝 iTunes。
+2. **準備電腦**：Windows 要先安裝 Apple 官網下載的 iTunes 和 iCloud（Sideloadly 下載頁上有「Web iTunes 64-bit」「Web iCloud」連結；Microsoft Store 版不能用，裝過的話要先移除），再安裝 [Sideloadly](https://sideloadly.io)（或 AltStore）。
 3. **安裝**：用傳輸線把 iPad 接上電腦，在 iPad 上按「信任」。把 `.ipa` 拖進 Sideloadly，輸入 Apple ID，按「Start」。建議用另一個 Apple ID，不要用主要帳號，因為密碼會交給這個第三方工具。
 4. **開啟開發者模式**：在 iPad 的「設定 → 隱私權與安全性 → 開發者模式」打開，iPad 會重新開機，開機後按「開啟」確認。
 5. **信任開發者**：到「設定 → 一般 → VPN 與裝置管理」，點你的 Apple ID，按「信任」。
