@@ -1,0 +1,72 @@
+# Builds the iPad/iPhone app from the website files on a GitHub-hosted Mac.
+# Every push checks that the app still builds. On main, once the four App Store Connect
+# secrets are set (see ios/README.md), it is signed and uploaded to TestFlight as a new build.
+name: iPad App
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - index.html
+      - manifest.json
+      - 'icon-*.png'
+      - 'assets/**'
+      - 'ios/**'
+      - .github/workflows/ios.yml
+
+concurrency:
+  group: ios-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: macos-26
+    timeout-minutes: 45
+    env:
+      BUNDLE_ID: ${{ vars.IOS_BUNDLE_ID || 'io.github.andy32012.universe' }}
+      UPLOAD: ${{ github.ref == 'refs/heads/main' && secrets.ASC_KEY_P8 != '' && secrets.ASC_KEY_ID != '' && secrets.ASC_ISSUER_ID != '' && secrets.APPLE_TEAM_ID != '' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Prepare the Xcode project
+        run: |
+          xcodebuild -version
+          brew install xcodegen
+          ios/prepare.sh
+          xcodegen generate --spec ios/project.yml
+
+      - name: Build without signing
+        if: env.UPLOAD != 'true'
+        run: |
+          xcodebuild build -project ios/Universe.xcodeproj -scheme Universe -configuration Release \
+            -destination 'generic/platform=iOS' -derivedDataPath "$RUNNER_TEMP/derived" \
+            CODE_SIGNING_ALLOWED=NO
+
+      - name: Archive and upload to TestFlight
+        if: env.UPLOAD == 'true'
+        env:
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          KEY="$RUNNER_TEMP/AuthKey_$ASC_KEY_ID.p8"
+          printf '%s\n' "$ASC_KEY_P8" > "$KEY"
+          AUTH="-allowProvisioningUpdates -authenticationKeyPath $KEY -authenticationKeyID $ASC_KEY_ID -authenticationKeyIssuerID $ASC_ISSUER_ID"
+          cat > "$RUNNER_TEMP/ExportOptions.plist" <<EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyLists/PLIST-1.0.dtd">
+          <plist version="1.0"><dict>
+            <key>method</key><string>app-store-connect</string>
+            <key>destination</key><string>upload</string>
+            <key>signingStyle</key><string>automatic</string>
+            <key>teamID</key><string>$APPLE_TEAM_ID</string>
+          </dict></plist>
+          EOF
+          xcodebuild archive -project ios/Universe.xcodeproj -scheme Universe -configuration Release \
+            -destination 'generic/platform=iOS' -archivePath "$RUNNER_TEMP/Universe.xcarchive" \
+            DEVELOPMENT_TEAM="$APPLE_TEAM_ID" PRODUCT_BUNDLE_IDENTIFIER="$BUNDLE_ID" \
+            CURRENT_PROJECT_VERSION="${{ github.run_number }}" $AUTH
+          xcodebuild -exportArchive -archivePath "$RUNNER_TEMP/Universe.xcarchive" \
+            -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist" -exportPath "$RUNNER_TEMP/export" $AUTH
+          rm -f "$KEY"

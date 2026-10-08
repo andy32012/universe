@@ -1,0 +1,5 @@
+# made by prepare.sh and xcodegen
+/Web/
+/Universe.xcodeproj/
+/Universe/Assets.xcassets/AppIcon.appiconset/AppIcon.png
+/build/
