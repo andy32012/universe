@@ -1,0 +1,104 @@
+# Builds the Godot port (godot/) as an iPad app on a GitHub-hosted Mac, unsigned, for installing with
+# Sideloadly from Windows like the web-view app (see ios/README.md). A separate app (its own bundle id), so
+# the web-view app stays installed beside it.
+name: iPad App (Godot)
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'godot/**'
+      - .github/workflows/godot-ios.yml
+
+concurrency:
+  group: godot-ios-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  GODOT_VERSION: 4.7.2
+  GODOT_RELEASE: 4.7.2-stable
+
+jobs:
+  build:
+    runs-on: macos-26
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache Godot and its export templates
+        id: cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/godot
+            ~/Library/Application Support/Godot/export_templates
+          key: godot-${{ env.GODOT_RELEASE }}-macos
+
+      - name: Download Godot and its export templates
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: |
+          base="https://github.com/godotengine/godot/releases/download/$GODOT_RELEASE"
+          mkdir -p ~/godot
+          curl -fsSL -o ~/godot/editor.zip "$base/Godot_v${GODOT_RELEASE}_macos.universal.zip"
+          (cd ~/godot && unzip -q editor.zip && rm editor.zip)
+          curl -fsSL -o ~/godot/templates.tpz "$base/Godot_v${GODOT_RELEASE}_export_templates.tpz"
+          dest="$HOME/Library/Application Support/Godot/export_templates/${GODOT_VERSION}.stable"
+          mkdir -p "$dest"
+          (cd ~/godot && unzip -q templates.tpz && mv templates/* "$dest/" && rm -rf templates templates.tpz)
+          ls "$dest" | head
+
+      - name: Number this build
+        run: |
+          # the log and the settings panel show it; the app's build number too
+          python3 - "${{ github.run_number }}" <<'EOF'
+          import re, sys
+          n = sys.argv[1]
+          p = 'godot/export_presets.cfg'
+          s = open(p, encoding='utf-8').read()
+          open(p, 'w', encoding='utf-8').write(re.sub(r'(?m)^application/version=.*$', 'application/version="%s"' % n, s))
+          p = 'godot/project.godot'
+          s = open(p, encoding='utf-8').read()
+          s = re.sub(r'(?m)^(config/description=.*)$', r'\1\nconfig/version="godot-%s"' % n, s, count=1)
+          open(p, 'w', encoding='utf-8').write(s)
+          EOF
+          grep -n 'version' godot/project.godot godot/export_presets.cfg
+
+      - name: Export the Xcode project (shader baker on)
+        run: |
+          GODOT=~/godot/Godot.app/Contents/MacOS/Godot
+          $GODOT --version
+          mkdir -p build/ios
+          $GODOT --headless --path godot --import
+          $GODOT --headless --path godot --export-release "iOS" ../build/ios/Universe.ipa 2>&1 | tee build/export.log
+          ls -la build/ios
+
+      - name: Build without signing
+        run: |
+          cd build/ios
+          proj=$(ls -d *.xcodeproj | head -1)
+          scheme=$(basename "$proj" .xcodeproj)
+          xcodebuild -list -project "$proj"
+          xcodebuild build -project "$proj" -scheme "$scheme" -configuration Release \
+            -destination 'generic/platform=iOS' -derivedDataPath "$RUNNER_TEMP/derived" \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO DEVELOPMENT_TEAM=
+          app=$(ls -d "$RUNNER_TEMP"/derived/Build/Products/Release-iphoneos/*.app | head -1)
+          plutil -p "$app/Info.plist"
+          du -sh "$app"
+          mkdir -p "$RUNNER_TEMP/ipa/Payload"
+          cp -R "$app" "$RUNNER_TEMP/ipa/Payload/"
+          (cd "$RUNNER_TEMP/ipa" && zip -qry Universe-Godot-unsigned.ipa Payload)
+
+      - name: Keep the unsigned app
+        uses: actions/upload-artifact@v4
+        with:
+          name: Universe-Godot-unsigned-ipa
+          path: ${{ runner.temp }}/ipa/Universe-Godot-unsigned.ipa
+          compression-level: 0
+
+      - name: Keep the export log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: godot-export-log
+          path: build/export.log
+          if-no-files-found: ignore

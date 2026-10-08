@@ -56,3 +56,12 @@
 5. 宇宙日記、上架。
 
 注意：宇宙的尺度遠超過單精度浮點數的範圍，要沿用網頁版處理大尺度的方式（相對位置、分層尺度）。網頁版和現有的 App 在移植期間繼續保留。
+
+## Godot 第一階段（2026-10-09，分支 `godot-port`）
+
+- 專案在 `godot/`，說明、比對數字與量測在 [`godot/README.md`](../godot/README.md)。網頁版與現有 App 沒有改動。
+- 畫面與網頁版逐像素比對過：平均差約 1 階（就是網頁本身的底片顆粒），做法是直接用網頁版產生的資料（`godot/tools/export_web_data.py`）並逐行移植著色器。
+- 銀河用 Sky 著色器畫；星點另外在不升頻的畫面畫。MetalFX 時間升頻、HDR 輸出、120 Hz、shader baker 預設開啟。
+- 全景圖已做：用同一支天空著色器分塊烘焙成立方體貼圖，條件不符時自動改回即時計算。iPad 估計每面 4608、約 970 MB。RTX 3060 上家裡的 GPU 時間從 16.8 ms 降到 0.5 ms。
+- 光線追蹤：設定面板有開關，預設關，用 `RenderingDevice.SUPPORTS_RAYTRACING_PIPELINE` 偵測。RTX 3060 用 Vulkan 偵測得到，D3D12 偵測不到。效果在第三階段加入。
+- iPad 版由 `.github/workflows/godot-ios.yml` 建置（`Universe-Godot-unsigned.ipa`，Bundle ID `io.github.andy32012.universe.godot`）。**還沒在 iPad 上跑過**，下一步是看它的記錄檔。
