@@ -1851,8 +1851,9 @@ function kerrHole(h){
   /* the inner disc's temperature for a thin disc: hotter for a smaller hole or a faster feed (about 10 million kelvin for ten suns at the Eddington rate) */
   h.tin = flow === 'thin' ? 2e7*Math.pow(o.lam || 0.1, 0.25)*Math.pow(mass/10, -0.25) : 0;
   /* how fast things near it are shown changing: a hole's own clock runs at GM/c^3, from a tenth of a millisecond to days; that range is
-     far too wide to show as it is, so it is squeezed: small holes are shown faster, the giants slower */
-  h.clk = clamp(5*Math.pow(mass/1e6, -0.12), 1.5, 20);
+     far too wide to show as it is, so it is squeezed: small holes are shown faster, the giants slower, but never so slow that the turning
+     of space near them cannot be seen */
+  h.clk = clamp(5*Math.pow(mass/1e6, -0.12), 4, 20);
   h.kerrRs = h.rs; h.kerrW = h.w.clone();
   return h;
 }
@@ -6268,9 +6269,10 @@ function nepPrepare(){
 /* Near a spinning black hole space itself turns with it and carries you round (frame dragging): you drift round its axis, and your view with you,
    at the rate a free-falling observer who keeps no spin of their own is turned (the zero-angular-momentum observer of Bardeen, 1972). Your clock is
    that observer's too, so its rate against a faraway clock is shown. Nothing can stay inside the horizon, so you are held just outside it. */
-var flightNoteShown = '';
+var flightNoteShown = '', bhNear = {r:Infinity, M:0, stop:0};
 function blackHoleFlight(dt){
   var note = '', hN = null, hR = Infinity, i;
+  bhNear.r = Infinity;
   for(i=0;i<holes.length;i++){ var Hk = kerrHole(holes[i]), hr = Hk.w.distanceTo(P)/(Hk.M*K('s')); if(hr < hR){ hR = hr; hN = Hk; } }
   if(hN && hR < 400){
     var Ms = hN.M*K('s'), ha = hN.a, free = typeof EXPLORER === 'undefined' || EXPLORER.mode === 'free';
@@ -6285,15 +6287,21 @@ function blackHoleFlight(dt){
     }
     var ct = zc/rB, s2 = Math.max(1 - ct*ct, 0), Sig = rB*rB + ha*ha*ct*ct, Del = rB*rB - 2*rB + ha*ha, Aa = (rB*rB + ha*ha)*(rB*rB + ha*ha) - ha*ha*Del*s2;
     var om = 2*ha*rB/Aa, lapse = Math.sqrt(Math.max(Del*Sig/Aa, 0)), turn = om*hN.clk*dt;
-    if(turn > 1e-9 && free){
+    bhNear.r = rB; bhNear.M = Ms; bhNear.stop = rStop;
+    /* while the explorer holds you near this hole (following or circling it), the hole's turning carries that position round too */
+    var parked = !free && EXPLORER.mode !== 'travel' && EXPLORER.selected && EXPLORER.selected.w.distanceTo(hN.w) < Ms;
+    if(turn > 1e-9 && (free || parked)){
       dragQ.setFromAxisAngle(hN.ax, turn);
       bhRel.applyQuaternion(dragQ); P.copy(hN.w).addScaledVector(bhRel, Ms);
+      if(parked){ EXPLORER.offset.applyQuaternion(dragQ); EXPLORER.direction.applyQuaternion(dragQ); }
       fwdV.applyQuaternion(dragQ); pitch = clamp(Math.asin(clamp(fwdV.y, -1, 1)), -MAX_PITCH, MAX_PITCH); yaw = Math.atan2(-fwdV.x, -fwdV.z);
     }
     if(hR < 60){
+      var degS = om*hN.clk*180/Math.PI;
       note = hN.name + '：這裡的時間只有遠方的 ' + (lapse >= 0.1 ? Math.round(lapse*100) : (lapse*100).toFixed(1)) + '% 快';
-      if(2*rB > Sig) note += '，已在能層裡，任何東西都只能跟著黑洞轉';
-      else if(om*hN.clk > 0.01) note += '，空間被它的自轉拖著走';
+      if(2*rB > Sig) note += '，已在能層裡，任何東西都只能跟著黑洞轉（每秒約 ' + Math.round(degS) + '°）';
+      else if(degS >= 0.1) note += '，空間被它的自轉拖著走（每秒約 ' + (degS < 10 ? degS.toFixed(1) : Math.round(degS)) + '°）';
+      else note += '；再靠近一點，空間會開始被它的自轉拖著走';
       if(rB <= rStop*1.001) note += '。再靠近就回不來了';
     }
   }
@@ -6342,6 +6350,8 @@ function frame(now){
   }
   /* near Neptune, the speed follows your height above its cloud tops, slowing to a walk among the clouds */
   if(NEP.w && NEP.alt < 2e5) nd = Math.min(nd, 2*(Math.max(NEP.alt - 35, 0) + 1.5)*K('p')*KM_LY);
+  /* near a black hole, the speed follows the distance left to the horizon, so the last stretch, where space turns most, can be flown slowly */
+  if(bhNear.r < 60) nd = Math.min(nd, Math.max(bhNear.r - bhNear.stop, 0.3)*bhNear.M);
   var S = nd;
   /* The outer limit is the extent of this observer-centred map, not a physical wall. */
   var gap = Math.abs(EDGE - P.length()), atEdge = gap < nd;
