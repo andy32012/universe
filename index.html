@@ -1268,8 +1268,16 @@ var VOL_NOISE =
   ' float F1(vec3 p){ return 0.5*N1(p) + 0.25*N1(p*2.0 + vec3(13.1,7.7,4.3)) + 0.125*N1(p*4.0 + vec3(31.7,3.3,17.9)) + 0.0625*N1(p*8.0 + vec3(5.9,21.3,9.1)); }\n' +
   ' float F2(vec3 p){ return F1(p + 17.3); }\n' +
   '#endif\n';
+/* the main picture's depth, for the clouds to skip what solid bodies cover (set by the renderer; stamp changes whenever a body is on
+   screen, so a kept picture of the clouds is not reused across a body's motion) */
+var BODY_DEPTH = {tex:{value:null}, on:{value:0}, res:{value:new THREE.Vector2(1, 1)}, stamp:{value:0}};
 var VOL_HEAD = 'uniform vec3 uRo; uniform vec3 uRight; uniform vec3 uUp; uniform vec3 uFwd; uniform float uTanF; uniform float uAspect; uniform float uAlpha; uniform float uSamples; uniform float uDetail; uniform float uOcclusion; varying vec2 vNdc;\n' +
-  'uniform float uMode; uniform sampler2D tPPos; uniform vec2 uPSize; uniform float uPN; uniform vec3 uCtr; uniform float uRad;\n' + VOL_NOISE +
+  'uniform float uMode; uniform sampler2D tPPos; uniform vec2 uPSize; uniform float uPN; uniform vec3 uCtr; uniform float uRad;\n' +
+  'uniform sampler2D tBodyDepth; uniform float uBodyDepthOn; uniform vec2 uVolRes; uniform float uDepthStamp;\n' + VOL_NOISE +
+  /* whether a solid body covers this whole cloud pixel (all four corners), in which case the composite shows the body and nothing here */
+  'bool bodyCovers(){ if(uBodyDepthOn < 0.5 || uMode > 0.5) return false; vec2 c = gl_FragCoord.xy/uVolRes; vec2 h = 0.5/uVolRes;' +
+  ' return texture2D(tBodyDepth, c + vec2(-h.x, -h.y)).r < 1.0 && texture2D(tBodyDepth, c + vec2(h.x, -h.y)).r < 1.0 &&' +
+  ' texture2D(tBodyDepth, c + vec2(-h.x, h.y)).r < 1.0 && texture2D(tBodyDepth, c + h).r < 1.0; }\n' +
   /* in probe mode (see PROBE) each pixel is one shining thing: the light-years of it, relative to the cloud, in the cloud's units */
   'float probeIndex(){ return floor(gl_FragCoord.y)*uPSize.x + floor(gl_FragCoord.x); }\n' +
   'vec3 probeAt(){ return (texture2D(tPPos, gl_FragCoord.xy/uPSize).xyz - uCtr)/uRad; }\n';
@@ -1377,6 +1385,7 @@ var VOL_FS = VOL_HEAD +
   ' for(int j=0;j<3;j++) tau += shadowDust(p + ld*ds*(float(j) + 0.5))*ds;' +
   ' return mix(1.0, 0.28 + 0.72*exp(-tau*3.0), uOcclusion); }' +
   'void main(){' +
+  ' if(bodyCovers()) discard;' +
   ' vec3 rd = normalize(uFwd + uRight*(vNdc.x*uAspect*uTanF) + uUp*(vNdc.y*uTanF)); float tEnd = 1e9;' +
   /* probe mode: the ray from you to the probe, ending at it */
   ' if(uMode > 0.5){ if(probeIndex() >= uPN) discard; vec3 dv = probeAt() - uRo; tEnd = length(dv); rd = dv/max(tEnd, 1e-12); }' +
@@ -1401,6 +1410,7 @@ var VOL_FS = VOL_HEAD +
 var GALV_FS = VOL_HEAD +
   'uniform mat3 uM; uniform float uArms; uniform float uB; uniform float uR0; uniform float uSeed; uniform float uKind; uniform float uGain; uniform vec3 uCore; uniform vec3 uArmCol;' +
   'void main(){' +
+  ' if(bodyCovers()) discard;' +
   ' vec3 rd = uM*normalize(uFwd + uRight*(vNdc.x*uAspect*uTanF) + uUp*(vNdc.y*uTanF)); float tEnd = 1e9;' +
   ' if(uMode > 0.5){ if(probeIndex() >= uPN) discard; vec3 dv = uM*probeAt() - uRo; tEnd = length(dv); rd = dv/max(tEnd, 1e-12); }' +
   ' vec3 so = uRo*vec3(1.0,3.2,1.0); vec3 sd = rd*vec3(1.0,3.2,1.0);' +
@@ -1457,6 +1467,7 @@ function volMaterial(fs, uniforms, steps){
   uniforms.uDetail = VOLUME_DETAIL; uniforms.uOcclusion = VOLUME_OCCLUSION;
   uniforms.uMode = PROBE.mode; uniforms.tPPos = PROBE.pos; uniforms.uPSize = PROBE.size; uniforms.uPN = PROBE.count;
   uniforms.uCtr = {value:new THREE.Vector3()}; uniforms.uRad = {value:1};
+  uniforms.tBodyDepth = BODY_DEPTH.tex; uniforms.uBodyDepthOn = BODY_DEPTH.on; uniforms.uVolRes = BODY_DEPTH.res; uniforms.uDepthStamp = BODY_DEPTH.stamp;
   var defs = {};
   if(HAS3D){ uniforms.uVol = volTex; defs.VOL3D = ''; } else uniforms.uNoiseT = noiseTexU;
   return new THREE.ShaderMaterial({uniforms:uniforms, defines:defs, vertexShader:VOL_VS, fragmentShader:fs.split('GSTEPS').join(String(steps)).split('STEPS').join(String(steps)),
@@ -1534,7 +1545,10 @@ function body(type, radius, pos, parent, tint, sunDir, a, b, c, d, cls, maps){
       mesh.add(shell); mesh.userData.cloudShells.push(shell);
     }
   }
-  addLayer(mesh,a,b,c,d,parent); return mesh;
+  addLayer(mesh,a,b,c,d,parent);
+  /* a plain sphere: skipped when out of view (the shared layer helper turns culling off for the full-screen and sprite effects) */
+  mesh.frustumCulled = true;
+  return mesh;
 }
 
 /* The ring is a translucent sheet with both illuminated faces, planet penumbra,
@@ -5005,11 +5019,11 @@ function updateRenderBudget(rawDt, now){
 /* 極致 (ultra) is 高 with more samples through the clouds, a finer trace round black holes and through Neptune's air; 高 and 極致 smooth
    edges by multisampling. The choice is remembered on this device. */
 var QUALITY_ULTRA = false;
-function setQuality(mode){
+function setQuality(mode, transient){
   if(mode !== 'ultra' && mode !== 'high' && mode !== 'balanced' && mode !== 'auto') return false;
   QUALITY_ULTRA = mode === 'ultra'; if(QUALITY_ULTRA) mode = 'high';
   QUALITY_MODE = mode;
-  try{ localStorage.setItem('universe-quality', QUALITY_ULTRA ? 'ultra' : mode); }catch(e){}
+  if(!transient){ try{ localStorage.setItem('universe-quality', QUALITY_ULTRA ? 'ultra' : mode); }catch(e){} }
   setMainMsaa(mode === 'high');
   invalidateVolumeCache();
   var high = mode === 'high';
@@ -5309,11 +5323,27 @@ function blackHoleAffectsView(hole){
   var pixels = 2*unit/Math.max(impact, 1e-30)*rtMain.height/(2*VIEW.tanF.value)*(1 + tanDiagonal*tanDiagonal);
   return pixels >= 0.5;
 }
+/* whether any solid body of the solar system, or a black hole's companion star, shows on screen (at least a pixel across) */
+function bodiesOnScreen(){
+  var i, half = rtMain.height/2/VIEW.tanF.value;
+  for(i=0;i<solarBodies.length;i++){
+    var b = solarBodies[i], r = b.radiusAU*AU_LY*K('p'), d = b.world.distanceTo(P);
+    if(r/Math.max(d, 1e-30)*half >= 0.5 && sphereIntersectsView(b.world, r)) return true;
+  }
+  for(i=0;i<moved.length;i++){
+    var c = moved[i], cw = c.rec.w, cr = c.rec.R;
+    if(cr/Math.max(cw.distanceTo(P), 1e-30)*half >= 0.5 && sphereIntersectsView(cw, cr)) return true;
+  }
+  return false;
+}
 function drawFrame(){
   if(RENDER_CONTEXT_LOST || gl.isContextLost())return;
   var w = rtMain.width, h = rtMain.height, i;
   renderer.setRenderTarget(rtMain); renderer.setClearColor(0x000000, 1); renderer.clear(); renderSceneWithoutClear(scene, camera);
+  BODY_DEPTH.tex.value = mainDepthSupported ? rtMain.depthTexture : null; BODY_DEPTH.on.value = mainDepthSupported ? 1 : 0;
+  BODY_DEPTH.res.value.set(rtVol.width, rtVol.height); BODY_DEPTH.stamp.value = bodiesOnScreen() ? frames : 0;
   RENDER_BUDGET.volumePasses = renderVisibleVolumes(camera, rtVol);
+  BODY_DEPTH.on.value = 0;
   var scene0 = rtMain;
   compU.uEmOn.value = 0; PROBE.use.value = 0;
   if(PROBES){
@@ -5495,13 +5525,13 @@ function stickMove(e){
 function stickEnd(e){ if(e.pointerId !== stickId) return; stickId = null; look.x = look.y = 0; knob.style.transform = 'translate(0,0)'; }
 stick.addEventListener('pointerdown', function(e){ stickId = e.pointerId; try{ stick.setPointerCapture(e.pointerId); }catch(err){} stickMove(e); e.preventDefault(); });
 stick.addEventListener('pointermove', function(e){ if(e.pointerId === stickId) stickMove(e); });
-stick.addEventListener('pointerup', stickEnd); stick.addEventListener('pointercancel', stickEnd);
+stick.addEventListener('pointerup', stickEnd); stick.addEventListener('pointercancel', stickEnd); stick.addEventListener('lostpointercapture', stickEnd);
 /* right buttons: hold to fly */
 function holdButton(id, dir){
   var b = $(id);
   function down(e){ if(typeof cancelExplorerTravel === 'function') cancelExplorerTravel(); thrust = dir; homing = false; $('#tip').classList.add('gone'); b.classList.add('on'); try{ b.setPointerCapture(e.pointerId); }catch(err){} e.preventDefault(); }
   function up(){ if(thrust === dir) thrust = 0; b.classList.remove('on'); }
-  b.addEventListener('pointerdown', down); b.addEventListener('pointerup', up); b.addEventListener('pointercancel', up);
+  b.addEventListener('pointerdown', down); b.addEventListener('pointerup', up); b.addEventListener('pointercancel', up); b.addEventListener('lostpointercapture', up);
   b.addEventListener('contextmenu', function(e){ e.preventDefault(); });
 }
 holdButton('#fwd', 1); holdButton('#back', -1);
@@ -5587,7 +5617,7 @@ function resetFlightInput(){
   keys={};thrust=0;held=0;look.x=look.y=0;stickId=null;touches.clear();pinchD=0;
   knob.style.transform='translate(0px,0px)';$('#fwd').classList.remove('on');$('#back').classList.remove('on');
 }
-window.addEventListener('blur',resetFlightInput);
+window.addEventListener('blur',resetFlightInput); window.addEventListener('pagehide',resetFlightInput);
 window.addEventListener('resize', function(){
   camera.aspect = window.innerWidth/window.innerHeight; camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight, false);
@@ -6140,7 +6170,7 @@ function prepareUniverse(){
 
 // Source: 90-frame.js
 var v1 = new THREE.Vector3(), fwdV = new THREE.Vector3(), frameAUQuaternion = new THREE.Quaternion(), last = performance.now(), frames = 0, shownPlace = '', plain = false;
-var frameDeadline = 0, frameTimingReset = true;
+var frameDeadline = 0, frameTimingReset = true, drawFailures = 0;
 /* Cached nearest-star identity remains exact within a triangle-inequality bound.
    Turning in place does not require scanning the entire catalogue again. */
 var starSearch = {position:new THREE.Vector3(Infinity,Infinity,Infinity), radius:0, index:-1, pos:null, abs:null, count:-1, named:null};
@@ -6474,16 +6504,24 @@ function frame(now){
   if(typeof updateCometView === 'function') updateCometView(S,L);
   if(typeof updateObservedClusters === 'function') updateObservedClusters(S,L);
   if(!plain){
-    try{ drawFrame(); }catch(err){ plain = true; }
+    try{ drawFrame(); }
+    catch(err){
+      /* first failure: note it and retry at the lightest automatic settings; a second: the plain picture below */
+      drawFailures++;
+      if(typeof console !== 'undefined' && console.warn) console.warn('Rendering failed (' + drawFailures + '):', err);
+      if(drawFailures === 1){ try{ setQuality('auto', true); applyAutomaticLevel(0, now); }catch(errQ){ plain = true; } }
+      else plain = true;
+    }
   }
   if(hdr.on){
     if(plain) setHdr(false); else { try{ hdrPresent(); }catch(errH){ hdr.ready = false; setHdr(false); } }
   }
   if(plain){
-    /* if the finishing pipeline is not available on this device, draw straight to the screen */
+    /* if the finishing pipeline is not available on this device, draw straight to the screen: bodies, stars and lights, without the
+       cloud volumes, whose full-resolution cost this path could not bear */
     renderer.setRenderTarget(null); renderer.setClearColor(0x000000, 1); renderer.autoClear = true; PROBE.use.value = 0;
     if(PROBES) camera.layers.enable(L_EM); renderer.render(scene, camera); camera.layers.set(0);
-    renderer.autoClear = false; renderer.render(volScene, camera); renderer.render(topScene, camera); renderer.autoClear = true;
+    renderer.autoClear = false; renderer.render(topScene, camera); renderer.autoClear = true;
   }
 
   /* labels: the dozen or so things you are closest to, relative to how far each one can be seen from */
