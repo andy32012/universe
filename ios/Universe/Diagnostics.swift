@@ -88,13 +88,39 @@ final class DiagnosticsLog {
 final class DiagnosticsHandler: NSObject, WKScriptMessageHandler {
     static let name = "log"
 
+    private let cpu = CPUMeter()
+
     func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {
-        if let text = message.body as? String { DiagnosticsLog.shared.write(String(text.prefix(4000))) }
+        guard let text = message.body as? String else { return }
+        if text.hasPrefix("PERF "), let line = perfLine(String(text.dropFirst(5))) {
+            DiagnosticsLog.shared.write(line)
+        } else {
+            DiagnosticsLog.shared.write(String(text.prefix(4000)))
+        }
+    }
+
+    /* One line per five seconds: frame rate, the whole system's CPU use over the same five seconds, the game
+       code's time per frame, and a guess at the bottleneck. iPadOS gives apps no GPU use figure, so a slow
+       frame with an idle CPU and quick game code is put down to the GPU. */
+    private func perfLine(_ json: String) -> String? {
+        guard let data = json.data(using: .utf8),
+              let p = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let fps = p["fps"] as? Double, let worst = p["worst"] as? Double,
+              let js = p["js"] as? Double, let jsMax = p["jsMax"] as? Double else { return nil }
+        let load = cpu.sample()
+        let cpuText = load.map { String(format: "CPU 全部 %.0f%%・最忙的核心 %.0f%%", $0.total, $0.busiest) } ?? "CPU 量測中"
+        let frameMs = 1000 / max(fps, 0.1)
+        let bottleneck: String
+        if fps >= 55 { bottleneck = "無（順暢）" }
+        else if js >= frameMs * 0.7 || (load?.busiest ?? 0) >= 90 { bottleneck = "CPU（推測）" }
+        else { bottleneck = "GPU（推測）" }
+        return String(format: "PERF %.1f 幀/秒｜最慢一幀 %.0f 毫秒｜", fps, worst) + cpuText +
+            String(format: "｜遊戲程式每幀 %.1f 毫秒（最多 %.0f）｜瓶頸 ", js, jsMax) + bottleneck + ((p["where"] as? String) ?? "")
     }
 
     /* Runs in the game page before its own code. It reports errors, files that fail to load, the graphics
-       context being lost, how loading went, and every five seconds the frame rate and the slowest frame,
-       with where you are and which quality setting is in use. */
+       context being lost, how loading went, and every five seconds the frame rate, the slowest frame and the
+       game code's time per frame, with where you are and which quality setting is in use. */
     static let pageScript = """
     (function(){
       var sent = {}, count = 0;
@@ -145,20 +171,57 @@ final class DiagnosticsHandler: NSObject, WKScriptMessageHandler {
         else if(loading && loading.hidden){ post('BOOT 載入完成 ' + now); clearInterval(boot); }
       }, 250);
 
+      /* how long the game's own code takes each frame: every requestAnimationFrame callback is timed */
+      var raf = window.requestAnimationFrame.bind(window), busy = 0, busyMax = 0, calls = 0;
+      window.requestAnimationFrame = function(cb){
+        return raf(function(t){
+          var s = performance.now();
+          try{ return cb(t); }finally{ var d = performance.now() - s; busy += d; calls++; if(d > busyMax) busyMax = d; }
+        });
+      };
       var frames = 0, worst = 0, last = 0, since = 0;
+      function reset(){ frames = 0; worst = 0; busy = 0; busyMax = 0; calls = 0; }
       function tick(now){
         if(last && !document.hidden){ frames++; worst = Math.max(worst, now - last); }
         last = document.hidden ? 0 : now;
         if(!since) since = now;
         if(now - since >= 5000){
-          if(frames) post('PERF ' + (frames*1000/(now - since)).toFixed(1) + ' 幀/秒｜最慢一幀 ' + Math.round(worst) + ' 毫秒' + where(), true);
-          frames = 0; worst = 0; since = now;
+          if(frames) post('PERF ' + JSON.stringify({fps:frames*1000/(now - since), worst:worst, js:busy/frames, jsMax:busyMax, where:where()}), true);
+          reset(); since = now;
         }
-        requestAnimationFrame(tick);
+        raf(tick);
       }
-      requestAnimationFrame(tick);
+      raf(tick);
       /* time spent in the background is not counted */
-      document.addEventListener('visibilitychange', function(){ frames = 0; worst = 0; since = 0; last = 0; });
+      document.addEventListener('visibilitychange', function(){ reset(); since = 0; last = 0; });
     })();
     """
+}
+
+/* The whole system's CPU use since the previous sample, from the kernel's per-core tick counts. The game's
+   page runs in WebKit's own processes, so the app's own CPU time would miss it. */
+final class CPUMeter {
+    private var previous: [UInt32] = []
+
+    func sample() -> (total: Double, busiest: Double)? {
+        var cores: natural_t = 0
+        var info: processor_info_array_t?
+        var infoCount: mach_msg_type_number_t = 0
+        guard host_processor_info(mach_host_self(), PROCESSOR_CPU_LOAD_INFO, &cores, &info, &infoCount) == KERN_SUCCESS,
+              let info else { return nil }
+        let states = Int(CPU_STATE_MAX)
+        let ticks = (0..<Int(cores) * states).map { UInt32(bitPattern: info[$0]) }
+        vm_deallocate(mach_task_self_, vm_address_t(bitPattern: info), vm_size_t(Int(infoCount) * MemoryLayout<integer_t>.stride))
+        defer { previous = ticks }
+        guard previous.count == ticks.count else { return nil }
+        var busy = 0.0, total = 0.0, busiest = 0.0
+        for core in 0..<Int(cores) {
+            let d = (0..<states).map { Double(ticks[core * states + $0] &- previous[core * states + $0]) }
+            let all = d.reduce(0, +), idle = d[Int(CPU_STATE_IDLE)]
+            guard all > 0 else { continue }
+            busy += all - idle; total += all
+            busiest = max(busiest, (all - idle) / all)
+        }
+        return total > 0 ? (busy / total * 100, busiest * 100) : nil
+    }
 }
