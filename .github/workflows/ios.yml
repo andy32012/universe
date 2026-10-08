@@ -1,6 +1,6 @@
 # Builds the iPad/iPhone app from the website files on a GitHub-hosted Mac.
-# Every push checks that the app still builds. On main, once the four App Store Connect
-# secrets are set (see ios/README.md), it is signed and uploaded to TestFlight as a new build.
+# Every push builds it and keeps an unsigned .ipa as a run artifact. On main, once the four App
+# Store Connect secrets are set (see ios/README.md), it is instead signed and uploaded to TestFlight.
 name: iPad App
 
 on:
@@ -41,6 +41,18 @@ jobs:
           xcodebuild build -project ios/Universe.xcodeproj -scheme Universe -configuration Release \
             -destination 'generic/platform=iOS' -derivedDataPath "$RUNNER_TEMP/derived" \
             CODE_SIGNING_ALLOWED=NO
+          mkdir -p "$RUNNER_TEMP/ipa/Payload"
+          cp -R "$RUNNER_TEMP/derived/Build/Products/Release-iphoneos/Universe.app" "$RUNNER_TEMP/ipa/Payload/"
+          (cd "$RUNNER_TEMP/ipa" && zip -qry Universe-unsigned.ipa Payload)
+
+      # For installing with a free Apple ID from a Windows PC (Sideloadly or AltStore signs it); see ios/README.md.
+      - name: Keep the unsigned app
+        if: env.UPLOAD != 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: Universe-unsigned-ipa
+          path: ${{ runner.temp }}/ipa/Universe-unsigned.ipa
+          compression-level: 0
 
       - name: Archive and upload to TestFlight
         if: env.UPLOAD == 'true'

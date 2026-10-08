@@ -4,10 +4,24 @@ App 是一個外殼：用 `WKWebView` 執行跟網站相同的 `index.html`。�
 
 建置在 GitHub 的 Mac 主機上進行（`.github/workflows/ios.yml`），不需要自己的 Mac：
 
-- 每次推送遊戲檔案或 `ios/`，都會檢查 App 能不能編譯成功（不簽名）。
-- 推送到 `main` 時，如果下面四個 secret 都設好了，就會簽名並上傳到 TestFlight，成為新版本。也可以在 GitHub 的「Actions → iPad App → Run workflow」手動執行。
+- 每次推送遊戲檔案或 `ios/`，都會編譯一次，並保留一個未簽名的 `Universe-unsigned.ipa`，可以用免費的 Apple ID 安裝（見下方「免費安裝」）。
+- 推送到 `main` 時，如果「TestFlight」一節的四個 secret 都設好了，就會改成簽名並上傳到 TestFlight，成為新版本。也可以在 GitHub 的「Actions → iPad App → Run workflow」手動執行。
 
-## 第一次設定（在 iPad 的 Safari 就能完成）
+## 免費安裝（需要一台 Windows 或 Mac 電腦）
+
+用免費的 Apple ID 簽名，不用加入 Apple Developer Program。限制是裝好的 App **7 天後就打不開**，要重新安裝一次；而且同時最多只能裝 3 個這樣的 App。
+
+1. **下載 App**：登入 GitHub 後，到「Actions → iPad App」，點最新一次成功的執行，在最下方「Artifacts」下載 `Universe-unsigned-ipa`，解壓縮後會得到 `Universe-unsigned.ipa`。
+2. **準備電腦**：在電腦上安裝 [Sideloadly](https://sideloadly.io)（或 AltStore），並依照它網站的說明安裝 iTunes。
+3. **安裝**：用傳輸線把 iPad 接上電腦，在 iPad 上按「信任」。把 `.ipa` 拖進 Sideloadly，輸入 Apple ID，按「Start」。建議用另一個 Apple ID，不要用主要帳號，因為密碼會交給這個第三方工具。
+4. **開啟開發者模式**：在 iPad 的「設定 → 隱私權與安全性 → 開發者模式」打開，iPad 會重新開機，開機後按「開啟」確認。
+5. **信任開發者**：到「設定 → 一般 → VPN 與裝置管理」，點你的 Apple ID，按「信任」。
+
+更新時下載新的 `.ipa`，用同樣的方法再裝一次就好，遊戲設定會保留。7 天到期時也是重新裝一次；Sideloadly 有自動續簽的選項，但電腦要開著，而且要跟 iPad 在同一個網路。
+
+## TestFlight（Apple Developer Program，每年 99 美元）
+
+在 iPad 的 Safari 就能完成設定：
 
 1. **加入 Apple Developer Program**（每年 99 美元）：可以用 App Store 上的「Apple Developer」App 申請。
 2. **註冊 Bundle ID**：到 developer.apple.com →「Certificates, Identifiers & Profiles」→「Identifiers」→「+」→「App IDs」→「App」，選「Explicit」，填入 `io.github.andy32012.universe`。
@@ -28,7 +42,7 @@ App 是一個外殼：用 `WKWebView` 執行跟網站相同的 `index.html`。�
 
 7. 在 iPad 上安裝 **TestFlight**。到 App Store Connect 的 App →「TestFlight」→ 建立內部測試群組，把自己加進去。
 
-## 更新
+### 更新
 
 改好遊戲並推送到 `main` 之後，GitHub 會自動建置、上傳新版本，版號使用 workflow 的執行次數。新版本通常十幾分鐘後會出現在 TestFlight；開啟 TestFlight 的「自動更新」，iPad 就會自己更新。
 
