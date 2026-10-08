@@ -14,6 +14,9 @@ struct GameView: UIViewRepresentable {
         configuration.setURLSchemeHandler(BundleSchemeHandler(), forURLScheme: BundleSchemeHandler.scheme)
         configuration.allowsInlineMediaPlayback = true
         configuration.mediaTypesRequiringUserActionForPlayback = []
+        configuration.userContentController.addUserScript(WKUserScript(source: DiagnosticsHandler.pageScript,
+                                                                       injectionTime: .atDocumentStart, forMainFrameOnly: true))
+        configuration.userContentController.add(DiagnosticsHandler(), name: DiagnosticsHandler.name)
 
         let webView = WKWebView(frame: .zero, configuration: configuration)
         let background = UIColor(named: "LaunchBackground")
@@ -36,6 +39,7 @@ struct GameView: UIViewRepresentable {
         /* iPadOS ends the page's process when it runs out of memory; start the game again
            instead of leaving a blank screen. */
         func webViewWebContentProcessDidTerminate(_ webView: WKWebView) {
+            DiagnosticsLog.shared.write("CRASH 遊戲頁面被系統結束（多半是記憶體不足），重新載入")
             webView.load(URLRequest(url: GameView.start))
         }
 
