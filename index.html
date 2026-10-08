@@ -4905,6 +4905,21 @@ var BH_FS = 'uniform sampler2D tScene; uniform samplerCube tSky; uniform float u
   ' vec3 dw; vec4 res = traceRay(rw, dw);' +
   ' gl_FragColor = uLowPass > 0.5 && uDirMode > 0.5 ? vec4(dw, res.a) : res; }';
 var bhMat = postMat(BH_FS, bhU), bhUpMat = postMat(BH_FS, bhU);
+/* the view as a body near a hole would have it: stretched along the direction to the hole and squeezed across it (about the middle of the
+   view), torn into slices that slip along the stretch with the colours parting, and swirled round the hole's place on screen */
+var tidalU = {tSrc:{value:null}, uC:{value:new THREE.Vector2(0.5, 0.5)}, uAx:{value:new THREE.Vector2(0, 1)}, uAspect:{value:1}, uK:{value:0}, uTear:{value:0}, uTwist:{value:0}, uTime:TIME};
+var tidalMat = postMat('uniform sampler2D tSrc; uniform vec2 uC; uniform vec2 uAx; uniform float uAspect; uniform float uK; uniform float uTear; uniform float uTwist; uniform float uTime; varying vec2 vUv;' +
+  'float hh(float n){ return fract(sin(n*12.9898)*43758.5453); }' +
+  'vec2 warp(vec2 uv, float k){ vec2 q = (uv - 0.5)*vec2(uAspect, 1.0); vec2 c = (uC - 0.5)*vec2(uAspect, 1.0); vec2 d = q - c; float r = length(d);' +
+  ' float ang = uTwist*exp(-r*2.5)*(1.0 + 0.15*sin(uTime*1.7 + r*9.0)); float cs = cos(ang); float sn = sin(ang);' +
+  ' q = c + vec2(cs*d.x - sn*d.y, sn*d.x + cs*d.y);' +
+  ' float a = dot(q, uAx); vec2 pp = q - uAx*a; q = uAx*(a/(1.0 + k)) + pp*sqrt(1.0 + k);' +
+  ' return q/vec2(uAspect, 1.0) + 0.5; }' +
+  'void main(){ vec2 uv = vUv;' +
+  ' if(uTear > 0.0){ vec2 q = (uv - 0.5)*vec2(uAspect, 1.0); float across = dot(q, vec2(-uAx.y, uAx.x)); float band = floor(across*36.0); float t = floor(uTime*12.0);' +
+  '  float off = (hh(band*1.37 + t) - 0.5)*uTear*0.08*step(0.5, hh(band + t*0.31)); uv += uAx/vec2(uAspect, 1.0)*off; }' +
+  ' float sep = uTear*0.10 + uK*0.03;' +
+  ' gl_FragColor = vec4(texture2D(tSrc, warp(uv, uK*(1.0 + sep))).r, texture2D(tSrc, warp(uv, uK)).g, texture2D(tSrc, warp(uv, uK*(1.0 - sep))).b, 1.0); }', tidalU);
 bhUpMat.defines = {UPSAMPLE:''};
 /* The trace has a resolution of its own, set by the quality (and, on automatic, by how the frames keep up): below full resolution the
    strongly bent part is traced coarser and filled in; the gently bent part far from the hole and the shadow's edge stay at full resolution. */
@@ -5523,6 +5538,17 @@ function drawFrame(){
       bhU.tLow.value = rtBHlow.texture; bhU.uLowRes.value.set(rtBHlow.width, rtBHlow.height); pass(bhUpMat, rtBH);
     } else pass(bhMat, rtBH);
     scene0 = rtBH;
+  }
+  if(BHFX.k > 0.002 || BHFX.twist > 0.002){
+    /* where the hole is on screen (behind you: far off screen, toward it), and the line to it, in the view's aspect-corrected plane */
+    vL.copy(BHFX.w).sub(P).normalize();
+    var hx = vL.dot(VIEW.right.value), hy = vL.dot(VIEW.up.value), hz = vL.dot(VIEW.fwd.value), lat = Math.sqrt(hx*hx + hy*hy);
+    tidalU.uAx.value.set(lat > 1e-6 ? hx/lat : 0, lat > 1e-6 ? hy/lat : 1);
+    if(hz > 1e-3) tidalU.uC.value.set(0.5 + 0.5*hx/(hz*VIEW.tanF.value*VIEW.aspect.value), 0.5 + 0.5*hy/(hz*VIEW.tanF.value));
+    else tidalU.uC.value.set(0.5 + 50*tidalU.uAx.value.x, 0.5 + 50*tidalU.uAx.value.y);
+    /* looking straight at the hole the stretch runs along the line of sight, and shows less across the view */
+    tidalU.uK.value = BHFX.k*(0.35 + 0.65*Math.min(lat, 1)); tidalU.uTear.value = BHFX.tear; tidalU.uTwist.value = BHFX.twist; tidalU.uAspect.value = w/h;
+    tidalU.tSrc.value = scene0.texture; var tidalTo = scene0 === rtComp ? rtBH : rtComp; pass(tidalMat, tidalTo); scene0 = tidalTo;
   }
   var src = scene0;
   for(i=0;i<BLOOM_N;i++){ downU.tSrc.value = src.texture; downU.uPx.value.set(1/src.width, 1/src.height); downU.uThr.value = i === 0 ? (HDR ? 0.85 : 0.62) : 0; pass(downMat, rtDown[i]); src = rtDown[i]; }
@@ -6236,7 +6262,7 @@ function prepareUniverse(){
     var warmSmallBodies=typeof prepareSmallBodyRendering==='function';
     var warmComets=typeof cometWarmGroups!=='undefined' && typeof preparePhysicalGroups==='function';
     var warmObservedClusters=typeof prepareObservedClusterRendering==='function';
-    var stages=[scene,volScene,topScene],postMaterials=[compMat,downMat,upMat,finMat,bhMat,bhUpMat].concat(typeof nepCompMat!=='undefined'?[nepCompMat,expMat]:[]);
+    var stages=[scene,volScene,topScene],postMaterials=[compMat,downMat,upMat,finMat,bhMat,bhUpMat,tidalMat].concat(typeof nepCompMat!=='undefined'?[nepCompMat,expMat]:[]);
     var controls=Array.from(document.body.children).filter(function(el){return el.id!=='loading' && el.id!=='fail' && el.tagName!=='SCRIPT';});
     controls.forEach(function(el){el.inert=true;});
     BOOT.total=STARTUP_TEXTURES.length+textures.length+profiles.length+3+stages.length+postMaterials.length+1+(warmSmallBodies?1:0)+(warmComets?1:0)+(warmObservedClusters?1:0);
@@ -6433,9 +6459,11 @@ function nepPrepare(){
    at the rate a free-falling observer who keeps no spin of their own is turned (the zero-angular-momentum observer of Bardeen, 1972). Your clock is
    that observer's too, so its rate against a faraway clock is shown. Nothing can stay inside the horizon, so you are held just outside it. */
 var flightNoteShown = '', bhNear = {r:Infinity, M:0, stop:0};
+/* what a hole does to you, for the view: the tidal stretch across a body (k), its tearing (tear), and the swirl of dragged space (twist) */
+var BHFX = {k:0, tear:0, twist:0, w:new THREE.Vector3()};
 function blackHoleFlight(dt){
   var note = '', hN = null, hR = Infinity, i;
-  bhNear.r = Infinity;
+  bhNear.r = Infinity; BHFX.k = BHFX.tear = BHFX.twist = 0;
   for(i=0;i<holes.length;i++){ var Hk = kerrHole(holes[i]), hr = Hk.w.distanceTo(P)/(Hk.M*K('s')); if(hr < hR){ hR = hr; hN = Hk; } }
   if(hN && hR < 400){
     var Ms = hN.M*K('s'), ha = hN.a, free = typeof EXPLORER === 'undefined' || EXPLORER.mode === 'free';
@@ -6459,13 +6487,22 @@ function blackHoleFlight(dt){
       if(parked){ EXPLORER.offset.applyQuaternion(dragQ); EXPLORER.direction.applyQuaternion(dragQ); }
       fwdV.applyQuaternion(dragQ); pitch = clamp(Math.asin(clamp(fwdV.y, -1, 1)), -MAX_PITCH, MAX_PITCH); yaw = Math.atan2(-fwdV.x, -fwdV.z);
     }
+    /* Tides: across a body 1.8 m tall the pull differs by 2GM L/r^3 (Newtonian, the leading term near a Kerr hole too). A small hole tears a
+       person apart far outside its horizon; a giant one hardly at all, even at the horizon. Shown as the view stretched toward the hole and
+       squeezed across, torn into slices beyond a few hundred g; the dragging of space as a swirl round the hole. */
+    var degS = om*hN.clk*180/Math.PI, Mm = hN.M*9.4607e15, gT = 2*8.98755e16*1.8/(rB*rB*rB*Mm*Mm)/9.81;
+    var lg = Math.log(Math.max(gT, 1e-9))/Math.LN10;
+    BHFX.k = 1.2*sstep(0, 4, lg); BHFX.tear = sstep(2.5, 5, lg); BHFX.twist = 0.9*sstep(2, 90, degS); BHFX.w.copy(hN.w);
     if(hR < 60){
-      var degS = om*hN.clk*180/Math.PI;
       note = hN.name + '：這裡的時間只有遠方的 ' + (lapse >= 0.1 ? Math.round(lapse*100) : (lapse*100).toFixed(1)) + '% 快';
       if(2*rB > Sig) note += '，已在能層裡，任何東西都只能跟著黑洞轉（每秒約 ' + Math.round(degS) + '°）';
       else if(degS >= 0.1) note += '，空間被它的自轉拖著走（每秒約 ' + (degS < 10 ? degS.toFixed(1) : Math.round(degS)) + '°）';
       else note += '；再靠近一點，空間會開始被它的自轉拖著走';
       if(rB <= rStop*1.001) note += '。再靠近就回不來了';
+    }
+    if(gT >= 0.1){
+      var gs = gT >= 1e12 ? (gT/1e12).toPrecision(2) + ' 兆' : gT >= 1e8 ? (gT/1e8).toPrecision(2) + ' 億' : gT >= 1e4 ? Math.round(gT/1e4) + ' 萬' : (gT >= 10 ? Math.round(gT) : gT.toFixed(1));
+      note += (note ? '。' : hN.name + '：') + '頭和腳之間的潮汐力差約 ' + gs + ' g' + (gT >= 300 ? '，身體會被拉長撕裂（麵條化）' : gT >= 3 ? '，身體被往黑洞方向拉長' : '');
     }
   }
   return note;
