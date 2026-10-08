@@ -5237,13 +5237,21 @@ function matchingVolumeState(a, b){
   }
   return true;
 }
+/* how many pixels a cloud's radius covers on the main picture (huge from inside it) */
+function volumePixels(bounds){
+  var R = bounds.record.R*(bounds.nebula ? K('n') : 1), dist = bounds.record.w.distanceTo(P);
+  if(dist <= R*1.05) return 1e9;
+  return R/Math.sqrt(dist*dist - R*R)/VIEW.tanF.value*(rtMain.height/2);
+}
+var VOLUME_MIN_PX = 10;
 function renderVisibleVolumes(viewCamera, target){
   var previousScissorContext=volumeScissorContext,drawContext=null;
   hiddenVolumes.length = 0; var count = 0, canScissor=true, i;
   for(i=0;volScene.visible && i<volScene.children.length;i++){
     var mesh = volScene.children[i]; if(!mesh.visible) continue;
     var bounds = mesh.userData.volumeBounds;
-    if(bounds && !sphereIntersectsView(bounds.record.w, bounds.record.R*(bounds.nebula ? K('n') : 1))){
+    /* skipped: out of view, or (in the main picture) too small on screen for the volume to add anything its point of light does not */
+    if(bounds && (!sphereIntersectsView(bounds.record.w, bounds.record.R*(bounds.nebula ? K('n') : 1)) || (target === rtVol && volumePixels(bounds) < VOLUME_MIN_PX))){
       mesh.visible = false; hiddenVolumes.push(mesh);
     } else {
       count++;
@@ -6409,10 +6417,17 @@ function frame(now){
   var cm = camera.matrixWorld.elements;
   VIEW.right.value.set(cm[0], cm[1], cm[2]); VIEW.up.value.set(cm[4], cm[5], cm[6]); VIEW.fwd.value.set(-cm[8], -cm[9], -cm[10]);
   VIEW.aspect.value = window.innerWidth/window.innerHeight;
-  /* through the telescope, far things that are normally only drawn once you have travelled out to them come into view */
-  var teleReach = 2.2*Math.log10(tele) + 7.5*sstep(1.0, 2.0, tele);
+  /* Through the telescope things look as big as they would from tele times closer, so that much farther comes into reach, and no more:
+     the telescope adds detail to what it is pointed at, not the load of every scale of the universe at once. A galaxy whose volume the
+     telescope makes large enough on screen (in view, 40 pixels and up) is drawn however far you are from it; smaller, its light and label
+     stand for it. */
+  var teleReach = Math.log10(tele);
   for(i=0;i<layers.length;i++){
     var Y = layers[i], a = sstep(Y.a, Y.b, L + teleReach)*(1 - sstep(Y.c, Y.d, L));
+    if(tele > 1.01 && a < 1){
+      var vb = Y.obj.userData && Y.obj.userData.volumeBounds;
+      if(vb && !vb.nebula && sphereIntersectsView(vb.record.w, vb.record.R)) a = Math.max(a, sstep(40, 80, volumePixels(vb))*(1 - sstep(Y.c, Y.d, L)));
+    }
     Y.obj.visible = a > 0.003;
     if(!Y.obj.visible) continue;
     if(Y.u.line) Y.u.line.opacity = Y.u.base*a;
