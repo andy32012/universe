@@ -86,6 +86,7 @@ var settings_button: Button
 var panel: PanelContainer
 var panel_items := {}
 var label_nodes: Array = []
+var loading_label: Label
 var diag: Node
 
 
@@ -195,10 +196,12 @@ func _detect() -> void:
 	caps.vendor = RenderingServer.get_video_adapter_vendor()
 	caps.raytracing = rd != null and rd.has_feature(RenderingDevice.SUPPORTS_RAYTRACING_PIPELINE)
 	caps.metalfx_temporal = rd != null and rd.has_feature(RenderingDevice.SUPPORTS_METALFX_TEMPORAL)
+	caps.metalfx_spatial = rd != null and rd.has_feature(RenderingDevice.SUPPORTS_METALFX_SPATIAL)
 	caps.hdr_device = rd != null and rd.has_feature(RenderingDevice.SUPPORTS_HDR_OUTPUT)
 	caps.hdr_display = DisplayServer.has_feature(DisplayServer.FEATURE_HDR_OUTPUT) and DisplayServer.window_is_hdr_output_supported()
 	caps.rt_on = caps.raytracing and bool(settings.get_value("render", "raytracing", false))
-	# the temporal upscaler: MetalFX on Apple devices; elsewhere FSR 2 exercises the same path (motion vectors, history)
+	# the temporal upscaler: MetalFX where Godot offers it; otherwise FSR 2, the same kind of upscaler (motion vectors,
+	# history) in compute shaders, which also runs on Metal (the M5 iPad reported no MetalFX temporal in Godot 4.7.2)
 	var mode = settings.get_value("render", "upscale", "auto")
 	caps.scale_3d = float(settings.get_value("render", "upscale_scale", 0.75))
 	if mode == "off":
@@ -210,10 +213,8 @@ func _detect() -> void:
 		caps.metalfx_scale_range = [lo, hi]
 		if hi > 0:
 			caps.scale_3d = clampf(caps.scale_3d, float(lo), float(hi))
-	elif OS.has_feature("pc"):
-		caps.upscaler = "fsr2"
 	else:
-		caps.upscaler = "off"
+		caps.upscaler = "fsr2"
 
 
 func set_raytracing(on: bool) -> void:
@@ -722,7 +723,17 @@ func _update_galaxies(tan_f: float) -> void:
 	for st in star_nodes:
 		if st.node.visible:
 			apply_uniforms(st.mat, u)
-	if panorama and panorama.use_for_frame():
+	# (use_for_frame also starts and advances the bakes, so it runs every frame)
+	var use_pano: bool = panorama != null and panorama.use_for_frame()
+	var first_bake: bool = panorama != null and panorama.first_bake()
+	loading_label.visible = first_bake
+	if first_bake:
+		# At start-up the GPU goes to the panorama alone (on the iPad a live sky costs as much as a whole tile);
+		# the sky waits, black, behind a progress note.
+		loading_label.text = "正在準備銀河全景圖… %d%%" % roundi(panorama.progress()*100.0)
+		sky_mat.set_shader_parameter("uPanoOn", 0.0)
+		sky_mat.set_shader_parameter("uCount", 0)
+	elif use_pano:
 		sky_mat.set_shader_parameter("uPanoOn", 1.0)
 		sky_mat.set_shader_parameter("uCount", 0)
 	else:
@@ -1105,6 +1116,14 @@ func _build_ui() -> void:
 	_place(settings_button, Control.PRESET_TOP_RIGHT, -96, 24, 72, 36)
 	ui.add_child(settings_button)
 	_build_panel()
+	loading_label = Label.new()
+	loading_label.add_theme_font_size_override("font_size", 14)
+	loading_label.modulate = Color(0.933, 0.941, 0.965, 0.72)
+	loading_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	loading_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_place(loading_label, Control.PRESET_CENTER, -200, -12, 400, 24)
+	loading_label.visible = false
+	ui.add_child(loading_label)
 
 
 ## anchors, then offsets from those anchors

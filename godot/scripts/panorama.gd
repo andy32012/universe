@@ -17,7 +17,8 @@ var main: Node
 
 const MOVE_LIMIT := 0.5          # light-years
 const SETTLE := 0.75             # seconds still before a new bake starts
-const TILE_MAX := 1280           # largest tile side, in texels
+const TILE_MAX := 1280           # largest tile side, in texels, while you fly (a tile costs about a live frame)
+const TILE_MAX_FIRST := 2304     # at start-up nothing else is drawn, so larger tiles: fewer frames
 # The cube's face convention (+X, -X, +Y, -Y, +Z, -Z; u, v as in Vulkan/Metal) is a mirror image of what a
 # camera sees. One reflection fixes all six faces: each face is shot as if z were flipped (look, up below),
 # and the sky looks the panorama up with z flipped (galaxy_sky.gdshader).
@@ -87,6 +88,18 @@ func _notification(what: int) -> void:
 			vp.size = Vector2i(4, 4)
 		if main.diag:
 			main.diag.note("記憶體警告：放掉全景圖（%.0f MB），這次執行改為即時計算" % (memory_bytes()/1048576.0))
+
+
+## The first bake, at start-up: the sky waits for it rather than share the GPU with it.
+func first_bake() -> bool:
+	return enabled and bakes == 0 and (bake_face >= 0 or (not have and size > 0))
+
+
+func progress() -> float:
+	if bake_face < 0:
+		return 0.0
+	var done := bake_face*tiles*tiles + bake_tile
+	return done*1.0/(6*tiles*tiles)
 
 
 func memory_bytes() -> int:
@@ -174,7 +187,8 @@ func _start_bake(cur: Dictionary) -> void:
 		_make_viewport()
 	# each face is drawn in tiles, a tile a frame, so a bake never adds more than about one live frame's work
 	tiles = 1
-	while size/tiles > TILE_MAX or size % tiles != 0:
+	var most := TILE_MAX_FIRST if bakes == 0 else TILE_MAX
+	while size/tiles > most or size % tiles != 0:
 		tiles += 1
 	tile = size/tiles
 	vp.size = Vector2i(tile, tile)
@@ -272,6 +286,7 @@ func _tile_drawn() -> void:
 	have = true
 	bakes += 1
 	bake_ms = Time.get_ticks_msec() - bake_t0
+	vp.size = Vector2i(4, 4)          # the tile-sized picture (up to 2304² on the iPad) is not needed until the next bake
 	if main.diag:
 		main.diag.note("全景圖烘焙完成：%d×%d×6，%d×%d 塊，%.0f MB，%.0f ms" % [size, size, tiles, tiles, memory_bytes()/1048576.0, bake_ms])
 

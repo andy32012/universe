@@ -34,7 +34,9 @@ func _ready() -> void:
 	note("螢幕：%s 像素，縮放 %s，更新率 %s Hz；畫面 %s 像素" % [str(DisplayServer.screen_get_size()), str(DisplayServer.screen_get_scale()),
 		str(DisplayServer.screen_get_refresh_rate()), str(main.render_size)])
 	note("光線追蹤：%s，開關%s" % ["支援" if c.raytracing else "不支援", "開" if c.rt_on else "關"])
-	note("升頻：%s，比例 %s%s" % [c.upscaler, str(c.scale_3d), ("，MetalFX 允許 " + str(c.metalfx_scale_range)) if c.has("metalfx_scale_range") else ""])
+	note("升頻：%s，比例 %s%s；MetalFX 時間升頻%s，空間升頻%s" % [c.upscaler, str(c.scale_3d),
+		("，MetalFX 允許 " + str(c.metalfx_scale_range)) if c.has("metalfx_scale_range") else "",
+		"支援" if c.metalfx_temporal else "不支援", "支援" if c.metalfx_spatial else "不支援"])
 	note("HDR：裝置%s，螢幕%s，要求%s" % ["支援" if c.hdr_device else "不支援", "支援" if c.hdr_display else "不支援",
 		"開" if DisplayServer.window_is_hdr_output_requested() else "關"])
 	note("最高幀率設定 %d，垂直同步 %d" % [Engine.max_fps, DisplayServer.window_get_vsync_mode()])
@@ -115,8 +117,14 @@ func _report(now: int) -> void:
 	var interval := secs*1000.0/maxi(frames, 1)
 	var script_ms := script_sum/maxi(frames, 1)
 	var render_cpu := render_cpu_sum/maxi(gpu_n, 1)
-	note("使用率：GPU 約 %.0f%%（每幀工作 %.2f ms／兩幀相隔 %.2f ms），CPU 主執行緒約 %.0f%%（遊戲程式 %.2f + 準備繪圖 %.2f ms）" % [
-		total/interval*100.0, total, interval, (script_ms + render_cpu)/interval*100.0, script_ms, render_cpu])
+	var cpu_pct := (script_ms + render_cpu)/interval*100.0
+	if total > 0.0:
+		note("使用率：GPU 約 %.0f%%（每幀工作 %.2f ms／兩幀相隔 %.2f ms），CPU 主執行緒約 %.0f%%（遊戲程式 %.2f + 準備繪圖 %.2f ms）" % [
+			total/interval*100.0, total, interval, cpu_pct, script_ms, render_cpu])
+	else:
+		# Godot's Metal driver gives no GPU timings; with the CPU this idle, the time between frames is the GPU's
+		note("使用率：GPU 計時此驅動不提供；兩幀相隔 %.2f ms（120 Hz 為 8.33），CPU 主執行緒約 %.0f%%（遊戲程式 %.2f + 準備繪圖 %.2f ms）%s" % [
+			interval, cpu_pct, script_ms, render_cpu, "，卡在 GPU" if interval > 9.0 and cpu_pct < 50.0 else ""])
 	note("幀率 %.1f（最慢一幀 %.1f ms），GPU 每幀 %.2f ms：%s；遊戲程式 %.2f ms" % [fps, frame_max*1000.0, total, ", ".join(parts),
 		script_sum/maxi(frames, 1)])
 	note("位置 log10(距離/光年)=%.2f，%s，望遠鏡 %.1f×，曝光 %.2f；%s；%s" % [main.L, main.hud_place.text, main.tele, main.expo, pano, mem])
