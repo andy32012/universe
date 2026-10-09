@@ -75,7 +75,9 @@ jobs:
           # what went wrong shows as annotations on the run page, which can be read without signing in
           if ! ls -d build/ios/*.xcodeproj >/dev/null 2>&1; then
             echo "::error::No Xcode project was exported. Files: $(ls build/ios | tr '\n' ' ')"
-            grep -iE 'error|fail|warn|invalid|missing' build/export.log | head -30 | sed 's/^/::error::export: /'
+            # the export's own explanation, as one multi-line annotation (newlines encoded as %0A)
+            msg=$(sed 's/\x1b\[[0-9;]*m//g' build/export.log | grep -v 'HDR output' | grep -A 20 -iE 'configuration errors|error' | head -40 | awk '{printf "%s%%0A", $0}')
+            echo "::error::export log:%0A$msg"
             exit 1
           fi
 
