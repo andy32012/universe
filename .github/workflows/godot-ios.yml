@@ -73,7 +73,8 @@ jobs:
           clean() { sed -e $'s/\x1b\\[[0-9;]*m//g' "$1" | grep -v 'HDR output' | grep -A 20 -iE 'configuration errors|error' | head -40 | awk '{printf "%s%%0A", $0}'; }
           # The shader baker compiles the Metal shaders at export, which needs a graphics device: run the editor
           # with the Mac's GPU rather than headless.
-          $GODOT --path godot --export-release "iOS" ../build/ios/Universe.ipa > build/export.log 2>&1 || true
+          # (perl's alarm: give up after 15 minutes rather than hang if no window session is available)
+          perl -e 'alarm 900; exec @ARGV' $GODOT --path godot --export-release "iOS" ../build/ios/Universe.ipa > build/export.log 2>&1 || true
           cat build/export.log
           if ls -d build/ios/*.xcodeproj >/dev/null 2>&1; then
             echo "::notice::Exported with the shader baker."
