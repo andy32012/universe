@@ -67,7 +67,7 @@ Down0…Down4、Up3…Up0（巢狀 SubViewport）  網頁的五層光暈
 
 ## 記錄檔
 
-`user://universe-log.txt`（上一次的是 `universe-log-previous.txt`）。用設定面板的「複製記錄檔」把內容複製到剪貼簿。匯出設定刻意**不**開「檔案」App 共享（`accessible_from_files_app`），因為它加的兩個 Info.plist 設定曾被懷疑造成 Sideloadly 閃退。內容：裝置、GPU、驅動、螢幕與更新率、光線追蹤、升頻、HDR、全景圖大小與記憶體；每 5 秒的幀率、最慢一幀、每個畫面的 GPU 時間、遊戲程式時間、位置、曝光、顯示記憶體。
+`user://universe-log.txt`（上一次的是 `universe-log-previous.txt`）。用設定面板的「複製記錄檔」把內容複製到剪貼簿。匯出設定刻意**不**開「檔案」App 共享（`accessible_from_files_app`），因為它加的兩個 Info.plist 設定曾被懷疑造成 Sideloadly 閃退。內容：裝置、GPU、驅動、螢幕與更新率、光線追蹤、升頻、HDR、全景圖大小與記憶體；每 5 秒的幀率、最慢一幀、每個畫面的 GPU 時間、遊戲程式時間、位置、曝光、顯示記憶體，以及使用率：GPU 約幾 %（每幀工作時間 ÷ 兩幀相隔的時間，100% 表示卡在 GPU）、CPU 主執行緒約幾 %（遊戲程式加準備繪圖的時間 ÷ 兩幀相隔的時間）。CPU 這個數字是 Godot 自己量的主執行緒，不是現有 App 那種 iOS 回報的各核心使用率；那需要另寫原生外掛。
 
 ## 在電腦上執行與檢查
 

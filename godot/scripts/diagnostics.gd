@@ -16,6 +16,7 @@ var gpu_n := 0
 var rt_gpu := {true: [0.0, 0], false: [0.0, 0]}   # GPU ms per frame with ray tracing on / off: sum, count
 var vps := {}
 var script_sum := 0.0
+var render_cpu_sum := 0.0      # CPU time preparing the frame's drawing (setup plus every viewport), ms
 
 const PATH := "user://universe-log.txt"
 
@@ -77,7 +78,9 @@ func _process(delta: float) -> void:
 	if vps.is_empty():
 		return
 	var total := 0.0
+	render_cpu_sum += RenderingServer.get_frame_setup_time_cpu()
 	for k in vps:
+		render_cpu_sum += RenderingServer.viewport_get_measured_render_time_cpu(vps[k].get_viewport_rid())
 		var g := RenderingServer.viewport_get_measured_render_time_gpu(vps[k].get_viewport_rid())
 		gpu_sum[k] = gpu_sum.get(k, 0.0) + g
 		total += g
@@ -106,6 +109,14 @@ func _report(now: int) -> void:
 		Performance.get_monitor(Performance.RENDER_BUFFER_MEM_USED)/1048576.0,
 		Performance.get_monitor(Performance.MEMORY_STATIC)/1048576.0]
 	var pano: String = main.panorama.status() if main.panorama else ""
+	# How busy each side is: its working time per frame over the time between frames. 100% on the GPU means the
+	# frame rate is held back by the GPU. The CPU figure is the main thread's work (game script plus preparing the
+	# drawing) measured by Godot, not the per-core use iOS reports to native code.
+	var interval := secs*1000.0/maxi(frames, 1)
+	var script_ms := script_sum/maxi(frames, 1)
+	var render_cpu := render_cpu_sum/maxi(gpu_n, 1)
+	note("使用率：GPU 約 %.0f%%（每幀工作 %.2f ms／兩幀相隔 %.2f ms），CPU 主執行緒約 %.0f%%（遊戲程式 %.2f + 準備繪圖 %.2f ms）" % [
+		total/interval*100.0, total, interval, (script_ms + render_cpu)/interval*100.0, script_ms, render_cpu])
 	note("幀率 %.1f（最慢一幀 %.1f ms），GPU 每幀 %.2f ms：%s；遊戲程式 %.2f ms" % [fps, frame_max*1000.0, total, ", ".join(parts),
 		script_sum/maxi(frames, 1)])
 	note("位置 log10(距離/光年)=%.2f，%s，望遠鏡 %.1f×，曝光 %.2f；%s；%s" % [main.L, main.hud_place.text, main.tele, main.expo, pano, mem])
@@ -120,5 +131,6 @@ func _report(now: int) -> void:
 	frames = 0
 	frame_max = 0.0
 	script_sum = 0.0
+	render_cpu_sum = 0.0
 	gpu_sum.clear()
 	gpu_n = 0
