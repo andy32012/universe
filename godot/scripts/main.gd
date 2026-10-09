@@ -90,6 +90,12 @@ var diag: Node
 
 
 func _ready() -> void:
+	# Chinese text: Godot does not fall back to the system's CJK fonts by itself on iOS (every character showed
+	# as a box), so name them: PingFang on the iPad, JhengHei on Windows; the default font stays for Latin text.
+	var cjk := SystemFont.new()
+	cjk.font_names = PackedStringArray(["PingFang TC", "PingFang SC", "Heiti TC", "Hiragino Sans", "Microsoft JhengHei", "Noto Sans CJK TC", "Noto Sans TC"])
+	cjk.font_weight = 400
+	ThemeDB.fallback_font = cjk
 	settings.load("user://settings.cfg")
 	bright_i = int(settings.get_value("view", "bright", 0))
 	_build_cosmology()
