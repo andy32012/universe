@@ -1,0 +1,17 @@
+[config]
+
+name="ShareLog"
+binary="sharelog.a"
+initialization="sharelog_init"
+deinitialization="sharelog_deinit"
+
+[dependencies]
+
+linked=[]
+embedded=[]
+system=["UIKit.framework"]
+capabilities=[]
+files=[]
+linker_flags=["-ObjC"]
+
+[plist]

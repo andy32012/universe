@@ -50,6 +50,9 @@ var bake_t0 := 0
 
 func _ready() -> void:
 	enabled = bool(main.settings.get_value("render", "panorama", true))
+	# baked on the rendering device; without one (headless, or a renderer without it) the sky stays live
+	if RenderingServer.get_rendering_device() == null:
+		enabled = false
 
 
 func on_resize() -> void:

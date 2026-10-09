@@ -1174,6 +1174,7 @@ func _build_panel() -> void:
 	panel_items.info.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	box.add_child(panel_items.info)
 
+	box.add_child(_button("分享記錄檔", _share_log))
 	box.add_child(_button("複製記錄檔", func():
 		DisplayServer.clipboard_set(diag.full_text())
 		panel_items.copied.text = "已複製，可以貼到訊息或備忘錄"))
@@ -1184,6 +1185,24 @@ func _build_panel() -> void:
 	box.add_child(_button("關閉", func(): panel.visible = false))
 	if settings.has_section_key("render", "hdr"):
 		get_window().hdr_output_requested = bool(settings.get_value("render", "hdr"))
+
+
+## The log as a file through the iPad's share sheet (AirDrop, Messages, Mail, Save to Files), by way of the
+## small native plugin in ios/plugins/sharelog; on a computer, the file shown in the file manager.
+func _share_log() -> void:
+	diag._report(Time.get_ticks_msec())       # the latest numbers first
+	var path := ProjectSettings.globalize_path(diag.PATH)
+	var ok := false
+	if OS.get_name() == "iOS":
+		ok = OS.shell_open("universe-share://file?path=" + path.uri_encode()) == OK
+	else:
+		ok = OS.shell_show_in_file_manager(path) == OK
+	if ok:
+		panel_items.copied.text = ""
+	else:
+		DisplayServer.clipboard_set(diag.full_text())
+		panel_items.copied.text = "無法開啟分享，已改為複製到剪貼簿"
+	diag.note("分享記錄檔：" + ("已開啟" if ok else "失敗，改為複製"))
 
 
 func _refresh_panel() -> void:

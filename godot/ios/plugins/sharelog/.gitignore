@@ -1,0 +1,3 @@
+# built on GitHub's Mac by .github/workflows/godot-ios.yml
+*.a
+*.o

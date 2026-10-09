@@ -63,6 +63,14 @@ jobs:
           EOF
           grep -n 'version' godot/project.godot godot/export_presets.cfg
 
+      - name: Build the share-sheet plugin
+        run: |
+          # ios/plugins/sharelog: the 分享記錄檔 button's share sheet; Godot's export links sharelog.a in
+          cd godot/ios/plugins/sharelog
+          xcrun -sdk iphoneos clang++ -arch arm64 -miphoneos-version-min=17.0 -fobjc-arc -fmodules -O2 -c sharelog.mm -o sharelog.o
+          libtool -static -o sharelog.a sharelog.o
+          ls -la
+
       - name: Export the Xcode project (shader baker on)
         run: |
           GODOT=~/godot/Godot.app/Contents/MacOS/Godot
@@ -99,6 +107,7 @@ jobs:
           proj=$(ls -d *.xcodeproj | head -1)
           scheme=$(basename "$proj" .xcodeproj)
           echo "::notice::Xcode project: $proj"
+          if grep -rq sharelog_init . ; then echo "::notice::Share-sheet plugin linked."; else echo "::warning::Share-sheet plugin NOT in the project: the 分享記錄檔 button will fall back to copying."; fi
           xcodebuild -list -project "$proj" || true
           if ! xcodebuild build -project "$proj" -scheme "$scheme" -configuration Release \
             -destination 'generic/platform=iOS' -derivedDataPath "$RUNNER_TEMP/derived" \
