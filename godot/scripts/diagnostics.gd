@@ -111,6 +111,8 @@ func _report(now: int) -> void:
 		Performance.get_monitor(Performance.RENDER_BUFFER_MEM_USED)/1048576.0,
 		Performance.get_monitor(Performance.MEMORY_STATIC)/1048576.0]
 	var pano: String = main.panorama.status() if main.panorama else ""
+	if main.accum:
+		pano += "；" + main.accum.status()
 	# How busy each side is: its working time per frame over the time between frames. 100% on the GPU means the
 	# frame rate is held back by the GPU. The CPU figure is the main thread's work (game script plus preparing the
 	# drawing) measured by Godot, not the per-core use iOS reports to native code.

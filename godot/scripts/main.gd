@@ -65,6 +65,7 @@ var render_size := Vector2i(4, 4)
 var pr := 1.0                 # render pixels per UI point (the web's devicePixelRatio)
 var time_acc := 0.0
 var panorama: Node
+var accum: Node
 var script_ms := 0.0          # this script's own time in the last frame
 
 # input
@@ -157,6 +158,15 @@ func _test_hooks() -> void:
 		# after 3 seconds, jump there (to test the panorama's re-bake)
 		var to := PackedFloat64Array(Array(args.hop.split(",")).map(func(x): return float(x)))
 		get_tree().create_timer(3.0).timeout.connect(func(): P = to; diag.note("跳到 " + str(to)))
+	if args.has("accum"):
+		# off, or a fixed N (frames per full picture: N²)
+		if args.accum == "off":
+			accum.enabled = false
+		else:
+			accum.enabled = true
+			accum.auto_n = false
+			accum.n = int(args.accum)
+			accum.resize(render_size)
 	if args.has("pano"):
 		panorama.enabled = args.pano == "on"
 	if args.has("hdr"):
@@ -390,6 +400,11 @@ func _build_post() -> void:
 	downs[0].mat.set_shader_parameter("tSrc2", stars_vp.get_texture())
 	downs[0].mat.set_shader_parameter("uTwo", 1.0)
 	downs[0].mat.set_shader_parameter("uThr", 0.85)
+	accum = preload("res://scripts/accum.gd").new()
+	accum.main = self
+	add_child(accum)
+	accum.build(downs[0].vp)
+	downs[0].mat.set_shader_parameter("tSrc3", accum.texture())
 	for i in range(1, BLOOM_N):
 		downs[i].mat.set_shader_parameter("tSrc", downs[i - 1].vp.get_texture())
 		downs[i].mat.set_shader_parameter("uThr", 0.0)
@@ -406,6 +421,7 @@ func _build_post() -> void:
 	final_mat.set_shader_parameter("tBloom", ups[0].vp.get_texture())
 	var layer := CanvasLayer.new()
 	layer.layer = -1
+	final_mat.set_shader_parameter("tGalaxy", accum.texture())
 	final_rect = _rect(final_mat)
 	layer.add_child(final_rect)
 	add_child(layer)
@@ -463,6 +479,7 @@ func _resize() -> void:
 		low = ups[i].vp.size
 	final_mat.set_shader_parameter("uAspect", float(w)/h)
 	final_mat.set_shader_parameter("uRes", Vector2(w, h))
+	accum.resize(render_size)
 	for s in star_nodes:
 		s.mat.set_shader_parameter("uPR", pr)
 	if panorama:
@@ -736,9 +753,19 @@ func _update_galaxies(tan_f: float) -> void:
 	elif use_pano:
 		sky_mat.set_shader_parameter("uPanoOn", 1.0)
 		sky_mat.set_shader_parameter("uCount", 0)
+	elif accum.enabled:
+		# live, accumulated over frames; the sky itself stays black
+		sky_mat.set_shader_parameter("uPanoOn", 0.0)
+		sky_mat.set_shader_parameter("uCount", 0)
+		accum.update(u, camera.transform.basis, tan_f, float(render_size.x)/render_size.y, P)
 	else:
 		sky_mat.set_shader_parameter("uPanoOn", 0.0)
 		apply_uniforms(sky_mat, u)
+	var galaxy_on: bool = not first_bake and not use_pano and accum.enabled
+	if not galaxy_on:
+		accum.disable()
+	downs[0].mat.set_shader_parameter("uThree", 1.0 if galaxy_on else 0.0)
+	final_mat.set_shader_parameter("uGalaxyOn", 1.0 if galaxy_on else 0.0)
 
 
 # ---------- exposure (updateExposure; no lit bodies in this phase) ----------

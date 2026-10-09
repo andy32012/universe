@@ -6,12 +6,15 @@ render_mode blend_disabled;
 uniform sampler2D tSrc : filter_linear, repeat_disable;
 uniform sampler2D tSrc2 : filter_linear, repeat_disable;
 uniform float uTwo = 0.0;
+uniform sampler2D tSrc3 : filter_linear, repeat_disable;   // the accumulated live galaxies (accum.gd)
+uniform float uThree = 0.0;
 uniform vec2 uPx;
 uniform float uThr = 0.0;
 
 vec3 tap(vec2 uv){
 	vec3 c = texture(tSrc, uv).rgb;
 	if(uTwo > 0.5) c += texture(tSrc2, uv).rgb;
+	if(uThree > 0.5) c += texture(tSrc3, uv).rgb;
 	return c;
 }
 

@@ -8,6 +8,8 @@ render_mode blend_disabled;
 uniform sampler2D tWorld : filter_linear, repeat_disable;
 uniform sampler2D tStars : filter_linear, repeat_disable;
 uniform sampler2D tBloom : filter_linear, repeat_disable;
+uniform sampler2D tGalaxy : filter_linear, repeat_disable;  // the accumulated live galaxies, where the sky would be
+uniform float uGalaxyOn = 0.0;
 uniform float uExpo = 1.3;
 uniform float uAspect = 1.0;
 uniform vec2 uRes = vec2(1.0);
@@ -32,6 +34,7 @@ vec3 srgb_to_linear(vec3 c){
 void fragment(){
 	vec2 uv = UV;
 	vec3 scene = texture(tWorld, uv).rgb + texture(tStars, uv).rgb;
+	if(uGalaxyOn > 0.5) scene += texture(tGalaxy, uv).rgb;
 	vec3 raw = (scene + texture(tBloom, uv).rgb*BLOOM)*uExpo;
 	vec3 c = 1.0 - exp(-raw);                          // highlights roll off gently instead of clipping
 	c = mix(c, c*c*(3.0 - 2.0*c), 0.18);               // a little contrast
