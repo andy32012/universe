@@ -69,25 +69,37 @@ jobs:
           $GODOT --version
           mkdir -p build/ios
           $GODOT --headless --path godot --import
-          $GODOT --headless --path godot --export-release "iOS" ../build/ios/Universe.ipa 2>&1 | tee build/export.log
+          $GODOT --headless --path godot --export-release "iOS" ../build/ios/Universe.ipa > build/export.log 2>&1 || true
+          cat build/export.log
           ls -la build/ios
+          # what went wrong shows as annotations on the run page, which can be read without signing in
+          if ! ls -d build/ios/*.xcodeproj >/dev/null 2>&1; then
+            echo "::error::No Xcode project was exported. Files: $(ls build/ios | tr '\n' ' ')"
+            grep -iE 'error|fail|warn|invalid|missing' build/export.log | head -30 | sed 's/^/::error::export: /'
+            exit 1
+          fi
 
       - name: Build without signing
         run: |
           cd build/ios
           proj=$(ls -d *.xcodeproj | head -1)
           scheme=$(basename "$proj" .xcodeproj)
-          xcodebuild -list -project "$proj"
-          xcodebuild build -project "$proj" -scheme "$scheme" -configuration Release \
+          echo "::notice::Xcode project: $proj"
+          xcodebuild -list -project "$proj" || true
+          if ! xcodebuild build -project "$proj" -scheme "$scheme" -configuration Release \
             -destination 'generic/platform=iOS' -derivedDataPath "$RUNNER_TEMP/derived" \
-            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO DEVELOPMENT_TEAM=
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO DEVELOPMENT_TEAM= > "$RUNNER_TEMP/xcodebuild.log" 2>&1; then
+            tail -80 "$RUNNER_TEMP/xcodebuild.log"
+            grep -E 'error:|\*\* BUILD FAILED|xcodebuild: error' "$RUNNER_TEMP/xcodebuild.log" | head -30 | sed 's/^/::error::xcode: /'
+            exit 1
+          fi
+          tail -5 "$RUNNER_TEMP/xcodebuild.log"
           app=$(ls -d "$RUNNER_TEMP"/derived/Build/Products/Release-iphoneos/*.app | head -1)
           plutil -p "$app/Info.plist"
-          du -sh "$app"
+          echo "::notice::App size $(du -sh "$app" | cut -f1)"
           mkdir -p "$RUNNER_TEMP/ipa/Payload"
           cp -R "$app" "$RUNNER_TEMP/ipa/Payload/"
           (cd "$RUNNER_TEMP/ipa" && zip -qry Universe-Godot-unsigned.ipa Payload)
-
       - name: Keep the unsigned app
         uses: actions/upload-artifact@v4
         with:
