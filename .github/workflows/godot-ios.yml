@@ -67,20 +67,29 @@ jobs:
         run: |
           GODOT=~/godot/Godot.app/Contents/MacOS/Godot
           $GODOT --version
+          ls "$HOME/Library/Application Support/Godot/export_templates/${GODOT_VERSION}.stable" | head -20
           mkdir -p build/ios
-          $GODOT --headless --path godot --import
-          $GODOT --headless --path godot --export-release "iOS" ../build/ios/Universe.ipa > build/export.log 2>&1 || true
+          $GODOT --headless --path godot --import > build/import.log 2>&1 || true
+          clean() { sed -e $'s/\x1b\\[[0-9;]*m//g' "$1" | grep -v 'HDR output' | grep -A 20 -iE 'configuration errors|error' | head -40 | awk '{printf "%s%%0A", $0}'; }
+          # The shader baker compiles the Metal shaders at export, which needs a graphics device: run the editor
+          # with the Mac's GPU rather than headless.
+          $GODOT --path godot --export-release "iOS" ../build/ios/Universe.ipa > build/export.log 2>&1 || true
           cat build/export.log
-          ls -la build/ios
-          # what went wrong shows as annotations on the run page, which can be read without signing in
-          if ! ls -d build/ios/*.xcodeproj >/dev/null 2>&1; then
-            echo "::error::No Xcode project was exported. Files: $(ls build/ios | tr '\n' ' ')"
-            # the export's own explanation, as one multi-line annotation (newlines encoded as %0A)
-            msg=$(sed 's/\x1b\[[0-9;]*m//g' build/export.log | grep -v 'HDR output' | grep -A 20 -iE 'configuration errors|error' | head -40 | awk '{printf "%s%%0A", $0}')
-            echo "::error::export log:%0A$msg"
-            exit 1
+          if ls -d build/ios/*.xcodeproj >/dev/null 2>&1; then
+            echo "::notice::Exported with the shader baker."
+            exit 0
           fi
-
+          echo "::warning::Export with the shader baker failed:%0A$(clean build/export.log)"
+          # still make an installable app: the same export without the baker (shaders compile on first use instead)
+          sed -i '' 's/^shader_baker\/enabled=true/shader_baker\/enabled=false/' godot/export_presets.cfg
+          $GODOT --headless --path godot --export-release "iOS" ../build/ios/Universe.ipa > build/export-nobake.log 2>&1 || true
+          cat build/export-nobake.log
+          if ls -d build/ios/*.xcodeproj >/dev/null 2>&1; then
+            echo "::warning::Exported WITHOUT the shader baker."
+            exit 0
+          fi
+          echo "::error::No Xcode project was exported, even without the shader baker:%0A$(clean build/export-nobake.log)"
+          exit 1
       - name: Build without signing
         run: |
           cd build/ios
@@ -114,5 +123,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: godot-export-log
-          path: build/export.log
+          path: build/*.log
           if-no-files-found: ignore
