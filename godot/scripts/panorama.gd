@@ -95,7 +95,7 @@ func _notification(what: int) -> void:
 
 ## The first bake, at start-up: the sky waits for it rather than share the GPU with it.
 func first_bake() -> bool:
-	return enabled and bakes == 0 and (bake_face >= 0 or (not have and size > 0))
+	return enabled and size > 0 and (bakes == 0 or urgent) and (bake_face >= 0 or not have or urgent)
 
 
 func progress() -> float:
@@ -120,6 +120,7 @@ func status() -> String:
 
 
 var use_now := false
+var urgent := false               # a wormhole arrival: bake here now, with the whole GPU (wormhole.gd)
 var hold_after := -1              # test hook only
 
 
@@ -188,6 +189,16 @@ func _maybe_bake(cur: Dictionary) -> void:
 			moved = true
 	last_p = cur.p.duplicate()
 	still_time = 0.0 if moved else still_time + dt
+	if urgent:
+		if bake_face >= 0:
+			if not _matches(bake_state, cur):
+				_cancel_bake()
+				_start_bake(cur)
+		elif have and _matches(state, cur):
+			urgent = false
+		else:
+			_start_bake(cur)
+		return
 	if bake_face >= 0:
 		# a bake in progress is abandoned if you leave its place
 		if not _matches(bake_state, cur):
@@ -313,6 +324,7 @@ func _tile_drawn() -> void:
 	bake_state = {}
 	have = true
 	bakes += 1
+	urgent = false
 	bake_ms = Time.get_ticks_msec() - bake_t0
 	vp.size = Vector2i(4, 4)          # the tile-sized picture (up to 2304² on the iPad) is not needed until the next bake
 	if main.diag:

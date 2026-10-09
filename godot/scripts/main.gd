@@ -66,6 +66,7 @@ var pr := 1.0                 # render pixels per UI point (the web's devicePixe
 var time_acc := 0.0
 var panorama: Node
 var accum: Node
+var wormhole: Node
 var last_view := []
 var still_for := 0.0
 var allow_freeze := true
@@ -170,6 +171,9 @@ func _test_hooks() -> void:
 			accum.auto_n = false
 			accum.n = int(args.accum)
 			accum.resize(render_size)
+	if args.has("wormhole"):
+		var wi := int(args.wormhole)
+		get_tree().create_timer(2.0).timeout.connect(func(): wormhole.go(wormhole.destinations()[wi]))
 	if args.has("nofreeze"):
 		allow_freeze = false
 	if args.has("holdbake"):
@@ -182,9 +186,12 @@ func _test_hooks() -> void:
 		set_raytracing(args.rt == "on")
 	if args.has("shot"):
 		get_tree().create_timer(60.0).timeout.connect(func(): get_tree().quit(1))
-		var n := int(args.get("frames", "60"))
-		for i in n:
-			await get_tree().process_frame
+		if args.has("shotat"):
+			await get_tree().create_timer(float(args.shotat)).timeout
+		else:
+			var n := int(args.get("frames", "60"))
+			for i in n:
+				await get_tree().process_frame
 		final_mat.set_shader_parameter("uEncodedOut", 1.0)
 		await get_tree().process_frame
 		await RenderingServer.frame_post_draw
@@ -750,7 +757,8 @@ func _update_galaxies(tan_f: float) -> void:
 	# (use_for_frame also starts and advances the bakes, so it runs every frame)
 	var use_pano: bool = panorama != null and panorama.use_for_frame()
 	var first_bake: bool = panorama != null and panorama.first_bake()
-	loading_label.visible = first_bake
+	# (inside a wormhole the tunnel covers the wait)
+	loading_label.visible = first_bake and not (wormhole and wormhole.active())
 	if first_bake:
 		# At start-up the GPU goes to the panorama alone (on the iPad a live sky costs as much as a whole tile);
 		# the sky waits, black, behind a progress note.
@@ -824,6 +832,10 @@ func _update_exposure(dt: float) -> void:
 # ---------- labels (90-frame.js) ----------
 func _update_labels(s: float, tan_f: float) -> void:
 	var pick := []
+	if wormhole and wormhole.active():
+		for l in label_nodes:
+			l.visible = false
+		return
 	for b in data.labels:
 		var dc := _dist(b.w)
 		if dc < b.rv and dc >= b.rmin and b.rv < S*3e4*tele*tele:
@@ -1098,9 +1110,11 @@ func _stick_move(pos: Vector2) -> void:
 
 
 func _over_buttons(pos: Vector2) -> bool:
-	for c in [tele_button, settings_button]:
+	for c in [tele_button, settings_button, wormhole.button]:
 		if c.visible and c.get_global_rect().has_point(pos):
 			return true
+	if wormhole.list_panel.visible and wormhole.list_panel.get_global_rect().has_point(pos):
+		return true
 	return panel.visible and panel.get_global_rect().has_point(pos)
 
 
@@ -1112,7 +1126,7 @@ func set_tele(v: float) -> void:
 func _tele_text() -> void:
 	var active := tele > 1.0 or tele_t > 1.0
 	var v := tele_t
-	var t := (str(snappedf(v, 0.1)) if v < 10 else commas(v)) + "×"
+	var t := (_trim(v, 1) if v < 10 else commas(v)) + "×"
 	tele_button.text = ("關閉望遠鏡" if active else "開啟望遠鏡") + "\n" + t
 
 
@@ -1176,6 +1190,10 @@ func _build_ui() -> void:
 	_place(loading_label, Control.PRESET_CENTER, -200, -12, 400, 24)
 	loading_label.visible = false
 	ui.add_child(loading_label)
+	wormhole = preload("res://scripts/wormhole.gd").new()
+	wormhole.main = self
+	add_child(wormhole)
+	wormhole.build(ui)
 
 
 ## anchors, then offsets from those anchors
