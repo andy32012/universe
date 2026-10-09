@@ -146,6 +146,10 @@ func _test_hooks() -> void:
 		_resize()
 	if args.has("seconds"):
 		get_tree().create_timer(float(args.seconds)).timeout.connect(func(): diag._report(Time.get_ticks_msec()); get_tree().quit())
+	if args.has("hop"):
+		# after 3 seconds, jump there (to test the panorama's re-bake)
+		var to := PackedFloat64Array(Array(args.hop.split(",")).map(func(x): return float(x)))
+		get_tree().create_timer(3.0).timeout.connect(func(): P = to; diag.note("跳到 " + str(to)))
 	if args.has("pano"):
 		panorama.enabled = args.pano == "on"
 	if args.has("hdr"):

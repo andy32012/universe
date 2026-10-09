@@ -8,8 +8,9 @@
 ##    light-years across, so the change is far below one display level),
 ##  - the galaxies, their fade and their glow are what they were at the bake,
 ##  - its texels are no coarser than the picture's pixels (the telescope at more than a little zoom goes live).
-## When you stop somewhere new for a moment, it is baked again in the background, one face per frame, and
-## swapped in when complete. Its memory use is in the log.
+## When you stop somewhere new for a moment, it is baked again in the background, one tile per frame, and used
+## when complete. The old one is freed when that bake starts (it no longer applies there), so at most one is ever held;
+## on an iOS memory warning the panorama is given back for the rest of the run. Its memory use is in the log.
 extends Node
 
 var main: Node
@@ -57,11 +58,32 @@ func on_resize() -> void:
 	var n := int(ceil(h/main.TAN0/256.0))*256
 	if n != size:
 		size = n
-		_drop(cube_rid)
-		cube_rid = RID()
-		have = false
+		_release()
 		_cancel_bake()
-		state = {}
+
+
+## Lets go of the panorama in use. The sky stops sampling it first, so nothing draws from freed memory.
+func _release() -> void:
+	main.sky_mat.set_shader_parameter("uPanoOn", 0.0)
+	main.sky_mat.set_shader_parameter("uPano", null)
+	cube_tex = null
+	_drop(cube_rid)
+	cube_rid = RID()
+	have = false
+	state = {}
+
+
+## iOS warns before it closes an app for using too much memory: give the panorama back and stop baking for
+## this run; the sky is then drawn live, as it is everywhere the panorama does not apply.
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_OS_MEMORY_WARNING and (enabled or have or bake_face >= 0):
+		_cancel_bake()
+		_release()
+		enabled = false
+		if vp:
+			vp.size = Vector2i(4, 4)
+		if main.diag:
+			main.diag.note("記憶體警告：放掉全景圖（%.0f MB），這次執行改為即時計算" % (memory_bytes()/1048576.0))
 
 
 func memory_bytes() -> int:
@@ -158,6 +180,9 @@ func _start_bake(cur: Dictionary) -> void:
 	main.apply_uniforms(mat, u)
 	mat.set_shader_parameter("uPanoOn", 0.0)
 	mat.set_shader_parameter("uFragH", float(tile))
+	# A bake starts only when the panorama in use no longer applies where you are; free it first so that at most one
+	# panorama (about 970 MB on the iPad) is ever held, never two.
+	_release()
 	bake_state = cur
 	bake_face = 0
 	bake_tile = 0
@@ -170,6 +195,9 @@ func _start_bake(cur: Dictionary) -> void:
 	fmt.texture_type = RenderingDevice.TEXTURE_TYPE_CUBE
 	fmt.usage_bits = RenderingDevice.TEXTURE_USAGE_SAMPLING_BIT | RenderingDevice.TEXTURE_USAGE_CAN_COPY_TO_BIT
 	bake_rid = RenderingServer.get_rendering_device().texture_create(fmt, RDTextureView.new())
+	if main.diag:
+		main.diag.note("開始烘焙全景圖：顯示記憶體 %.0f MB（貼圖 %.0f）" % [Performance.get_monitor(Performance.RENDER_VIDEO_MEM_USED)/1048576.0,
+			Performance.get_monitor(Performance.RENDER_TEXTURE_MEM_USED)/1048576.0])
 	_render_tile()
 
 
@@ -229,18 +257,15 @@ func _tile_drawn() -> void:
 	if bake_face < 6:
 		_render_tile()
 		return
-	# complete: swap it in, then free the old one
-	var old := cube_rid
+	# complete: put it in use
 	cube_rid = bake_rid
 	bake_rid = RID()
 	bake_face = -1
 	state = bake_state
 	bake_state = {}
-	if cube_tex == null:
-		cube_tex = TextureCubemapRD.new()
+	cube_tex = TextureCubemapRD.new()
 	cube_tex.texture_rd_rid = cube_rid
 	main.sky_mat.set_shader_parameter("uPano", cube_tex)
-	_drop(old)
 	have = true
 	bakes += 1
 	bake_ms = Time.get_ticks_msec() - bake_t0
