@@ -33,7 +33,10 @@ var have := false                # a complete panorama is in use
 var cube_rid := RID()            # the cube in use
 var cube_tex: TextureCubemapRD
 var bake_rid := RID()            # the cube being baked
-var bake_face := -1
+var bake_face := -1              # step of the bake in progress (0..5; the face is face_order[bake_face])
+var face_order := [0, 1, 2, 3, 4, 5]
+var face_ok := PackedFloat32Array([0, 0, 0, 0, 0, 0])   # faces of the bake in progress already complete
+var partial := false             # this frame uses a bake in progress: its complete faces, live elsewhere
 var bake_tile := 0
 var tiles := 1
 var tile := 0
@@ -117,18 +120,33 @@ func status() -> String:
 
 
 var use_now := false
+var hold_after := -1              # test hook only
 
 
 ## Called by main each frame: whether the sky should read the panorama this frame.
 func use_for_frame() -> bool:
 	use_now = false
+	partial = false
 	if not enabled or size == 0:
 		return false
 	var cur := _current_state()
 	_maybe_bake(cur)
-	if have and _matches(state, cur) and main.tele <= _tele_limit():
+	if main.tele > _tele_limit():
+		return false
+	if have and _matches(state, cur):
 		use_now = true
+	elif bake_face >= 0 and bakes > 0 and _matches(bake_state, cur) and face_ok.has(1.0):
+		# a bake in progress for this very place: its complete faces are already exact
+		use_now = true
+		partial = true
 	return use_now
+
+
+## Which faces the sky may read: all of a complete panorama, the finished ones of a bake in progress.
+func face_mask() -> Array:
+	if not partial:
+		return [Vector3.ONE, Vector3.ONE]
+	return [Vector3(face_ok[0], face_ok[1], face_ok[2]), Vector3(face_ok[3], face_ok[4], face_ok[5])]
 
 
 func _tele_limit() -> float:
@@ -187,7 +205,8 @@ func _start_bake(cur: Dictionary) -> void:
 		_make_viewport()
 	# each face is drawn in tiles, a tile a frame, so a bake never adds more than about one live frame's work
 	tiles = 1
-	var most := TILE_MAX_FIRST if bakes == 0 else TILE_MAX
+	# whole faces where they fit: a bake mostly runs while you stand still, when nothing else is drawn (main.gd)
+	var most := TILE_MAX_FIRST
 	while size/tiles > most or size % tiles != 0:
 		tiles += 1
 	tile = size/tiles
@@ -203,6 +222,11 @@ func _start_bake(cur: Dictionary) -> void:
 	bake_state = cur
 	bake_face = 0
 	bake_tile = 0
+	# the faces you are looking at first, so that what you see becomes the panorama soonest
+	var fwd: Vector3 = -main.camera.transform.basis.z
+	face_order = [0, 1, 2, 3, 4, 5]
+	face_order.sort_custom(func(a, b): return FACES[a][0].dot(fwd) > FACES[b][0].dot(fwd))
+	face_ok = PackedFloat32Array([0, 0, 0, 0, 0, 0])
 	bake_t0 = Time.get_ticks_msec()
 	var fmt := RDTextureFormat.new()
 	fmt.format = RenderingDevice.DATA_FORMAT_R16G16B16A16_SFLOAT
@@ -215,6 +239,10 @@ func _start_bake(cur: Dictionary) -> void:
 	if main.diag:
 		main.diag.note("開始烘焙全景圖：顯示記憶體 %.0f MB（貼圖 %.0f）" % [Performance.get_monitor(Performance.RENDER_VIDEO_MEM_USED)/1048576.0,
 			Performance.get_monitor(Performance.RENDER_TEXTURE_MEM_USED)/1048576.0])
+	# the cube is shown face by face as they complete (see use_for_frame)
+	cube_tex = TextureCubemapRD.new()
+	cube_tex.texture_rd_rid = bake_rid
+	main.sky_mat.set_shader_parameter("uPano", cube_tex)
 	_render_tile()
 
 
@@ -246,7 +274,7 @@ func _make_viewport() -> void:
 
 ## one tile of one face: a 90-degree square view split tiles x tiles, as an off-centre frustum
 func _render_tile() -> void:
-	var f: Array = FACES[bake_face]
+	var f: Array = FACES[face_order[bake_face]]
 	cam.transform = Transform3D(Basis.looking_at(f[0], f[1]), Vector3.ZERO)
 	var i := bake_tile % tiles
 	var j := bake_tile/tiles
@@ -260,7 +288,7 @@ func _render_tile() -> void:
 func _tile_drawn() -> void:
 	if bake_face < 0:
 		return
-	var face := bake_face
+	var face: int = face_order[bake_face]
 	var src := RenderingServer.texture_get_rd_texture(vp.get_texture().get_rid())
 	var dst := bake_rid
 	var ts := tile
@@ -271,7 +299,10 @@ func _tile_drawn() -> void:
 	if bake_tile == tiles*tiles:
 		bake_tile = 0
 		bake_face += 1
+		face_ok[face] = 1.0
 	if bake_face < 6:
+		if hold_after >= 0 and bakes > 0 and bake_face >= hold_after:
+			return                        # test hook: leave this bake half done (--holdbake=K)
 		_render_tile()
 		return
 	# complete: put it in use
@@ -280,9 +311,6 @@ func _tile_drawn() -> void:
 	bake_face = -1
 	state = bake_state
 	bake_state = {}
-	cube_tex = TextureCubemapRD.new()
-	cube_tex.texture_rd_rid = cube_rid
-	main.sky_mat.set_shader_parameter("uPano", cube_tex)
 	have = true
 	bakes += 1
 	bake_ms = Time.get_ticks_msec() - bake_t0
@@ -293,6 +321,11 @@ func _tile_drawn() -> void:
 func _cancel_bake() -> void:
 	if bake_face >= 0:
 		bake_face = -1
+		partial = false
+		# the sky may be reading its finished faces: stop that before the cube goes
+		main.sky_mat.set_shader_parameter("uPanoOn", 0.0)
+		main.sky_mat.set_shader_parameter("uPano", null)
+		cube_tex = null
 		_drop(bake_rid)
 		bake_rid = RID()
 		bake_state = {}

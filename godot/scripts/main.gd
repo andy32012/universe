@@ -66,6 +66,9 @@ var pr := 1.0                 # render pixels per UI point (the web's devicePixe
 var time_acc := 0.0
 var panorama: Node
 var accum: Node
+var last_view := []
+var still_for := 0.0
+var allow_freeze := true
 var script_ms := 0.0          # this script's own time in the last frame
 
 # input
@@ -167,6 +170,10 @@ func _test_hooks() -> void:
 			accum.auto_n = false
 			accum.n = int(args.accum)
 			accum.resize(render_size)
+	if args.has("nofreeze"):
+		allow_freeze = false
+	if args.has("holdbake"):
+		panorama.hold_after = int(args.holdbake)
 	if args.has("pano"):
 		panorama.enabled = args.pano == "on"
 	if args.has("hdr"):
@@ -751,8 +758,14 @@ func _update_galaxies(tan_f: float) -> void:
 		sky_mat.set_shader_parameter("uPanoOn", 0.0)
 		sky_mat.set_shader_parameter("uCount", 0)
 	elif use_pano:
+		var mask: Array = panorama.face_mask()
 		sky_mat.set_shader_parameter("uPanoOn", 1.0)
-		sky_mat.set_shader_parameter("uCount", 0)
+		sky_mat.set_shader_parameter("uFaceOkA", mask[0])
+		sky_mat.set_shader_parameter("uFaceOkB", mask[1])
+		if panorama.partial:
+			apply_uniforms(sky_mat, u)       # the faces still being baked are drawn live
+		else:
+			sky_mat.set_shader_parameter("uCount", 0)
 	elif accum.enabled:
 		# live, accumulated over frames; the sky itself stays black
 		sky_mat.set_shader_parameter("uPanoOn", 0.0)
@@ -766,6 +779,18 @@ func _update_galaxies(tan_f: float) -> void:
 		accum.disable()
 	downs[0].mat.set_shader_parameter("uThree", 1.0 if galaxy_on else 0.0)
 	final_mat.set_shader_parameter("uGalaxyOn", 1.0 if galaxy_on else 0.0)
+	# Standing quite still while a panorama bakes (same place, view and zoom), the live picture cannot change:
+	# keep the last one instead of computing it again, and the GPU goes to the bake. Any move draws it again.
+	var view_now := [camera.transform, tele, P[0], P[1], P[2]]
+	if view_now == last_view:
+		still_for += get_process_delta_time()
+	else:
+		still_for = 0.0
+	last_view = view_now
+	var freeze: bool = allow_freeze and not first_bake and panorama != null and panorama.bake_face >= 0 and still_for > 0.25
+	var mode := SubViewport.UPDATE_DISABLED if freeze else SubViewport.UPDATE_ALWAYS
+	if world_vp.render_target_update_mode != mode:
+		world_vp.render_target_update_mode = mode
 
 
 # ---------- exposure (updateExposure; no lit bodies in this phase) ----------
