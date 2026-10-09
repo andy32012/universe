@@ -70,7 +70,8 @@ jobs:
           ls "$HOME/Library/Application Support/Godot/export_templates/${GODOT_VERSION}.stable" | head -20
           mkdir -p build/ios
           $GODOT --headless --path godot --import > build/import.log 2>&1 || true
-          clean() { sed -e $'s/\x1b\\[[0-9;]*m//g' "$1" | grep -v 'HDR output' | grep -A 20 -iE 'configuration errors|error' | head -40 | awk '{printf "%s%%0A", $0}'; }
+          # a log file as one annotation (colours stripped, newlines encoded as %0A)
+          clean() { sed -e $'s/\x1b\\[[0-9;]*m//g' "$1" | grep -v -e 'HDR output' -e 'display_server.cpp' -e '^\[ *[0-9]*% \]' | tail -60 | awk '{printf "%s%%0A", $0}'; }
           # The shader baker compiles the Metal shaders at export, which needs a graphics device: run the editor
           # with the Mac's GPU rather than headless.
           # (perl's alarm: give up after 15 minutes rather than hang if no window session is available)
@@ -90,6 +91,7 @@ jobs:
             exit 0
           fi
           echo "::error::No Xcode project was exported, even without the shader baker:%0A$(clean build/export-nobake.log)"
+          echo "::error::import log:%0A$(clean build/import.log)"
           exit 1
       - name: Build without signing
         run: |
