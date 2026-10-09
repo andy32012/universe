@@ -118,6 +118,12 @@ jobs:
           fi
           tail -5 "$RUNNER_TEMP/xcodebuild.log"
           app=$(ls -d "$RUNNER_TEMP"/derived/Build/Products/Release-iphoneos/*.app | head -1)
+          # drop the symbol table the app does not need (about 24 MB): smaller to install, and Sideloadly 0.70.1
+          # crashes while preparing the full-size binary
+          exe="$app/$(plutil -extract CFBundleExecutable raw "$app/Info.plist")"
+          before=$(stat -f %z "$exe")
+          xcrun strip -S -x "$exe"
+          echo "::notice::Executable $before -> $(stat -f %z "$exe") bytes after strip"
           plutil -p "$app/Info.plist"
           echo "::notice::App size $(du -sh "$app" | cut -f1)"
           mkdir -p "$RUNNER_TEMP/ipa/Payload"
