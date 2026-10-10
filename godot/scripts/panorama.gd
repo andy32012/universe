@@ -72,8 +72,16 @@ var pre_size := 0
 var using_prebaked := false      # this frame reads it
 
 
+## Where the prebaked panoramas are: next to the app's executable on the iPad (copied into the bundle as separate
+## files by the build, because AltServer failed to install them packed into one 1 GB .pck), else in the project.
+var prebaked_dir := "res://prebaked"
+
+
 func _load_prebaked_index() -> void:
-	var path := "res://prebaked/index.json"
+	var bundle := OS.get_executable_path().get_base_dir().path_join("prebaked")
+	if not OS.has_feature("editor") and FileAccess.file_exists(bundle.path_join("index.json")):
+		prebaked_dir = bundle
+	var path := prebaked_dir.path_join("index.json")
 	if not FileAccess.file_exists(path):
 		return
 	var list = JSON.parse_string(FileAccess.get_file_as_string(path))
@@ -82,7 +90,7 @@ func _load_prebaked_index() -> void:
 	for e in list:
 		prebaked.append({id = e.id, name = e.name, p = PackedFloat64Array(e.p), size = int(e.size), gals = e.gals})
 	if main.diag:
-		main.diag.note("預先烘焙的全景圖：%d 個地點" % prebaked.size())
+		main.diag.note("預先烘焙的全景圖：%d 個地點（%s）" % [prebaked.size(), prebaked_dir])
 
 
 func _prebaked_for(cur: Dictionary) -> Dictionary:
@@ -98,7 +106,7 @@ func _load_prebaked(e: Dictionary) -> bool:
 	var t0 := Time.get_ticks_msec()
 	var images: Array[Image] = []
 	for face in 6:
-		var bytes := FileAccess.get_file_as_bytes("res://prebaked/%s/face%d.astc" % [e.id, face])
+		var bytes := FileAccess.get_file_as_bytes(prebaked_dir.path_join("%s/face%d.astc" % [e.id, face]))
 		if bytes.is_empty():
 			return false
 		images.append(Image.create_from_data(e.size, e.size, false, Image.FORMAT_ASTC_4x4_HDR, bytes))
