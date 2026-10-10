@@ -106,7 +106,8 @@ func _ready() -> void:
 	cjk.font_names = PackedStringArray(["PingFang TC", "Microsoft JhengHei", "Noto Sans CJK TC"])
 	var base: Font = ThemeDB.fallback_font
 	var fb: Array[Font] = base.fallbacks.duplicate()
-	if not OS.get_cmdline_user_args().has("--nosysfont"):    # test hook: show the bundled font alone
+	# On iOS the bundled font alone: a system font that iOS resolves to one without Chinese drew boxes.
+	if OS.get_name() != "iOS" and not OS.get_cmdline_user_args().has("--nosysfont"):
 		fb.append(cjk)
 	fb.append(load("res://fonts/DroidSansFallbackFull.woff2"))
 	base.fallbacks = fb

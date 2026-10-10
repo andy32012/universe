@@ -91,7 +91,9 @@ Down0…Down4、Up3…Up0（巢狀 SubViewport）  網頁的五層光暈
 
 ## 記錄檔
 
-`user://universe-log.txt`（上一次的是 `universe-log-previous.txt`）。設定面板的「分享記錄檔」在 iPad 上打開系統的分享選單（AirDrop、訊息、郵件、儲存到檔案），由 `ios/plugins/sharelog` 這個小外掛提供：遊戲呼叫 `OS.shell_open("universe-share://file?path=…")`，外掛攔下這個網址、顯示分享選單，其他網址照常處理；外掛不需要 Godot 原始碼，由 GitHub 的 Mac 編譯。分享不成時改為複製到剪貼簿。「複製記錄檔」則直接複製內容。匯出設定刻意**不**開「檔案」App 共享（`accessible_from_files_app`），因為它加的兩個 Info.plist 設定曾被懷疑造成 Sideloadly 閃退。內容：裝置、GPU、驅動、螢幕與更新率、光線追蹤、升頻、HDR、全景圖大小與記憶體；每 5 秒的幀率、最慢一幀、每個畫面的 GPU 時間、遊戲程式時間、位置、曝光、顯示記憶體，以及使用率：GPU 約幾 %（每幀工作時間 ÷ 兩幀相隔的時間，100% 表示卡在 GPU）、CPU 主執行緒約幾 %（遊戲程式加準備繪圖的時間 ÷ 兩幀相隔的時間）。CPU 這個數字是 Godot 自己量的主執行緒，不是現有 App 那種 iOS 回報的各核心使用率；那需要另寫原生外掛。
+`user://universe-log.txt`（上一次的是 `universe-log-previous.txt`）。設定面板的「分享記錄檔」在 iPad 上打開系統的分享選單（AirDrop、訊息、郵件、儲存到檔案），由 `ios/plugins/sharelog` 這個小外掛提供：遊戲呼叫 `OS.shell_open("universe-share://file?path=…")`，外掛攔下這個網址、顯示分享選單，其他網址照常處理；外掛不需要 Godot 原始碼，由 GitHub 的 Mac 編譯。分享不成時改為複製到剪貼簿。「複製記錄檔」則直接複製內容。匯出設定刻意**不**開「檔案」App 共享（`accessible_from_files_app`），因為它加的兩個 Info.plist 設定曾被懷疑造成 Sideloadly 閃退。內容：裝置、GPU、驅動、螢幕與更新率、光線追蹤、升頻、HDR、全景圖大小與記憶體；每 5 秒的幀率、最慢一幀、每個畫面的 GPU 時間、遊戲程式時間、位置、曝光、顯示記憶體，以及使用率：GPU 約幾 %（每幀工作時間 ÷ 兩幀相隔的時間，100% 表示卡在 GPU）、CPU 主執行緒約幾 %（遊戲程式加準備繪圖的時間 ÷ 兩幀相隔的時間）。CPU 這個數字是 Godot 自己量的主執行緒。
+
+另外還記錄：Godot 自己的錯誤與警告（引擎、腳本、著色器，`OS.add_logger`；同樣的訊息只寫第一次，之後每 5 秒彙總次數）；切到背景／回到前景／記憶體警告；開 App 時檢查上次是否在畫面上中斷（可能閃退或被系統因記憶體、過熱關閉），是的話附上上次最後 15 行。iPad 上還有原生外掛（`ios/plugins/sharelog`）每 2 秒寫的系統狀態：溫度（正常／偏熱／很熱／危急）、低耗電模式、App 實際用的記憶體（iOS 據以關閉 App 的數字）與系統還能給多少、各 CPU 核心使用率；以及這些狀態改變時的事件。
 
 ## 在電腦上執行與檢查
 
