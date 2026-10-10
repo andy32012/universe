@@ -147,9 +147,12 @@ jobs:
           app=$(ls -d "$RUNNER_TEMP"/derived/Build/Products/Release-iphoneos/*.app | head -1)
           # The prebaked panoramas go into the bundle as separate files beside the executable (panorama.gd looks
           # there): packed into the 1 GB .pck, AltServer could not write the app to the iPad.
-          if [ -f godot/prebaked/index.json ]; then
-            cp -R godot/prebaked "$app/prebaked"
+          # (this step runs inside build/ios, hence the full path)
+          if [ -f "$GITHUB_WORKSPACE/godot/prebaked/index.json" ]; then
+            cp -R "$GITHUB_WORKSPACE/godot/prebaked" "$app/prebaked"
             echo "::notice::Prebaked panoramas in the bundle: $(du -sh "$app/prebaked" | cut -f1), $(find "$app/prebaked" -type f | wc -l | tr -d ' ') files"
+          else
+            echo "::warning::No prebaked panoramas to put in the bundle"
           fi
           pck=$(ls "$app"/*.pck 2>/dev/null | head -1)
           [ -n "$pck" ] && echo "::notice::$(basename "$pck"): $(du -sh "$pck" | cut -f1)"
