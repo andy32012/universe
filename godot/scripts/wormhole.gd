@@ -55,18 +55,20 @@ func build(ui: Control) -> void:
 	box.add_child(main._button("關閉", func(): list_panel.visible = false))
 
 
-## Viewpoints for this phase, from the very data the web version generates (galaxy centres and sizes).
+## Viewpoints for this phase, from the very data the web version generates (galaxy centres and sizes). Their panoramas
+## are prebaked into the app (tools/prebake.gd), so arriving at one needs no bake on the device.
 func destinations() -> Array:
 	var out := []
 	var g: Array = main.gal_state
 	var earth: Dictionary = main._mark("地球")
 	var gc: PackedFloat64Array = g[0].w
-	out.append({name = "太陽系（家）", p = earth.w if not earth.is_empty() else PackedFloat64Array([0.0, 0.0, 0.0]), face = gc})
-	out.append({name = "銀河系全貌（從上方）", p = _add(gc, [0.0, 80000.0, 60000.0]), face = gc})
-	out.append({name = "銀河系側面", p = _add(gc, [-20000.0, 12000.0, 160000.0]), face = gc})
+	out.append({id = "home", name = "太陽系（家）", p = earth.w if not earth.is_empty() else PackedFloat64Array([0.0, 0.0, 0.0]), face = gc})
+	out.append({id = "mw_above", name = "銀河系全貌（從上方）", p = _add(gc, [0.0, 80000.0, 60000.0]), face = gc})
+	out.append({id = "mw_edge", name = "銀河系側面", p = _add(gc, [-20000.0, 12000.0, 160000.0]), face = gc})
 	# above the disc, closer than the whole view: inside the galaxy's volume the web draws it as a faint band
-	out.append({name = "銀河中心（斜看）", p = _add(gc, [0.0, 26000.0, 26000.0]), face = gc})
+	out.append({id = "mw_centre", name = "銀河中心（斜看）", p = _add(gc, [0.0, 26000.0, 26000.0]), face = gc})
 	var names := ["", "仙女座星系", "三角座星系", "大麥哲倫雲", "小麥哲倫雲"]
+	var ids := ["", "m31", "m33", "lmc", "smc"]
 	for i in range(1, mini(g.size(), names.size())):
 		var e: Dictionary = g[i]
 		# a third of the way between face-on and edge-on; the bright irregular clouds from farther out
@@ -74,7 +76,7 @@ func destinations() -> Array:
 		var u1: Vector3 = e.rows[0]
 		var dir := (n*0.8 + u1*0.6).normalized()
 		var k: float = e.R*(4.5 if i >= 3 else 2.6)
-		out.append({name = names[i], p = _add(e.w, [dir.x*k, dir.y*k, dir.z*k]), face = e.w})
+		out.append({id = ids[i], name = names[i], p = _add(e.w, [dir.x*k, dir.y*k, dir.z*k]), face = e.w})
 	return out
 
 
@@ -117,7 +119,8 @@ func _process(delta: float) -> void:
 				t = 0.0
 		Phase.INSIDE:
 			mat.set_shader_parameter("uMix", 1.0)
-			var ready: bool = main.panorama == null or not main.panorama.enabled or (main.panorama.have and not main.panorama.urgent)
+			var pano = main.panorama
+			var ready: bool = pano == null or not pano.enabled or pano.using_prebaked or (pano.have and not pano.urgent)
 			if t >= MIN_INSIDE and ready:
 				if main.diag:
 					main.diag.note("蟲洞：抵達 %s（隧道 %.1f 秒）" % [dest.name, t])

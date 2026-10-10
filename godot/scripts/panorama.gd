@@ -57,12 +57,68 @@ func _ready() -> void:
 	# baked on the rendering device; without one (headless, or a renderer without it) the sky stays live
 	if RenderingServer.get_rendering_device() == null:
 		enabled = false
+	_load_prebaked_index()
+
+
+# ---------- prebaked panoramas ----------
+# Home and every wormhole destination are baked ahead of time on GitHub's Mac with this same sky shader and
+# shipped compressed (ASTC 4x4 HDR: 127 MB on the GPU instead of 972, indistinguishable after the tone curve; see
+# tools/prebake.gd). Where one applies, it is loaded instead of baking.
+var prebaked := []               # {id, name, p, size, gals}
+var use_prebaked := true
+var pre_id := ""                 # the prebaked place loaded
+var pre_tex: Cubemap
+var pre_size := 0
+var using_prebaked := false      # this frame reads it
+
+
+func _load_prebaked_index() -> void:
+	var path := "res://prebaked/index.json"
+	if not FileAccess.file_exists(path):
+		return
+	var list = JSON.parse_string(FileAccess.get_file_as_string(path))
+	if list == null:
+		return
+	for e in list:
+		prebaked.append({id = e.id, name = e.name, p = PackedFloat64Array(e.p), size = int(e.size), gals = e.gals})
+	if main.diag:
+		main.diag.note("預先烘焙的全景圖：%d 個地點" % prebaked.size())
+
+
+func _prebaked_for(cur: Dictionary) -> Dictionary:
+	if not use_prebaked:
+		return {}
+	for e in prebaked:
+		if _matches({p = e.p, gals = e.gals}, cur):
+			return e
+	return {}
+
+
+func _load_prebaked(e: Dictionary) -> bool:
+	var t0 := Time.get_ticks_msec()
+	var images: Array[Image] = []
+	for face in 6:
+		var bytes := FileAccess.get_file_as_bytes("res://prebaked/%s/face%d.astc" % [e.id, face])
+		if bytes.is_empty():
+			return false
+		images.append(Image.create_from_data(e.size, e.size, false, Image.FORMAT_ASTC_4x4_HDR, bytes))
+	var cm := Cubemap.new()
+	if cm.create_from_images(images) != OK:
+		return false
+	pre_tex = cm
+	pre_id = e.id
+	pre_size = e.size
+	if main.diag:
+		main.diag.note("載入預先烘焙的全景圖：%s（%d×%d×6，%.0f ms）" % [e.name, e.size, e.size, Time.get_ticks_msec() - t0])
+	return true
 
 
 func on_resize() -> void:
 	# texels no coarser than the 3D picture's pixels at the middle of a face, at 1x
 	var h: float = main.render_size.y*main.world_vp.scaling_3d_scale
 	var n := int(ceil(h/main.TAN0/256.0))*256
+	if size_override > 0:
+		n = size_override
 	if n != size:
 		size = n
 		_release()
@@ -94,8 +150,14 @@ func _notification(what: int) -> void:
 
 
 ## The first bake, at start-up: the sky waits for it rather than share the GPU with it.
+func _leave_prebaked() -> void:
+	if using_prebaked:
+		using_prebaked = false
+		main.sky_mat.set_shader_parameter("uPano", cube_tex)    # (the last prebaked cube stays loaded for a return)
+
+
 func first_bake() -> bool:
-	return enabled and size > 0 and (bakes == 0 or urgent) and (bake_face >= 0 or not have or urgent)
+	return enabled and size > 0 and not using_prebaked and (bakes == 0 or urgent) and (bake_face >= 0 or not have or urgent)
 
 
 func progress() -> float:
@@ -112,6 +174,8 @@ func memory_bytes() -> int:
 func status() -> String:
 	if not enabled:
 		return "全景圖：關"
+	if using_prebaked:
+		return "全景圖：預先烘焙的 %s（%d×%d×6，ASTC，%.0f MB）使用中" % [pre_id, pre_size, pre_size, pre_size*pre_size*6/1048576.0]
 	var mb := memory_bytes()/1048576.0
 	var s := "全景圖 %d×%d×6（%.0f MB）%s" % [size, size, mb, "使用中" if use_now else ("就緒" if have else "未就緒")]
 	if bakes > 0:
@@ -122,6 +186,9 @@ func status() -> String:
 var use_now := false
 var urgent := false               # a wormhole arrival: bake here now, with the whole GPU (wormhole.gd)
 var hold_after := -1              # test hook only
+var save_dir := ""                # tool: save the next completed panorama's faces here
+var size_override := 0            # tool: bake at this face size (the iPad's is 4608)
+signal saved
 
 
 ## Called by main each frame: whether the sky should read the panorama this frame.
@@ -129,8 +196,23 @@ func use_for_frame() -> bool:
 	use_now = false
 	partial = false
 	if not enabled or size == 0:
+		_leave_prebaked()
 		return false
 	var cur := _current_state()
+	var pre := _prebaked_for(cur)
+	if not pre.is_empty() and (pre_id == pre.id or _load_prebaked(pre)):
+		# a prebaked place: nothing to bake here, and the device's own cube (972 MB) is given back
+		urgent = false
+		if bake_face >= 0:
+			_cancel_bake()
+		if have:
+			_release()
+		using_prebaked = true
+		main.sky_mat.set_shader_parameter("uPano", pre_tex)
+		var h: float = main.render_size.y*main.world_vp.scaling_3d_scale
+		use_now = main.tele <= pre_size*main.TAN0/h
+		return use_now
+	_leave_prebaked()
 	_maybe_bake(cur)
 	if main.tele > _tele_limit():
 		return false
@@ -245,7 +327,7 @@ func _start_bake(cur: Dictionary) -> void:
 	fmt.height = size
 	fmt.array_layers = 6
 	fmt.texture_type = RenderingDevice.TEXTURE_TYPE_CUBE
-	fmt.usage_bits = RenderingDevice.TEXTURE_USAGE_SAMPLING_BIT | RenderingDevice.TEXTURE_USAGE_CAN_COPY_TO_BIT
+	fmt.usage_bits = RenderingDevice.TEXTURE_USAGE_SAMPLING_BIT | RenderingDevice.TEXTURE_USAGE_CAN_COPY_TO_BIT | RenderingDevice.TEXTURE_USAGE_CAN_COPY_FROM_BIT
 	bake_rid = RenderingServer.get_rendering_device().texture_create(fmt, RDTextureView.new())
 	if main.diag:
 		main.diag.note("開始烘焙全景圖：顯示記憶體 %.0f MB（貼圖 %.0f）" % [Performance.get_monitor(Performance.RENDER_VIDEO_MEM_USED)/1048576.0,
@@ -329,6 +411,20 @@ func _tile_drawn() -> void:
 	vp.size = Vector2i(4, 4)          # the tile-sized picture (up to 2304² on the iPad) is not needed until the next bake
 	if main.diag:
 		main.diag.note("全景圖烘焙完成：%d×%d×6，%d×%d 塊，%.0f MB，%.0f ms" % [size, size, tiles, tiles, memory_bytes()/1048576.0, bake_ms])
+	if save_dir != "":
+		RenderingServer.frame_post_draw.connect(_save_faces, CONNECT_ONE_SHOT)
+
+
+## Tool: the six faces of the panorama in use, as half-float EXR files (for prebaking; --savepano=dir).
+func _save_faces() -> void:
+	var rd := RenderingServer.get_rendering_device()
+	for face in 6:
+		var bytes := rd.texture_get_data(cube_rid, face)
+		var img := Image.create_from_data(size, size, false, Image.FORMAT_RGBAH, bytes)
+		img.save_exr(save_dir.path_join("face%d.exr" % face), false)
+	if main.diag:
+		main.diag.note("全景圖六面已存到 " + save_dir)
+	saved.emit()
 
 func _cancel_bake() -> void:
 	if bake_face >= 0:

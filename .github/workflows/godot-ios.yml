@@ -17,11 +17,13 @@ concurrency:
 env:
   GODOT_VERSION: 4.7.2
   GODOT_RELEASE: 4.7.2-stable
+  # bump to bake the shipped panoramas again even when none of their inputs changed
+  PREBAKE_VERSION: 1
 
 jobs:
   build:
     runs-on: macos-26
-    timeout-minutes: 60
+    timeout-minutes: 150
     steps:
       - uses: actions/checkout@v4
 
@@ -62,6 +64,31 @@ jobs:
           open(p, 'w', encoding='utf-8').write(s)
           EOF
           grep -n 'version' godot/project.godot godot/export_presets.cfg
+
+      # Panoramas of home and every wormhole destination, baked with this Mac's GPU by the game itself (same sky
+      # shader as on the iPad) and compressed to ASTC 4x4 HDR; about 127 MB a place. Kept in the Actions cache and
+      # baked again only when the galaxy shader, the data, the places or the tool change.
+      - name: Cache the prebaked panoramas
+        id: prebaked
+        uses: actions/cache@v4
+        with:
+          path: godot/prebaked
+          key: prebaked-v${{ env.PREBAKE_VERSION }}-${{ hashFiles('godot/shaders/galaxy_common.gdshaderinc', 'godot/shaders/galaxy_sky.gdshader', 'godot/data/**', 'godot/scripts/wormhole.gd', 'godot/scripts/prebake.gd') }}
+
+      - name: Prebake the panoramas
+        if: steps.prebaked.outputs.cache-hit != 'true'
+        run: |
+          GODOT=~/godot/Godot.app/Contents/MacOS/Godot
+          $GODOT --headless --path godot --import > build-import.log 2>&1 || true
+          # with the GPU, not headless; give up after 100 minutes rather than hang
+          perl -e 'alarm 6000; exec @ARGV' $GODOT --path godot -- --hdr=off --prebake=res://prebaked 2>&1 | grep -E '預先|已存|ERROR|SCRIPT' || true
+          ls -la godot/prebaked || true
+          if [ -f godot/prebaked/index.json ]; then
+            echo "::notice::Prebaked panoramas: $(du -sh godot/prebaked | cut -f1)"
+          else
+            echo "::warning::Panoramas were not prebaked; the app will bake them on the device."
+            mv godot/prebaked "$RUNNER_TEMP/prebaked-incomplete" 2>/dev/null || true
+          fi
 
       - name: Build the share-sheet plugin
         run: |

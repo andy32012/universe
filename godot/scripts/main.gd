@@ -184,6 +184,21 @@ func _test_hooks() -> void:
 		get_tree().create_timer(2.0).timeout.connect(func(): wormhole.go(wormhole.destinations()[wi]))
 	if args.has("nofreeze"):
 		allow_freeze = false
+	if args.has("panosize"):
+		panorama.size_override = int(args.panosize)
+		panorama.on_resize()
+	if args.has("savepano"):
+		# bake here, save the six faces, quit
+		panorama.save_dir = args.savepano
+		DirAccess.make_dir_recursive_absolute(args.savepano)
+		panorama.saved.connect(func(): get_tree().quit())
+	if args.has("prebake"):
+		var pb = preload("res://scripts/prebake.gd").new()
+		pb.main = self
+		add_child(pb)
+		pb.start(args.prebake)
+	if args.has("noprebaked"):
+		panorama.use_prebaked = false
 	if args.has("holdbake"):
 		panorama.hold_after = int(args.holdbake)
 	if args.has("pano"):
