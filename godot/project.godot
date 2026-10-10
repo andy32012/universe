@@ -28,6 +28,11 @@ window/hdr/request_hdr_output=true
 window/ios/hide_home_indicator=true
 window/ios/hide_status_bar=true
 
+[gui]
+
+; Chinese everywhere: the bundled CJK font is the project's font (fonts/README.md); iOS gives Godot no system fallback
+theme/custom_font="res://fonts/DroidSansFallbackFull.woff2"
+
 [rendering]
 
 renderer/rendering_method="forward_plus"

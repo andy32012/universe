@@ -99,18 +99,16 @@ var diag: Node
 
 
 func _ready() -> void:
-	# Chinese text: on the iPad Godot neither falls back to the system's CJK fonts nor finds them by name (every
-	# character showed as a box), so a CJK font travels with the app (fonts/README.md). The default font keeps
-	# Latin text; a system font is tried first for the rest (JhengHei on Windows), then the bundled one.
-	var cjk := SystemFont.new()
-	cjk.font_names = PackedStringArray(["PingFang TC", "Microsoft JhengHei", "Noto Sans CJK TC"])
-	var base: Font = ThemeDB.fallback_font
-	var fb: Array[Font] = base.fallbacks.duplicate()
-	# On iOS the bundled font alone: a system font that iOS resolves to one without Chinese drew boxes.
+	# Chinese text: the project's font is the bundled CJK font (project.godot, gui/theme/custom_font), applied by
+	# the engine before any script runs; iOS gives Godot no system fallback. On a desktop the system's own CJK
+	# font (JhengHei) backs it up.
 	if OS.get_name() != "iOS" and not OS.get_cmdline_user_args().has("--nosysfont"):
+		var cjk := SystemFont.new()
+		cjk.font_names = PackedStringArray(["Microsoft JhengHei", "PingFang TC", "Noto Sans CJK TC"])
+		var base: Font = ThemeDB.fallback_font
+		var fb: Array[Font] = base.fallbacks.duplicate()
 		fb.append(cjk)
-	fb.append(load("res://fonts/DroidSansFallbackFull.woff2"))
-	base.fallbacks = fb
+		base.fallbacks = fb
 	settings.load("user://settings.cfg")
 	bright_i = int(settings.get_value("view", "bright", 0))
 	_build_cosmology()

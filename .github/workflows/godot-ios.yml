@@ -128,6 +128,16 @@ jobs:
           echo "::error::No Xcode project was exported, even without the shader baker:%0A$(clean build/export-nobake.log)"
           echo "::error::import log:%0A$(clean build/import.log)"
           exit 1
+      # Chinese on the iPad: check the exported pack itself (what the iPad gets) can draw every character used
+      - name: Check the exported font
+        run: |
+          GODOT=~/godot/Godot.app/Contents/MacOS/Godot
+          pck=$(find build/ios -name "*.pck" | head -1)
+          echo "pack: $pck"
+          out=$($GODOT --headless --main-pack "$pck" --script "$GITHUB_WORKSPACE/godot/tools/check_font.gd" -- "$GITHUB_WORKSPACE/godot" 2>&1 | grep FONTCHECK || true)
+          echo "$out"
+          if echo "$out" | grep -q "FONTCHECK ok"; then echo "::notice::$out"; else echo "::warning::Font check: ${out:-no result}"; fi
+
       - name: Build without signing
         run: |
           cd build/ios
