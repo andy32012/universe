@@ -66,6 +66,9 @@ var pr := 1.0                 # render pixels per UI point (the web's devicePixe
 var time_acc := 0.0
 var panorama: Node
 var accum: Node
+var probe_vp: SubViewport
+var probe_mat: ShaderMaterial
+var probe_key := []
 var wormhole: Node
 var last_view := []
 var still_for := 0.0
@@ -96,12 +99,17 @@ var diag: Node
 
 
 func _ready() -> void:
-	# Chinese text: Godot does not fall back to the system's CJK fonts by itself on iOS (every character showed
-	# as a box), so name them: PingFang on the iPad, JhengHei on Windows; the default font stays for Latin text.
+	# Chinese text: on the iPad Godot neither falls back to the system's CJK fonts nor finds them by name (every
+	# character showed as a box), so a CJK font travels with the app (fonts/README.md). The default font keeps
+	# Latin text; a system font is tried first for the rest (JhengHei on Windows), then the bundled one.
 	var cjk := SystemFont.new()
-	cjk.font_names = PackedStringArray(["PingFang TC", "PingFang SC", "Heiti TC", "Hiragino Sans", "Microsoft JhengHei", "Noto Sans CJK TC", "Noto Sans TC"])
-	cjk.font_weight = 400
-	ThemeDB.fallback_font = cjk
+	cjk.font_names = PackedStringArray(["PingFang TC", "Microsoft JhengHei", "Noto Sans CJK TC"])
+	var base: Font = ThemeDB.fallback_font
+	var fb: Array[Font] = base.fallbacks.duplicate()
+	if not OS.get_cmdline_user_args().has("--nosysfont"):    # test hook: show the bundled font alone
+		fb.append(cjk)
+	fb.append(load("res://fonts/DroidSansFallbackFull.woff2"))
+	base.fallbacks = fb
 	settings.load("user://settings.cfg")
 	bright_i = int(settings.get_value("view", "bright", 0))
 	_build_cosmology()
@@ -224,8 +232,9 @@ func _detect() -> void:
 	caps.hdr_device = rd != null and rd.has_feature(RenderingDevice.SUPPORTS_HDR_OUTPUT)
 	caps.hdr_display = DisplayServer.has_feature(DisplayServer.FEATURE_HDR_OUTPUT) and DisplayServer.window_is_hdr_output_supported()
 	caps.rt_on = caps.raytracing and bool(settings.get_value("render", "raytracing", false))
-	# the temporal upscaler: MetalFX where Godot offers it; otherwise FSR 2, the same kind of upscaler (motion vectors,
-	# history) in compute shaders, which also runs on Metal (the M5 iPad reported no MetalFX temporal in Godot 4.7.2)
+	# The temporal upscaler: MetalFX where Godot offers it. Otherwise native resolution: on the M5 iPad (no MetalFX
+	# in Godot 4.7.2) FSR 2 cost more than it saved, holding the panorama view at 68-97 fps instead of 120; it stays
+	# available as a setting ("fsr2").
 	var mode = settings.get_value("render", "upscale", "auto")
 	caps.scale_3d = float(settings.get_value("render", "upscale_scale", 0.75))
 	if mode == "off":
@@ -237,8 +246,10 @@ func _detect() -> void:
 		caps.metalfx_scale_range = [lo, hi]
 		if hi > 0:
 			caps.scale_3d = clampf(caps.scale_3d, float(lo), float(hi))
-	else:
+	elif mode == "fsr2":
 		caps.upscaler = "fsr2"
+	else:
+		caps.upscaler = "off"
 
 
 func set_raytracing(on: bool) -> void:
@@ -296,16 +307,15 @@ func _build_world() -> void:
 			continue
 		var mat := ShaderMaterial.new()
 		mat.shader = shader
-		mat.set_shader_parameter("uVol", data.noise)
 		mat.set_shader_parameter("uGrow", c.grow)
-		mat.set_shader_parameter("uSamples", GAL_SAMPLES)
 		var mi := MeshInstance3D.new()
 		mi.mesh = _points_mesh(c)
 		mi.material_override = mat
 		mi.layers = 2
 		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		world_vp.add_child(mi)
-		star_nodes.append({node = mi, mat = mat, layer = layer})
+		star_nodes.append({node = mi, mat = mat, layer = layer, cloud = c})
+	_build_star_probe()
 
 	for i in data.galaxies.size():
 		var g = data.galaxies[i]
@@ -320,6 +330,64 @@ func _build_world() -> void:
 			kind = float(o.get("kind", 0)),
 			core = _vec3(o.core), arm = _vec3(o.arm),
 			layer = GAL_LAYERS[i] if i < GAL_LAYERS.size() else [4.2, 5.0, 7.2, 7.9]})
+
+
+## The stars' probes (the web's PROBE): one texel a star, how much of its light the galaxies hide from here.
+## Drawn into a small picture of its own before the stars (it sits inside their viewport), and only when you move.
+func _build_star_probe() -> void:
+	var total := 0
+	for st in star_nodes:
+		st.base = total
+		total += int(st.cloud.n)
+	var w := 512
+	var h := maxi(1, int(ceil(total/float(w))))
+	var pos := PackedFloat32Array()
+	pos.resize(w*h*4)
+	for st in star_nodes:
+		var c: Dictionary = st.cloud
+		for i in int(c.n):
+			var k: int = (st.base + i)*4
+			pos[k] = c.pos[i*3]
+			pos[k + 1] = c.pos[i*3 + 1]
+			pos[k + 2] = c.pos[i*3 + 2]
+			pos[k + 3] = 1.0
+	var img := Image.create_from_data(w, h, false, Image.FORMAT_RGBAF, pos.to_byte_array())
+	probe_mat = ShaderMaterial.new()
+	probe_mat.shader = preload("res://shaders/star_probe.gdshader")
+	probe_mat.set_shader_parameter("uVol", data.noise)
+	probe_mat.set_shader_parameter("uStarPos", ImageTexture.create_from_image(img))
+	probe_mat.set_shader_parameter("uStarCount", total)
+	probe_mat.set_shader_parameter("uSamples", GAL_SAMPLES)
+	probe_vp = _viewport("StarProbe")
+	probe_vp.disable_3d = true
+	probe_vp.size = Vector2i(w, h)
+	probe_vp.render_target_update_mode = SubViewport.UPDATE_ONCE
+	probe_vp.add_child(_rect(probe_mat))
+	stars_vp.add_child(probe_vp)
+	for st in star_nodes:
+		st.mat.set_shader_parameter("uProbe", probe_vp.get_texture())
+		st.mat.set_shader_parameter("uProbeBase", st.base)
+		st.mat.set_shader_parameter("uDim", 1.0)
+
+
+## Redraw the probes when where you are or the galaxies' fade has changed (looking around changes nothing).
+func _update_star_probe() -> void:
+	var any := false
+	for st in star_nodes:
+		any = any or st.node.visible
+	if not any:
+		return
+	var list := active_galaxies(TAN0/tele, false)
+	var key := [P[0], P[1], P[2]]
+	for e in list:
+		key.append_array([gal_state.find(e.g), e.alpha, e.gain])
+	if key == probe_key:
+		return
+	probe_key = key
+	var u := galaxy_uniforms(list)
+	apply_uniforms(probe_mat, u)
+	probe_mat.set_shader_parameter("uP", Vector3(P[0], P[1], P[2]))
+	probe_vp.render_target_update_mode = SubViewport.UPDATE_ONCE
 
 
 func _environment() -> Environment:
@@ -554,6 +622,10 @@ func _process(delta: float) -> void:
 	var gap := absf(edge_ly - plen)
 	var sm := minf(nd, maxf(gap, edge_ly*0.004))
 	var th := thrust + float(Input.is_key_pressed(KEY_W)) - float(Input.is_key_pressed(KEY_S))
+	if wormhole and wormhole.active():
+		# no flying inside a wormhole: it would move you off the place being baked and start the bake again
+		th = 0.0
+		fly_index.clear()
 	for idx in fly_index:
 		th += fly_index[idx]
 	th = clampf(th, -1, 1)
@@ -751,9 +823,7 @@ func _update_galaxies(tan_f: float) -> void:
 	var u := galaxy_uniforms(view_list)
 	u.uSamples = GAL_SAMPLES
 	# the stars are dimmed by every galaxy along their line of sight, as the web's composite dims them
-	for st in star_nodes:
-		if st.node.visible:
-			apply_uniforms(st.mat, u)
+	_update_star_probe()
 	# (use_for_frame also starts and advances the bakes, so it runs every frame)
 	var use_pano: bool = panorama != null and panorama.use_for_frame()
 	var first_bake: bool = panorama != null and panorama.first_bake()
@@ -1068,6 +1138,8 @@ func _drag(index: int, pos: Vector2, rel: Vector2) -> void:
 		return
 	var t = touches[index]
 	t.pos = pos
+	if wormhole and wormhole.active():
+		return
 	if t.role == "stick":
 		_stick_move(pos)
 	elif t.role == "sky":
@@ -1180,6 +1252,7 @@ func _build_ui() -> void:
 	ui.add_child(tele_button)
 	settings_button = _button("設定", func(): panel.visible = not panel.visible; _refresh_panel())
 	_place(settings_button, Control.PRESET_TOP_RIGHT, -96, 24, 72, 36)
+	settings_button.pressed.connect(func(): wormhole.list_panel.visible = false)
 	ui.add_child(settings_button)
 	_build_panel()
 	loading_label = Label.new()

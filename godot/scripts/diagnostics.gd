@@ -69,6 +69,16 @@ func note(s: String) -> void:
 	print(line)
 
 
+## Godot's memory monitors in MB. The texture counter goes below zero (and wraps to a huge number) because the
+## panorama's cube is created straight on the rendering device, uncounted, but counted when freed; such values
+## show as "?" (the panorama's own size is in its status).
+func _mb(monitor: int) -> String:
+	var v := Performance.get_monitor(monitor)
+	if v < 0 or v > 1e13:
+		return "?"
+	return "%.0f" % (v/1048576.0)
+
+
 func full_text() -> String:
 	return "\n".join(lines)
 
@@ -105,11 +115,8 @@ func _report(now: int) -> void:
 		total += ms
 		if ms >= 0.05:
 			parts.append("%s %.2f" % [k, ms])
-	var mem := "記憶體：顯示 %.0f MB（貼圖 %.0f，緩衝 %.0f），程式 %.0f MB" % [
-		Performance.get_monitor(Performance.RENDER_VIDEO_MEM_USED)/1048576.0,
-		Performance.get_monitor(Performance.RENDER_TEXTURE_MEM_USED)/1048576.0,
-		Performance.get_monitor(Performance.RENDER_BUFFER_MEM_USED)/1048576.0,
-		Performance.get_monitor(Performance.MEMORY_STATIC)/1048576.0]
+	var mem := "記憶體：顯示 %s MB（貼圖 %s，緩衝 %s）" % [_mb(Performance.RENDER_VIDEO_MEM_USED),
+		_mb(Performance.RENDER_TEXTURE_MEM_USED), _mb(Performance.RENDER_BUFFER_MEM_USED)]
 	var pano: String = main.panorama.status() if main.panorama else ""
 	if main.accum:
 		pano += "；" + main.accum.status()
