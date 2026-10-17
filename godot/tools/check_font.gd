@@ -26,7 +26,7 @@ func _init() -> void:
 		used[c] = true
 		if not font.has_char(c):
 			missing[ch] = true
-	var bundled := ResourceLoader.exists("res://fonts/DroidSansFallbackFull.woff2")
+	var bundled := ResourceLoader.exists("res://fonts/DroidSansFallbackFull.ttf")
 	if missing.is_empty() and bundled:
 		print("FONTCHECK ok: %d Chinese characters, all in the exported font (%s; bundled font in the pack: %s)" % [used.size(), custom, bundled])
 	else:

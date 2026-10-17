@@ -2,13 +2,13 @@
 
 importer="font_data_dynamic"
 type="FontFile"
-uid="uid://dg6gnlulqok8d"
-path="res://.godot/imported/DroidSansFallbackFull.woff2-c40bafc6bed97187c6a5620c42d604ed.fontdata"
+uid="uid://4dh3wdje8e1a"
+path="res://.godot/imported/DroidSansFallbackFull.ttf-1324b0b500f81cf4dd4b16a7e5ec2988.fontdata"
 
 [deps]
 
-source_file="res://fonts/DroidSansFallbackFull.woff2"
-dest_files=["res://.godot/imported/DroidSansFallbackFull.woff2-c40bafc6bed97187c6a5620c42d604ed.fontdata"]
+source_file="res://fonts/DroidSansFallbackFull.ttf"
+dest_files=["res://.godot/imported/DroidSansFallbackFull.ttf-1324b0b500f81cf4dd4b16a7e5ec2988.fontdata"]
 
 [params]
 
