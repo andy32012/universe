@@ -18,7 +18,7 @@ env:
   GODOT_VERSION: 4.7.2
   GODOT_RELEASE: 4.7.2-stable
   # bump to bake the shipped panoramas again even when none of their inputs changed
-  PREBAKE_VERSION: 1
+  PREBAKE_VERSION: 2
 
 jobs:
   build:

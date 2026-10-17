@@ -73,6 +73,7 @@ func _ready() -> void:
 		"開" if DisplayServer.window_is_hdr_output_requested() else "關"])
 	note("最高幀率設定 %d，垂直同步 %d" % [Engine.max_fps, DisplayServer.window_get_vsync_mode()])
 	_previous_session()
+	_font_report()
 	call_deferred("_measure_setup")
 
 
@@ -109,6 +110,21 @@ func _exit_tree() -> void:
 	note(QUIT)
 	if catcher:
 		OS.remove_logger(catcher)
+
+
+## Whether the font the screen uses was loaded and can draw Chinese (the iPad showed boxes).
+func _font_report() -> void:
+	var f: Font = ThemeDB.fallback_font
+	var probe := "宇宙設定蟲洞前進"
+	var have := 0
+	for ch in probe:
+		if f.has_char(ch.unicode_at(0)):
+			have += 1
+	var name := f.get_font_name()
+	var path := f.resource_path
+	var data_size := (f as FontFile).data.size() if f is FontFile else -1
+	note("字型：%s（%s，資料 %d bytes，類別 %s），文字引擎 %s；「%s」%d/%d 字可畫" % [name if name != "" else "（沒有名稱：可能沒載入）",
+		path, data_size, f.get_class(), TextServerManager.get_primary_interface().get_name(), probe, have, probe.length()])
 
 
 func _notification(what: int) -> void:

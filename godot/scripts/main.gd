@@ -15,6 +15,7 @@ const PIXEL_CAP := 8388608.0          # the web's high-quality limit on the main
 const BLOOM_N := 5
 const GAL_SAMPLES := 96.0             # the web's fixed high quality
 const MAXG := 5
+const PANO_REF_HEIGHT := 2064.0      # the iPad Pro M5's picture height, for panorama decisions on any screen
 # the fade range (layer a, b, c, d) of each galaxy volume, in the order the web builds them
 const GAL_LAYERS := [[-9.0, -8.0, 6.9, 7.7], [4.2, 5.0, 7.2, 7.9], [4.2, 5.0, 7.2, 7.9], [3.6, 4.4, 7.0, 7.7], [3.6, 4.4, 7.0, 7.7]]
 # the point clouds of this phase, by fade range: the Milky Way's stars, its nebula sites, the Local Group
@@ -748,7 +749,9 @@ func active_galaxies(tan_f: float, for_view: bool) -> Array:
 	for g in gal_state:
 		var lay: Array = g.layer
 		var a := sstep(lay[0], lay[1], L + tele_reach)*(1.0 - sstep(lay[2], lay[3], L))
-		var pix := _volume_pixels(g, tan_f)
+		# For the panorama (for_view false) the size test uses the iPad's picture height, not this window's: a prebaked
+		# panorama made on another screen must list the same galaxies, or it is never matched.
+		var pix := _volume_pixels(g, tan_f, float(render_size.y) if for_view else PANO_REF_HEIGHT)
 		if for_view and tele > 1.01 and a < 1.0 and _sphere_in_view(g.w, g.R, tan_f):
 			a = maxf(a, sstep(40, 80, pix)*(1.0 - sstep(lay[2], lay[3], L)))
 		if a <= 0.003:
@@ -770,11 +773,11 @@ func active_galaxies(tan_f: float, for_view: bool) -> Array:
 	return out
 
 
-func _volume_pixels(g: Dictionary, tan_f: float) -> float:
+func _volume_pixels(g: Dictionary, tan_f: float, height: float) -> float:
 	var d := _dist(g.w)
 	if d <= g.R*1.05:
 		return 1e9
-	return g.R/sqrt(d*d - g.R*g.R)/tan_f*(render_size.y/2.0)
+	return g.R/sqrt(d*d - g.R*g.R)/tan_f*(height/2.0)
 
 
 func _sphere_in_view(w: PackedFloat64Array, radius: float, tan_f: float) -> bool:
