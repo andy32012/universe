@@ -104,6 +104,16 @@ var ui: Control
 var hud_place: Label
 var hud_stats: Label
 var hud_near: Label
+# Arriving (as the web's #arrival): when the nearest landmark comes within 60 times the closest you can come to it while you are
+# closing in, a card names it for a few seconds; once per approach, ready again after you are 120 times that distance away.
+var arrival_box: VBoxContainer
+var arrival_name: Label
+var arrival_sub: Label
+var arrival_tween: Tween
+var arrival_done := {}        # name -> {w, reach}
+var arrival_last := ""
+var arrival_last_d := INF
+var arrival_started := false
 var stick: TouchPad
 var btn_fwd: TouchPad
 var btn_back: TouchPad
@@ -1024,6 +1034,42 @@ func _update_hud(D: float, near) -> void:
 	if near:
 		var real := _dist(near.w)
 		hud_near.text = "最近的地標：" + near.name + ("，還有 " + fmt_dist(real) if real > near.r0*1.02 else "，就在眼前")
+	_update_arrival(near)
+
+
+func _update_arrival(near) -> void:
+	for k in arrival_done.keys():
+		var rec: Dictionary = arrival_done[k]
+		if _dist(rec.w) > rec.reach*120.0:
+			arrival_done.erase(k)
+	if not near:
+		return
+	var reach: float = near.r0
+	if not (reach > 0.0):
+		return
+	var d := _dist(near.w)
+	var closing: bool = arrival_last == near.name and d < arrival_last_d
+	if d < reach*60.0 and not arrival_done.has(near.name):
+		arrival_done[near.name] = {w = near.w.duplicate(), reach = reach}
+		if arrival_started and closing:
+			_show_arrival(near.name, d)
+	arrival_started = true
+	arrival_last = near.name
+	arrival_last_d = d
+
+
+func _show_arrival(n: String, d: float) -> void:
+	arrival_name.text = n
+	arrival_sub.text = "還有 " + fmt_dist(d)
+	if arrival_tween:
+		arrival_tween.kill()
+	arrival_box.visible = true
+	arrival_box.modulate.a = 0.0
+	arrival_tween = create_tween()
+	arrival_tween.tween_property(arrival_box, "modulate:a", 1.0, 0.8)
+	arrival_tween.tween_interval(3.8)
+	arrival_tween.tween_property(arrival_box, "modulate:a", 0.0, 0.9)
+	arrival_tween.tween_callback(func(): arrival_box.visible = false)
 
 
 static func commas(x: float) -> String:
@@ -1329,6 +1375,32 @@ func _build_ui() -> void:
 	hud_near.add_theme_font_size_override("font_size", 12)
 	hud_near.modulate = Color(0.933, 0.941, 0.965, 0.55)
 	hud.add_child(hud_near)
+
+	arrival_box = VBoxContainer.new()
+	arrival_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	arrival_box.set_anchors_preset(Control.PRESET_CENTER_TOP)
+	arrival_box.offset_left = -320
+	arrival_box.offset_right = 320
+	arrival_box.offset_top = 120
+	arrival_box.add_theme_constant_override("separation", 6)
+	arrival_box.visible = false
+	arrival_box.modulate.a = 0.0
+	ui.add_child(arrival_box)
+	var arrival_k := Label.new()
+	arrival_k.text = "即 將 抵 達"
+	arrival_k.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	arrival_k.add_theme_font_size_override("font_size", 12)
+	arrival_k.modulate = Color(0.953, 0.851, 0.635)     # the web's gold
+	arrival_box.add_child(arrival_k)
+	arrival_name = Label.new()
+	arrival_name.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	arrival_name.add_theme_font_size_override("font_size", 44)
+	arrival_box.add_child(arrival_name)
+	arrival_sub = Label.new()
+	arrival_sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	arrival_sub.add_theme_font_size_override("font_size", 13)
+	arrival_sub.modulate = Color(0.933, 0.941, 0.965, 0.66)
+	arrival_box.add_child(arrival_sub)
 
 	stick = TouchPad.new(TouchPad.Kind.STICK)
 	_place(stick, Control.PRESET_BOTTOM_LEFT, 24, -140, 112, 112)

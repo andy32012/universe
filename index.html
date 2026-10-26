@@ -78,6 +78,14 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--gold);outline-o
 #near{margin:8px 0 0;font-size:12.5px;color:var(--ink-dim);text-shadow:0 1px 8px #000}
 #flightNote{margin:8px 0 0;font-size:12.5px;line-height:1.5;color:var(--gold);text-shadow:0 1px 8px #000}
 #flightNote[hidden]{display:none}
+/* arriving somewhere: a card names the place for a few seconds as you close in */
+#arrival{position:fixed;left:50%;top:calc(env(safe-area-inset-top,0px) + 17vh);z-index:6;width:max-content;max-width:calc(100% - 32px);pointer-events:none;text-align:center;opacity:0;transform:translate(-50%,10px);transition:opacity .8s ease,transform .8s ease}
+#arrival.show{opacity:1;transform:translate(-50%,0)}
+#arrival[hidden]{display:none}
+#arrival .arrival-k{margin:0;font-size:12px;letter-spacing:.36em;color:var(--gold);text-shadow:0 1px 8px #000}
+#arrivalName{margin:8px 0 0;font-family:var(--serif);font-weight:500;font-size:clamp(30px,7vw,54px);line-height:1.15;letter-spacing:.14em;color:var(--ink);text-shadow:0 2px 26px rgba(0,0,0,.9)}
+#arrivalSub{margin:10px 0 0;font-size:12.5px;letter-spacing:.06em;color:var(--ink-dim);text-shadow:0 1px 8px #000}
+@media (prefers-reduced-motion:reduce){#arrival{transition:opacity .3s linear;transform:translate(-50%,0)}}
 #nepInfo{margin:6px 0 0;font-size:12.5px;font-variant-numeric:tabular-nums;color:var(--ink);text-shadow:0 1px 8px #000}
 #nepInfo small{display:block;margin-top:2px;font-size:11.5px;color:var(--ink-dim)}
 #nepInfo[hidden],#nepBar[hidden]{display:none}
@@ -374,6 +382,7 @@ body.booting>:not(#loading):not(#fail):not(script){visibility:hidden}
      Algorithm references: oseiskar/black-hole (MIT), wwwtyro/glsl-atmosphere (public domain).
      Full sources, processing notes and licenses are documented in README.md. -->
 <p id="tip">左邊轉頭，右邊按住前進，雙指拉開是望遠鏡</p>
+<div id="arrival" aria-live="polite" hidden><p class="arrival-k">即將抵達</p><p id="arrivalName"></p><p id="arrivalSub"></p></div>
 
 <div id="stick" role="group" aria-label="視角：往左右上下推來轉頭">
   <i class="u">上</i><i class="d">下</i><i class="l">左</i><i class="r">右</i>
@@ -6929,6 +6938,32 @@ function showFlightNote(note){
   flightNoteShown = note; var el = $('#flightNote'); el.textContent = note; el.hidden = !note;
 }
 var pick = [];
+/* Arriving: when the nearest landmark comes within 60 times the closest you can come to it while you are closing in (Mars is then a
+   disk under a degree across), a card names it for a few seconds. It shows once per approach; once you are 120 times that distance away
+   again, it can show again. A place you start
+   inside (the Earth, after loading) does not announce itself. */
+var ARRIVAL = {done:Object.create(null), last:null, lastD:Infinity, started:false, timer:0};
+function updateArrival(m, d){
+  var k, rec;
+  for(k in ARRIVAL.done){ rec = ARRIVAL.done[k]; if(rec.w.distanceTo(P) > rec.reach*120) delete ARRIVAL.done[k]; }
+  if(!m || !m.name) return;
+  var reach = m.r0*K(m.cls);
+  if(!(reach > 0)) return;
+  var inside = d < reach*60, closing = ARRIVAL.last === m.name && d < ARRIVAL.lastD;
+  if(inside && !ARRIVAL.done[m.name]){
+    ARRIVAL.done[m.name] = {w:m.w.clone(), reach:reach};
+    if(ARRIVAL.started && closing) showArrival(m, d);
+  }
+  ARRIVAL.started = true; ARRIVAL.last = m.name; ARRIVAL.lastD = d;
+}
+function showArrival(m, d){
+  var el = $('#arrival');
+  $('#arrivalName').textContent = m.name;
+  $('#arrivalSub').textContent = (typeof explorerKind === 'function' ? explorerKind(m) + ' · ' : '') + '還有 ' + fmtDist(d);
+  clearTimeout(ARRIVAL.timer);
+  el.hidden = false; void el.offsetWidth; el.classList.add('show');
+  ARRIVAL.timer = setTimeout(function(){ el.classList.remove('show'); ARRIVAL.timer = setTimeout(function(){ el.hidden = true; }, 900); }, 3800);
+}
 function frame(now){
   if(!BOOT.ready && !BOOT.firstFrame)return;
   if(BOOT.ready)requestAnimationFrame(frame);
@@ -7164,6 +7199,7 @@ function frame(now){
       $('#near').textContent = '地球觀測視界示意；不是可抵達的實體邊界';
     } else if(near){
       var real = near.w.distanceTo(P);
+      updateArrival(near, real);
       $('#near').textContent = '最近的地標：' + near.name + (real > near.r0*K(near.cls)*1.02 ? '，還有 ' + fmtDist(real) : '，就在眼前');
     }
     if(NEP.ui) nepHud();
