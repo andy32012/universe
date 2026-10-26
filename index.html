@@ -4392,6 +4392,37 @@ function updateDsoView(){
   }
 }
 
+/* ---------- the other named stars of the embedded HYG catalogue ----------
+   The 370 stars that carry a proper name in the bundled HYG subset, apart from those already drawn as landmarks above, become landmarks
+   you can search for. Their light is already in the sky (the HYG points), and the nearest catalogue star is always drawn as a body
+   (setPoolStar), so a landmark adds only the label, the search entry and the data card. Temperature and radius are worked out from colour
+   and brightness as for that body. Traditional Chinese names are given where one is in common use; the IAU name stays searchable. */
+var STAR_ZH = {"Castor":"北河二","Achernar":"水委一","Hadar":"馬腹一","Acrux":"十字架二","Mimosa":"十字架三","Gacrux":"十字架一","Bellatrix":"參宿五","Elnath":"五車五","Alnilam":"參宿二","Alnitak":"參宿一","Mintaka":"參宿三","Saiph":"參宿六","Mirfak":"天船三","Algol":"大陵五","Mizar":"開陽","Alcor":"輔","Dubhe":"天樞","Merak":"天璇","Phecda":"天璣","Megrez":"天權","Alioth":"玉衡","Alkaid":"搖光","Denebola":"五帝座一","Shaula":"尾宿八","Sargas":"尾宿五","Kaus Australis":"箕宿三","Nunki":"斗宿四","Peacock":"孔雀十一","Alnair":"鶴一","Alpheratz":"壁宿二","Hamal":"婁宿三","Diphda":"土司空","Rasalhague":"候","Eltanin":"天棓四","Vindemiatrix":"太微左垣四","Zubenelgenubi":"氐宿一","Zubeneschamali":"氐宿四","Unukalhai":"天市右垣七","Alphard":"星宿一","Algieba":"軒轅十二","Thuban":"右樞","Kochab":"北極二","Schedar":"王良四","Caph":"王良一","Ruchbah":"閣道三","Enif":"危宿三","Markab":"室宿一","Scheat":"室宿二","Algenib":"壁宿一","Sadr":"天津一","Albireo":"輦道增七","Mira":"蒭藁增二","Atria":"三角形三","Avior":"海石一","Miaplacidus":"南船五","Wezen":"弧矢一","Adhara":"弧矢七","Aludra":"弧矢二","Mirzam":"軍市一","Tarazed":"河鼓三","Alshain":"河鼓一","Menkent":"庫樓三","Izar":"梗河一","Alphecca":"貫索四","Zosma":"西上相","Cor Caroli":"常陳一","Muphrid":"右攝提一","Porrima":"東上相","Sadalmelik":"危宿一","Sadalsuud":"虛宿一","Deneb Algedi":"壘壁陣四","Ankaa":"火鳥六","Acamar":"天園六","Cursa":"玉井三","Arneb":"廁一","Phact":"丈人一","Gomeisa":"南河二","Menkalinan":"五車三","Alcyone":"昴宿六"};
+(function(){
+  if(!HYG.n || !ASSETS.names) return;
+  var taken = [];
+  marks.forEach(function(m){ if(m.cls === 's' && m.w) taken.push(m.w); });
+  ASSETS.names.forEach(function(e){
+    var i = e[0], en = e[1]; if(namedStarIndices[i] || !(HYG.abs[i] < 90)) return;
+    var pos = new THREE.Vector3(HYG.pos[i*3], HYG.pos[i*3+1], HYG.pos[i*3+2]), dist = pos.length();
+    for(var t=0;t<taken.length;t++) if(taken[t].distanceTo(pos) < Math.max(0.05, dist*0.002)) return;     /* already a landmark */
+    var ci = HYG.ci[i], M = HYG.abs[i], hip = HYG.hip[i];
+    var T = 4600*(1/(0.92*ci + 1.7) + 1/(0.92*ci + 0.62));
+    var bc = ci > 1.0 ? -0.2 - 2.2*Math.pow(ci - 1.0, 1.5) : (ci < 0.0 ? -0.3 + 6*ci : -0.15);
+    var Rs = clamp(Math.sqrt(Math.pow(10, 0.4*(4.74 - (M + bc))))*Math.pow(5772/T, 2), 0.08, 1500);
+    var zh = STAR_ZH[en], name = zh || en;
+    if(BODY_INFO[name] || marks.some(function(m){ return m.name === name; })) name = zh ? zh + '（' + en + '）' : en + (hip ? '（HIP ' + hip + '）' : '');
+    var world = label(name, lyText(dist), pos, -9, Math.log10(Math.max(30, dist*0.3)), false);
+    mark(name, world, Rs*RSUN_LY*2.5, 's'); taken.push(pos);
+    BODY_INFO[name] = {kind:'恆星', radiusKm:Math.round(Rs*695700), aliases:[en].concat(hip ? ['HIP ' + hip] : []),
+      description:(zh ? zh + '，國際名稱 ' + en + '。' : '') + (hip ? '依巴谷星表編號 HIP ' + hip + '。' : '') + '距離約 ' + lyText(dist) + '；絕對星等 ' + M.toFixed(2) + '，色指數 B−V ' + ci.toFixed(2) +
+        '。由顏色估算表面溫度約 ' + Math.round(T/100)*100 + ' K，由亮度與溫度估算半徑約 ' + (Rs < 10 ? +Rs.toFixed(2) : Math.round(Rs)) + ' 倍太陽。',
+      sourceLabel:'HYG 星表（CC BY-SA 4.0）', sourceUrl:'https://github.com/astronexus/HYG-Database',
+      confidence:'方向、距離與亮度依星表；溫度與半徑由顏色和亮度推算，雙星或變星可能偏差較大。',
+      appearance:'靠近時以估算的溫度和半徑畫出恆星本體；表面細節為示意。'};
+  });
+})();
+
 /* galaxies along walls and filaments (see genKit), drawn from the shared random stream */
 function webby(R, n, cell, col, size){ return KIT.webby(R, n, cell, col, size); }
 
