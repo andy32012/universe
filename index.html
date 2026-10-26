@@ -84,7 +84,6 @@ button:focus-visible,input:focus-visible{outline:2px solid var(--gold);outline-o
 #arrival[hidden]{display:none}
 #arrival .arrival-k{margin:0;font-size:12px;letter-spacing:.36em;color:var(--gold);text-shadow:0 1px 8px #000}
 #arrivalName{margin:8px 0 0;font-family:var(--serif);font-weight:500;font-size:clamp(30px,7vw,54px);line-height:1.15;letter-spacing:.14em;color:var(--ink);text-shadow:0 2px 26px rgba(0,0,0,.9)}
-#arrivalSub{margin:10px 0 0;font-size:12.5px;letter-spacing:.06em;color:var(--ink-dim);text-shadow:0 1px 8px #000}
 @media (prefers-reduced-motion:reduce){#arrival{transition:opacity .3s linear;transform:translate(-50%,0)}}
 #nepInfo{margin:6px 0 0;font-size:12.5px;font-variant-numeric:tabular-nums;color:var(--ink);text-shadow:0 1px 8px #000}
 #nepInfo small{display:block;margin-top:2px;font-size:11.5px;color:var(--ink-dim)}
@@ -382,7 +381,7 @@ body.booting>:not(#loading):not(#fail):not(script){visibility:hidden}
      Algorithm references: oseiskar/black-hole (MIT), wwwtyro/glsl-atmosphere (public domain).
      Full sources, processing notes and licenses are documented in README.md. -->
 <p id="tip">左邊轉頭，右邊按住前進，雙指拉開是望遠鏡</p>
-<div id="arrival" aria-live="polite" hidden><p class="arrival-k">即將抵達</p><p id="arrivalName"></p><p id="arrivalSub"></p></div>
+<div id="arrival" aria-live="polite" hidden><p class="arrival-k">即將抵達</p><p id="arrivalName"></p></div>
 
 <div id="stick" role="group" aria-label="視角：往左右上下推來轉頭">
   <i class="u">上</i><i class="d">下</i><i class="l">左</i><i class="r">右</i>
@@ -6431,7 +6430,8 @@ function explorerSafeRadius(m){
 }
 function syncExplorerTravel(){
   var active = EXPLORER.mode !== 'free', m = EXPLORER.selected;
-  $('#explorerTravel').hidden = !active;
+  /* no strip over the view while travelling: forward or back still takes over, and the object card keeps its release button */
+  $('#explorerTravel').hidden = true;
   $('#objectRelease').hidden = !active;
   $('#objectFollow').setAttribute('aria-pressed', EXPLORER.mode === 'follow' ? 'true' : 'false');
   $('#objectOrbit').setAttribute('aria-pressed', EXPLORER.mode === 'orbit' ? 'true' : 'false');
@@ -6939,7 +6939,7 @@ function showFlightNote(note){
 }
 var pick = [];
 /* Arriving: when the nearest landmark comes within 60 times the closest you can come to it while you are closing in (Mars is then a
-   disk under a degree across), a card names it for a few seconds. It shows once per approach; once you are 120 times that distance away
+   disk under a degree across), a card names it (only its name) for a few seconds. It shows once per approach; once you are 120 times that distance away
    again, it can show again. A place you start
    inside (the Earth, after loading) does not announce itself. */
 var ARRIVAL = {done:Object.create(null), last:null, lastD:Infinity, started:false, timer:0};
@@ -6959,7 +6959,6 @@ function updateArrival(m, d){
 function showArrival(m, d){
   var el = $('#arrival');
   $('#arrivalName').textContent = m.name;
-  $('#arrivalSub').textContent = (typeof explorerKind === 'function' ? explorerKind(m) + ' · ' : '') + '還有 ' + fmtDist(d);
   clearTimeout(ARRIVAL.timer);
   el.hidden = false; void el.offsetWidth; el.classList.add('show');
   ARRIVAL.timer = setTimeout(function(){ el.classList.remove('show'); ARRIVAL.timer = setTimeout(function(){ el.hidden = true; }, 900); }, 3800);

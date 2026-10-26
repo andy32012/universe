@@ -105,10 +105,9 @@ var hud_place: Label
 var hud_stats: Label
 var hud_near: Label
 # Arriving (as the web's #arrival): when the nearest landmark comes within 60 times the closest you can come to it while you are
-# closing in, a card names it for a few seconds; once per approach, ready again after you are 120 times that distance away.
+# closing in, a card names it (only its name) for a few seconds; once per approach, ready again after you are 120 times that distance away.
 var arrival_box: VBoxContainer
 var arrival_name: Label
-var arrival_sub: Label
 var arrival_tween: Tween
 var arrival_done := {}        # name -> {w, reach}
 var arrival_last := ""
@@ -1058,9 +1057,8 @@ func _update_arrival(near) -> void:
 	arrival_last_d = d
 
 
-func _show_arrival(n: String, d: float) -> void:
+func _show_arrival(n: String, _d: float) -> void:
 	arrival_name.text = n
-	arrival_sub.text = "還有 " + fmt_dist(d)
 	if arrival_tween:
 		arrival_tween.kill()
 	arrival_box.visible = true
@@ -1396,11 +1394,6 @@ func _build_ui() -> void:
 	arrival_name.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	arrival_name.add_theme_font_size_override("font_size", 44)
 	arrival_box.add_child(arrival_name)
-	arrival_sub = Label.new()
-	arrival_sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	arrival_sub.add_theme_font_size_override("font_size", 13)
-	arrival_sub.modulate = Color(0.933, 0.941, 0.965, 0.66)
-	arrival_box.add_child(arrival_sub)
 
 	stick = TouchPad.new(TouchPad.Kind.STICK)
 	_place(stick, Control.PRESET_BOTTOM_LEFT, 24, -140, 112, 112)
