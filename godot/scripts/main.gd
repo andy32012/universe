@@ -24,6 +24,15 @@ const BRIGHT := [
 	{key = "natural", label = "自然", exposure = 1.0, auto = true, gain = 1.0},
 	{key = "photo", label = "攝影", exposure = 3.0, auto = true, gain = 1.7},
 	{key = "guide", label = "固定曝光", exposure = 1.6, auto = false, gain = 1.3}]
+# Flight speed (設定, 速度上限). Distances are real; by default the speed follows the distance to the nearest landmark, which far
+# outruns light between stars and galaxies. A cap in multiples of light's speed lets the real scale be felt. Light's speed is one
+# light-year a Julian year, as fmt_light counts it. Same choices and words as the web's 飛行速度 setting.
+const C_LYS := 1.0/31557600.0
+const FLIGHT_CAPS := [
+	{key = "auto", label = "自動：越遠飛越快", mult = INF},
+	{key = "1e6", label = "光速的 100 萬倍", mult = 1e6},
+	{key = "1e3", label = "光速的 1,000 倍", mult = 1e3},
+	{key = "1", label = "光速（真實）", mult = 1.0}]
 const PLACES := [
 	[-3.35, "太陽系"], [-2.5, "太陽系的邊緣"], [0.3, "歐特雲"], [1.6, "鄰近的恆星"], [3.3, "太陽附近的星空"],
 	[5.4, "銀河系"], [7.0, "本星系群"], [8.75, "拉尼亞凱亞超星系團"], [10.64, "宇宙網"], [99.0, "可觀測宇宙"]]
@@ -40,6 +49,14 @@ var tele := 1.0
 var tele_t := 1.0
 var thrust := 0.0
 var held := 0.0
+var cap_i := 0
+var flight_speed := 0.0       # light-years a second actually flown, smoothed, for the HUD
+var flight_capped := false
+var prev_P := PackedFloat64Array()
+# Far from home a slow step is only a few units of the position's last digit (at the Andromeda Galaxy one frame at light's speed is
+# about one), so each step is rounded. What the rounding drops is carried into the next step, so the distance flown is right on average.
+var carry := [0.0, 0.0, 0.0]
+var carry_was := [0.0, 0.0, 0.0]
 var look := Vector2.ZERO
 var S := 1.0
 var L := 0.0
@@ -112,6 +129,7 @@ func _ready() -> void:
 		base.fallbacks = fb
 	settings.load("user://settings.cfg")
 	bright_i = int(settings.get_value("view", "bright", 0))
+	cap_i = clampi(int(settings.get_value("view", "flight_cap", 0)), 0, FLIGHT_CAPS.size() - 1)
 	_build_cosmology()
 	if not data.load_all():
 		_fatal("宇宙資料沒有載入：請先執行 godot/tools/export_web_data.py")
@@ -646,13 +664,36 @@ func _process(delta: float) -> void:
 	th = clampf(th, -1, 1)
 	if th != 0.0:
 		held = minf(held + dt, 6.0)
-		var step := th*sm*(0.375 + 0.1*held)*dt
+		var rate := sm*(0.375 + 0.1*held)
+		var cap: float = FLIGHT_CAPS[cap_i].mult*C_LYS
+		flight_capped = rate > cap
+		if flight_capped:
+			rate = cap
 		for k in 3:
-			P[k] += fwd[k]*step
+			var want: float = fwd[k]*th*rate*dt + carry[k]
+			var p0: float = P[k]
+			P[k] = p0 + want
+			carry[k] = want - (P[k] - p0)
 		if _len(P) > edge_ly*2.2:
 			_set_len(P, edge_ly*2.2)
+			carry = [0.0, 0.0, 0.0]
 	else:
 		held = 0.0
+		flight_capped = false
+		carry = [0.0, 0.0, 0.0]
+	# the move this frame, with the change in what is carried, so the HUD shows the speed flown and not the rounding;
+	# a wormhole puts you at its destination at once, which is not flying
+	if prev_P.size() == 3 and dt > 0.0:
+		var mv := 0.0
+		for k in 3:
+			var dk: float = P[k] - prev_P[k] + carry[k] - carry_was[k]
+			mv += dk*dk
+		var flown := sqrt(mv)/dt
+		if wormhole and wormhole.active():
+			flown = 0.0
+		flight_speed = 0.0 if flown == 0.0 else flight_speed + (flown - flight_speed)*(1.0 - exp(-dt*8.0))
+	prev_P = P.duplicate()
+	carry_was = carry.duplicate()
 	var near := _nearest()
 	S = maxf(near[0], 1e-15)
 	var D := maxf(_len(P), 1e-8)
@@ -973,6 +1014,10 @@ func _update_hud(D: float, near) -> void:
 	hud_place.text = place
 	var left := edge_ly - D
 	var lines := "離家　" + fmt_dist(D) + "\n光行　" + fmt_light(D)
+	var sp := fmt_speed(flight_speed)
+	lines += "\n速度　" + sp[0]
+	if sp[1] != "":
+		lines += "（" + sp[1] + ("，已達速度上限" if flight_capped else "") + "）"
 	if left > 0:
 		lines += "\n到視界　" + ly_text(left)
 	hud_stats.text = lines
@@ -1008,6 +1053,37 @@ static func ly_text(d: float) -> String:
 	if d < 1e8:
 		return (_trim(d/1e4, 1) if d/1e4 < 100 else commas(d/1e4)) + " 萬光年"
 	return (_trim(d/1e8, 1) if d/1e8 < 100 else commas(d/1e8)) + " 億光年"
+
+
+## A number of times light's speed in words: 1,200, 3.2 億, 67 兆.
+static func big_times(x: float) -> String:
+	if x >= 1e20:
+		var e := floori(log(x)/log(10.0))
+		return String.num(x/pow(10.0, e), 1) + "×10^" + str(e)
+	for u in [[1e16, " 京"], [1e12, " 兆"], [1e8, " 億"], [1e4, " 萬"]]:
+		if x >= u[0]:
+			var y: float = x/u[0]
+			return (String.num(y, 1) if y < 10 else commas(y)) + u[1]
+	return String.num(x, 1) if x < 10 else commas(x)
+
+
+## The speed flown (light-years a second) as [the main words, a note], as the web's fmtSpeed.
+static func fmt_speed(v: float) -> Array:
+	var m := v/C_LYS
+	if m < 1e-9:
+		return ["停止", ""]
+	var per := "每秒 " + fmt_dist(v)
+	if m < 1e-5:
+		return [per, "不到光速的 0.001%"]
+	if m < 0.01:
+		var pct := m*100.0
+		return [per, "光速的 " + String.num(pct, maxi(0, 1 - floori(log(pct)/log(10.0)))) + "%"]
+	if m < 0.995:
+		return ["光速的 %d%%" % roundi(m*100.0), per]
+	if m < 1.005:
+		return ["光速", per]
+	var t := big_times(m)
+	return ["光速的 " + t + (" 倍" if t.right(1).is_valid_int() else "倍"), per]
 
 
 static func fmt_dist(ly: float) -> String:
@@ -1327,6 +1403,19 @@ func _build_panel() -> void:
 		_apply_bright())
 	box.add_child(panel_items.bright)
 
+	panel_items.cap = _button("速度上限：", func():
+		cap_i = (cap_i + 1) % FLIGHT_CAPS.size()
+		settings.set_value("view", "flight_cap", cap_i)
+		settings.save("user://settings.cfg")
+		_refresh_panel())
+	box.add_child(panel_items.cap)
+	var cap_note := Label.new()
+	cap_note.add_theme_font_size_override("font_size", 10)
+	cap_note.modulate = Color(1, 1, 1, 0.55)
+	cap_note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	cap_note.text = "宇宙的距離都是真實的：銀河中心 2.67 萬光年，仙女座星系 254 萬光年。「自動」會依離最近天體的距離加速，在星系之間遠遠超過光速；左上角的「速度」會顯示比光快多少倍。選「光速」時，到比鄰星要 4.2 年，到銀河中心要 2.67 萬年。蟲洞不受此上限限制。"
+	box.add_child(cap_note)
+
 	panel_items.hdr = _button("HDR", func():
 		var want := not DisplayServer.window_is_hdr_output_requested()
 		get_window().hdr_output_requested = want
@@ -1392,6 +1481,7 @@ func _share_log() -> void:
 
 func _refresh_panel() -> void:
 	panel_items.bright.text = "觀感：" + BRIGHT[bright_i].label
+	panel_items.cap.text = "速度上限：" + FLIGHT_CAPS[cap_i].label
 	if caps.hdr_display:
 		panel_items.hdr.disabled = false
 		panel_items.hdr.text = "HDR：" + ("開" if DisplayServer.window_is_hdr_output_requested() else "關")

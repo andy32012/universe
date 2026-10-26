@@ -255,7 +255,7 @@ body.booting>:not(#loading):not(#fail):not(script){visibility:hidden}
 #settingsPanel #hdrBtn[hidden]{display:none}
 .explorer-quality{display:grid;grid-template-columns:1fr auto;align-items:center;gap:12px;margin-top:14px}
 .explorer-quality label{font-size:12px;color:var(--ink-dim)}
-#bhSettings select,#objectStateSelect{max-width:190px;padding:10px;min-height:44px;border:1px solid var(--line);border-radius:9px;background:#151b27;color:var(--ink);font:inherit;font-size:12px}
+#bhSettings select,#flightCap,#objectStateSelect{max-width:190px;padding:10px;min-height:44px;border:1px solid var(--line);border-radius:9px;background:#151b27;color:var(--ink);font:inherit;font-size:12px}
 #qualitySelect{max-width:172px;padding:10px;min-height:44px;border:1px solid var(--line);border-radius:9px;background:#151b27;color:var(--ink);font:inherit;font-size:12px}
 #explorerPositionFacts{margin:0}
 #explorerPositionFacts dt{font-size:10px;color:var(--ink-faint);line-height:1.5}
@@ -356,6 +356,7 @@ body.booting>:not(#loading):not(#fail):not(script){visibility:hidden}
   <h1 id="place">太陽系</h1>
   <dl class="stats">
     <div><dt>離太陽</dt><dd id="dHome">—<small id="dLight"></small></dd></div>
+    <div><dt>速度</dt><dd id="dSpeed">—<small id="dSpeedNote"></small></dd></div>
     <div class="edge"><dt>至地球觀測視界（示意）</dt><dd id="dEdge">—<small id="dPct"></small></dd></div>
   </dl>
   <p id="near"></p>
@@ -479,6 +480,13 @@ body.booting>:not(#loading):not(#fail):not(script){visibility:hidden}
           <label for="qualitySelect">畫面品質</label>
           <select id="qualitySelect"><option value="ultra">極致</option><option value="high">高畫質</option><option value="balanced">均衡</option><option value="smooth">流暢</option><option value="auto">自動調整</option></select>
         </div>
+      </div>
+    </details>
+    <details id="flightSettings" class="explorer-detail">
+      <summary>飛行速度</summary>
+      <div class="explorer-detail-body">
+        <div class="explorer-quality"><label for="flightCap">速度上限</label><select id="flightCap"><option value="auto">自動：越遠飛越快</option><option value="1e6">光速的 100 萬倍</option><option value="1e3">光速的 1,000 倍</option><option value="1">光速（真實）</option></select></div>
+        <p class="explorer-muted">宇宙的距離都是真實的：銀河中心 2.67 萬光年，仙女座星系 254 萬光年。「自動」會依離最近天體的距離加速，在星系之間遠遠超過光速，所以幾分鐘就能飛出銀河系；左上角的「速度」會顯示你飛得比光快多少倍。選「光速」時，到月球約 1.3 秒、到海王星約 4 小時、到比鄰星要 4.2 年。「回到地球」與探索的自動前往不受此上限限制。</p>
       </div>
     </details>
     <details id="bhSettings" class="explorer-detail">
@@ -5989,6 +5997,31 @@ var startEarth = typeof solarByName !== 'undefined' && solarByName['地球'];
 var P = startEarth ? startEarth.world.clone().add(startEarth.world.clone().normalize().negate().add(new THREE.Vector3(0,0.35,0)).normalize().multiplyScalar(startEarth.radiusAU*AU_LY*7)) : new THREE.Vector3(0.9,0.55,1.6).normalize().multiplyScalar(3.2*AU_LY);
 var MAX_PITCH=Math.PI/2-1e-7;
 var yaw = 0, pitch = 0, look = {x:0, y:0}, thrust = 0, held = 0, homing = false;
+/* Flight speed (Settings, 飛行速度). Distances are real; by default the speed follows the distance to the nearest landmark, which far
+   outruns light between stars and galaxies. A cap in multiples of light's speed lets the real scale be felt. One light-year a Julian
+   year is light's speed, as fmtLight counts it. The HUD shows the speed actually flown, smoothed, from the change in position. */
+var C_LYS = 1/31557600, FLIGHT_CAPS = {auto:Infinity, '1e6':1e6, '1e3':1e3, '1':1}, flightCapKey = 'auto';
+try{ var capSaved = localStorage.getItem('universe-flight-cap'); if(capSaved && FLIGHT_CAPS.hasOwnProperty(capSaved)) flightCapKey = capSaved; }catch(e){}
+var flightSpeed = 0, flightCapped = false, flightPrevP = null;
+/* Far from the Sun a slow step is only a few units of the position's last digit (at the Andromeda Galaxy one frame at light's speed is
+   about one), so each step is rounded. What the rounding drops is carried into the next step, so the distance flown is right on average. */
+var flightWant = new THREE.Vector3(), flightCarry = new THREE.Vector3(), flightFrom = new THREE.Vector3(), flightCarryWas = new THREE.Vector3(), flightMoved = new THREE.Vector3();
+function bigTimes(x){
+  var u = [[1e16, ' 京'], [1e12, ' 兆'], [1e8, ' 億'], [1e4, ' 萬']];   /* a word unit takes 倍 directly: 3.2 億倍, 1,200 倍 */
+  if(x >= 1e20) return x.toExponential(1).replace('e+', '×10^');
+  for(var k=0;k<u.length;k++) if(x >= u[k][0]){ var y = x/u[k][0]; return (y < 10 ? y.toFixed(1) : Math.round(y).toLocaleString('en-US')) + u[k][1]; }
+  return x < 10 ? x.toFixed(1) : Math.round(x).toLocaleString('en-US');
+}
+function fmtSpeed(v){
+  var m = v/C_LYS;
+  if(m < 1e-9) return ['停止', ''];
+  var per = '每秒 ' + fmtDist(v);
+  if(m < 1e-5) return [per, '不到光速的 0.001%'];
+  if(m < 0.01) return [per, '光速的 ' + (m*100).toPrecision(2) + '%'];
+  if(m < 0.995) return ['光速的 ' + Math.round(m*100) + '%', per];
+  if(m < 1.005) return ['光速', per];
+  var t = bigTimes(m); return ['光速的 ' + t + (/[0-9]$/.test(t) ? ' 倍' : '倍'), per];
+}
 function faceTo(target){
   var d = target.clone().sub(P).normalize();
   pitch = Math.asin(clamp(d.y, -1, 1)); yaw = Math.atan2(-d.x, -d.z);
@@ -6546,6 +6579,8 @@ $('#qualitySelect').addEventListener('change', function(e){ if(typeof setQuality
   el.addEventListener('change', function(e){ BHOPT[q[1]] = e.target.value; saveBhOpt(); $('#bhBright').disabled = BHOPT.band !== 'vis'; });
 });
 $('#bhBright').disabled = BHOPT.band !== 'vis';
+$('#flightCap').value = flightCapKey;
+$('#flightCap').addEventListener('change', function(e){ if(FLIGHT_CAPS.hasOwnProperty(e.target.value)) flightCapKey = e.target.value; try{ localStorage.setItem('universe-flight-cap', flightCapKey); }catch(err){} });
 EXPLORER.select = selectExplorerObject;
 EXPLORER.fly = beginExplorerTravel;
 EXPLORER.follow = beginExplorerFollow;
@@ -6942,9 +6977,13 @@ function frame(now){
   if(th !== 0 && !homing){
     if(typeof cancelExplorerTravel === 'function') cancelExplorerTravel();
     held = Math.min(held + dt, 6);
-    P.addScaledVector(fwdV, th*Sm*(0.375 + 0.1*held)*dt);
-    if(P.length() > EDGE*2.2) P.setLength(EDGE*2.2);
-  } else held = 0;
+    var rate = Sm*(0.375 + 0.1*held), cap = FLIGHT_CAPS[flightCapKey]*C_LYS;
+    flightCapped = rate > cap; if(flightCapped) rate = cap;
+    flightWant.copy(fwdV).multiplyScalar(th*rate*dt).add(flightCarry);
+    flightFrom.copy(P); P.add(flightWant);
+    flightCarry.copy(flightWant).sub(flightFrom.subVectors(P, flightFrom));
+    if(P.length() > EDGE*2.2){ P.setLength(EDGE*2.2); flightCarry.set(0, 0, 0); }
+  } else { held = 0; flightCapped = false; flightCarry.set(0, 0, 0); }
   if(homing){
     var dh = P.length();
     if(dh > 3.3*AU_LY){ P.multiplyScalar(Math.exp(-dt*4.5)); if(P.length() < 3.2*AU_LY) P.setLength(3.2*AU_LY); faceTo(new THREE.Vector3()); }
@@ -6956,6 +6995,10 @@ function frame(now){
   var flightNote = blackHoleFlight(dt);
   nepFlight(dt);
   if(frames % 4 === 0) showFlightNote(flightNote);
+  /* the move this frame, with the change in what is carried, so the readout shows the speed flown and not the rounding */
+  if(flightPrevP && dt > 0){ var flown = flightMoved.subVectors(P, flightPrevP).add(flightCarry).sub(flightCarryWas).length()/dt; flightSpeed = flown === 0 ? 0 : flightSpeed + (flown - flightSpeed)*(1 - Math.exp(-dt*8)); }
+  if(!flightPrevP) flightPrevP = P.clone(); else flightPrevP.copy(P);
+  flightCarryWas.copy(flightCarry);
   /* Navigation may cross many scales in one frame. Recompute the floating-origin scale at the destination. */
   nd = Infinity;
   for(i=0;i<marks.length;i++){ var currentDistance = Math.max(marks[i].w.distanceTo(P), marks[i].r0*K(marks[i].cls)); if(currentDistance < nd){ nd = currentDistance; near = marks[i]; } }
@@ -7110,6 +7153,7 @@ function frame(now){
     for(var q=0;q<PLACES.length;q++){ if(L < PLACES[q][0]){ place = PLACES[q]; break; } }
     if(place[1] !== shownPlace){ shownPlace = place[1]; $('#place').textContent = place[1]; }
     $('#dHome').firstChild.nodeValue = fmtDist(D); $('#dLight').textContent = fmtLight(D);
+    var spd = fmtSpeed(flightSpeed); $('#dSpeed').firstChild.nodeValue = spd[0]; $('#dSpeedNote').textContent = spd[1] + (flightCapped && spd[1] ? ' · 已達速度上限' : '');
     var left = EDGE - D;
     if(left > 0){
       $('#dEdge').firstChild.nodeValue = lyText(left);
