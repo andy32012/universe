@@ -54,6 +54,18 @@
 
 三份成員目錄合計約 2.80 MB，FPR 核心方向目錄約 5.30 MB，只有選取或接近相應星團時才下載；觀測圖片只在展開時下載。點源繪圖程式在啟動畫面預熱，目錄驗證與建構分段進行；全部四個目錄使用最多四次點雲繪製，頂點資料約 3.79 MB；整團在視野外時略過頂點提交，不刪減星源或降低可見畫質。首次實際頂點上傳及 JSON 解析仍有成本，不宣稱在所有裝置零停頓。星曆同步內嵌以確保開場地球與相機使用同一位置，不會在下載完成後突然移動。原始研究資料、測試程式、測試影像與執行紀錄不隨網站發布。
 
+## 更新太陽系星曆
+
+內嵌的 JPL Horizons 星曆只涵蓋固定的一段期間，超過後行星與衛星會回退近似軌道。到期前用 `tools/update_ephemeris.py` 重新產生，只需要 Python 3 和能連上 `ssd.jpl.nasa.gov` 的網路：
+
+```sh
+python3 tools/update_ephemeris.py --check             # 目前資料涵蓋到哪天、還剩幾天（少於 60 天時結束碼為 1）
+python3 tools/update_ephemeris.py                     # 從本月 1 日起 365 天，改寫 index.html 與本文的涵蓋日期
+python3 tools/update_ephemeris.py --start 2027-01-01  # 指定起始日；--days 可改長度，資料量隨之等比增加
+```
+
+腳本沿用原本各天體的取樣間隔與 Horizons 參數，再到取樣點之間的時刻向 Horizons 抽查插值誤差（衛星另外與母星合成後對照日心位置）。任一天體誤差超過 `--max-error-km`（預設 2 公里）就不寫入。`--cache 資料夾` 會保存 Horizons 的回應，之後可離線重建。`python3 tools/test_update_ephemeris.py` 不需網路，確認用目前內嵌的資料重建時能逐位元組還原。
+
 ## 資料與程式來源
 
 - 恆星位置、亮度、顏色：[HYG Database](https://github.com/astronexus/HYG-Database)，CC BY-SA 4.0。本專案內嵌的是其中 16,166 顆恆星的子集，並轉換為銀河座標；這份內嵌資料同樣以 CC BY-SA 4.0 授權。
